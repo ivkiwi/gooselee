@@ -17,8 +17,15 @@ assert_output() {
 
 assert_output "docs/readme.md" "native_or_packaging=false"
 assert_output "browser-extension/guesli-meet-speaker/content.js" "browser_extension=true"
+assert_output "browser-extension/guesli-meet-speaker/content.js" "native_or_packaging=false"
 assert_output "scripts/build_onnx_gigaam_helper.sh" "release_update=true"
+assert_output "scripts/build_onnx_gigaam_helper.sh" "native_or_packaging=true"
 assert_output "docs/appcast-guesli.xml" "release_update=true"
+assert_output "docs/appcast-guesli.xml" "native_or_packaging=false"
+assert_output "scripts/merge_appcast_item.py" "release_update=true"
+assert_output "scripts/merge_appcast_item.py" "native_or_packaging=false"
+assert_output ".github/workflows/ci.yml" "release_update=true"
+assert_output ".github/workflows/ci.yml" "native_or_packaging=false"
 assert_output "native/Guesli/Sources/GuesliApp/AppDelegate.swift" "native_or_packaging=true"
 
 echo "Changed-file classifier tests passed."

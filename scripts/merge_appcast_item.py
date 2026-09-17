@@ -42,7 +42,7 @@ def validate_download_url(url: str, *, allow_legacy: bool = False) -> None:
         else (ALLOWED_DOWNLOAD_PREFIX,)
     )
     if not url.startswith(allowed_prefixes) or parsed.scheme != "https" or not parsed.path.endswith(".dmg"):
-        raise ValueError(f"non-Guesli release URL in appcast: {url}")
+        raise ValueError(f"non-GooseLee release URL in appcast: {url}")
 
 
 def merge(existing_path: Path, generated_path: Path, version: str, download_url: str, output_path: Path) -> None:

@@ -7,7 +7,8 @@ VERSION=""
 SHORT_VERSION=""
 ARTIFACT_VERSION=""
 DMG_PATH=""
-APP_NAME="Guesli"
+APP_NAME="GooseLee"
+LEGACY_ASSET_NAME=""
 EXPECTED_FEED_URL="https://raw.githubusercontent.com/ivkiwi/gooselee/sparkle-feed/docs/appcast-guesli.xml"
 EXPECTED_ASSET_URL=""
 ASSET_URL_PREFIX="https://github.com/ivkiwi/gooselee/releases/download/"
@@ -31,8 +32,10 @@ Options:
   --short-version <version> Require the latest short/display version. Defaults to --version.
   --artifact-version <ver>  Version string used in the DMG filename. Defaults to --version.
   --appcast <path>          Appcast XML path. Required.
-  --dmg <path>              DMG path. Defaults to dist-release/Guesli-<version>.dmg.
-  --app-name <name>         App bundle/update artifact name. Defaults to Guesli.
+  --dmg <path>              DMG path. Defaults to dist-release/GooseLee-<version>.dmg.
+  --app-name <name>         App bundle/update artifact name. Defaults to GooseLee.
+  --legacy-asset-name <name>
+                            Also allow this DMG filename prefix for an old live feed.
   --feed-url <url>          Expected SUFeedURL. Defaults to the production appcast.
   --asset-url <url>         Require the latest enclosure to use this exact URL.
   --asset-url-prefix <url>  Allowed GitHub release URL prefix.
@@ -73,6 +76,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --app-name)
       APP_NAME="${2:?missing value for --app-name}"
+      shift 2
+      ;;
+    --legacy-asset-name)
+      LEGACY_ASSET_NAME="${2:?missing value for --legacy-asset-name}"
       shift 2
       ;;
     --feed-url)
@@ -150,7 +157,7 @@ if [[ ! -f "$APPCAST" ]]; then
   exit 1
 fi
 
-if ! APPCAST_METADATA="$(python3 - "$APPCAST" "$VERSION" "$SHORT_VERSION" "$APP_NAME" "$REQUIRE_RELEASE_NOTES" "$EXPECTED_ASSET_URL" "$ASSET_URL_PREFIX" "$LEGACY_ASSET_URL_PREFIX" <<'PY'
+if ! APPCAST_METADATA="$(python3 - "$APPCAST" "$VERSION" "$SHORT_VERSION" "$APP_NAME" "$LEGACY_ASSET_NAME" "$REQUIRE_RELEASE_NOTES" "$EXPECTED_ASSET_URL" "$ASSET_URL_PREFIX" "$LEGACY_ASSET_URL_PREFIX" <<'PY'
 import base64
 import re
 import shlex
@@ -161,12 +168,16 @@ appcast_path = sys.argv[1]
 expected_version = sys.argv[2]
 expected_short_version = sys.argv[3]
 app_name = sys.argv[4]
-require_release_notes = sys.argv[5] == "1"
-expected_url = sys.argv[6]
-url_prefix = sys.argv[7]
-legacy_url_prefix = sys.argv[8]
+legacy_asset_name = sys.argv[5]
+require_release_notes = sys.argv[6] == "1"
+expected_url = sys.argv[7]
+url_prefix = sys.argv[8]
+legacy_url_prefix = sys.argv[9]
 allowed_url_prefixes = tuple(
     prefix for prefix in (url_prefix, legacy_url_prefix) if prefix
+)
+allowed_asset_names = tuple(
+    name for name in (app_name, legacy_asset_name) if name
 )
 sparkle_ns = "http://www.andymatuschak.org/xml-namespaces/sparkle"
 
@@ -215,8 +226,13 @@ if not url.startswith(allowed_url_prefixes):
         f"{allowed_url_prefixes!r}: {url!r}"
     )
 asset_name = url.rsplit("/", 1)[-1]
-if not asset_name.startswith(f"{app_name}-") or not asset_name.endswith(".dmg"):
-    raise SystemExit(f"ERROR: latest appcast asset is not a {app_name} DMG: {asset_name!r}")
+if (
+    not any(asset_name.startswith(f"{name}-") for name in allowed_asset_names)
+    or not asset_name.endswith(".dmg")
+):
+    raise SystemExit(
+        f"ERROR: latest appcast asset does not match {allowed_asset_names!r}: {asset_name!r}"
+    )
 
 try:
     length_int = int(length)

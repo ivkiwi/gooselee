@@ -114,8 +114,12 @@ func appBundlePath() -> String? {
             return bundlePath
         }
     }
-    let defaultPath = "/Applications/Guesli.app"
-    return FileManager.default.fileExists(atPath: defaultPath) ? defaultPath : nil
+    for path in ["/Applications/GooseLee.app", "/Applications/Guesli.app"] {
+        if FileManager.default.fileExists(atPath: path) {
+            return path
+        }
+    }
+    return nil
 }
 
 func emitSuccess<T: Encodable>(command: String, data: T, dbPath: URL, warnings: [String] = []) {

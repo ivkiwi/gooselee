@@ -3,6 +3,21 @@ import Foundation
 import MuesliCore
 @testable import MuesliNativeApp
 
+private struct SummaryStageCall: Sendable {
+    let title: String
+    let transcript: String
+}
+
+private actor SummaryStageRecorder {
+    private var calls: [SummaryStageCall] = []
+
+    func record(title: String, transcript: String) {
+        calls.append(SummaryStageCall(title: title, transcript: transcript))
+    }
+
+    func recordedCalls() -> [SummaryStageCall] { calls }
+}
+
 @Suite("MeetingSummaryClient", .muesliHermeticSupport)
 struct MeetingSummaryClientTests {
     private let customTemplate = MeetingTemplateSnapshot(
@@ -34,6 +49,25 @@ struct MeetingSummaryClientTests {
 
         #expect(result.contains("## Raw Transcript"))
         #expect(result.contains("Hello world"))
+    }
+
+    @Test("missing API key fallback preserves a long transcript without chunk reduction")
+    func longFallbackWithoutKeyPreservesFullTranscript() async throws {
+        var config = AppConfig()
+        config.openAIAPIKey = ""
+        config.meetingSummaryBackend = "openai"
+        let transcript = "OPEN\n" + String(repeating: "middle ", count: 5_000) + "\nCLOSE"
+
+        let result = try await MeetingSummaryClient.summarize(
+            transcript: transcript,
+            meetingTitle: "Long fallback",
+            config: config
+        )
+
+        #expect(result.contains("OPEN"))
+        #expect(result.contains("middle middle middle"))
+        #expect(result.contains("CLOSE"))
+        #expect(!result.contains("middle omitted"))
     }
 
     @Test("summary instructions include built-in template structure")
@@ -209,24 +243,26 @@ struct MeetingSummaryClientTests {
         #expect(prompt.contains("Raw transcript:\nTranscript body"))
     }
 
-    @Test("summary user prompt middle-truncates long transcripts")
-    func userPromptMiddleTruncatesLongTranscripts() {
+    @Test("summary input planner keeps every part of long transcripts")
+    func summaryInputPlannerKeepsEntireTranscript() {
         let transcript = [
             "OPENING-START " + String(repeating: "a", count: 12_000),
-            "MIDDLE-OMITTED " + String(repeating: "b", count: 12_000),
+            "MIDDLE-PRESENT " + String(repeating: "b", count: 12_000),
             String(repeating: "c", count: 12_000) + " CLOSING-END",
         ].joined(separator: "\n")
 
-        let boundedTranscript = MeetingSummaryClient.summaryTranscriptForPrompt(
-            transcript,
-            maxCharacters: 160
+        let plan = MeetingSummaryClient.summaryInputPlan(
+            transcript: transcript,
+            meetingTitle: "Long Meeting",
+            template: MeetingTemplates.auto.snapshot
         )
 
-        #expect(boundedTranscript.count <= 160)
-        #expect(boundedTranscript.contains("OPENING-START"))
-        #expect(boundedTranscript.contains("[Transcript truncated: middle omitted"))
-        #expect(!boundedTranscript.contains("MIDDLE-OMITTED"))
-        #expect(boundedTranscript.contains("CLOSING-END"))
+        #expect(plan.requiresChunking)
+        #expect(plan.transcriptChunks.allSatisfy { $0.count <= plan.transcriptCharactersPerRequest })
+        let plannedText = plan.transcriptChunks.joined(separator: "\n")
+        #expect(plannedText.contains("OPENING-START"))
+        #expect(plannedText.contains("MIDDLE-PRESENT"))
+        #expect(plannedText.contains("CLOSING-END"))
 
         let prompt = MeetingSummaryClient.summaryUserPrompt(
             transcript: transcript,
@@ -234,20 +270,52 @@ struct MeetingSummaryClientTests {
         )
 
         #expect(prompt.contains("Raw transcript:\nOPENING-START"))
-        #expect(!prompt.contains("MIDDLE-OMITTED"))
+        #expect(prompt.contains("MIDDLE-PRESENT"))
         #expect(prompt.contains("CLOSING-END"))
+        #expect(!prompt.contains("middle omitted"))
     }
 
-    @Test("summary transcript uses raw prefix when marker cannot fit")
-    func summaryTranscriptUsesRawPrefixWhenMarkerCannotFit() {
-        let transcript = "abcdef"
+    @Test("chunked summary includes ordered evidence from every source part")
+    func chunkedSummaryIncludesEverySourcePartInOrder() async throws {
+        let transcript = (1...3).map { index in
+            "PART-\(index) " + String(repeating: Character(String(index)), count: 3_500)
+        }.joined(separator: "\n")
+        let plan = MeetingSummaryClient.summaryInputPlan(
+            transcript: transcript,
+            meetingTitle: "Long Meeting",
+            template: MeetingTemplates.auto.snapshot,
+            inputCharacterBudget: 4_500
+        )
+        let recorder = SummaryStageRecorder()
 
-        let bounded = MeetingSummaryClient.summaryTranscriptForPrompt(
-            transcript,
-            maxCharacters: 3
+        let result = try await MeetingSummaryClient.summarizeUsingPlan(
+            plan,
+            meetingTitle: "Long Meeting",
+            template: MeetingTemplates.auto.snapshot,
+            existingNotes: nil,
+            manualNotesToRetain: nil,
+            visualContext: nil,
+            request: { transcript, title, _, _, _, _ in
+                await recorder.record(title: title, transcript: transcript)
+                if title.contains(" — part ") {
+                    let part = [1, 2, 3].first { transcript.contains("PART-\($0)") } ?? 0
+                    try await Task.sleep(for: .milliseconds(part == 1 ? 30 : 5))
+                    return "evidence-from-part-\(part)"
+                }
+                return "FINAL"
+            }
         )
 
-        #expect(bounded == "abc")
+        #expect(result == "FINAL")
+        #expect(plan.transcriptChunks.count == 3)
+        let calls = await recorder.recordedCalls()
+        #expect(calls.count == 4)
+        let finalInput = try #require(calls.last?.transcript)
+        let first = try #require(finalInput.range(of: "evidence-from-part-1"))
+        let second = try #require(finalInput.range(of: "evidence-from-part-2"))
+        let third = try #require(finalInput.range(of: "evidence-from-part-3"))
+        #expect(first.lowerBound < second.lowerBound)
+        #expect(second.lowerBound < third.lowerBound)
     }
 
     @Test("summarize routes to OpenRouter when configured")

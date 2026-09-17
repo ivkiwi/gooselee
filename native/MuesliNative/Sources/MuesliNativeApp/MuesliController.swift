@@ -424,6 +424,7 @@ public final class MuesliController: NSObject {
     private let dictationStore: DictationStore
     private let meetingHookDispatcher: MeetingHookDispatching
     private let meetingMarkdownAutoExporter: MeetingMarkdownAutoExporting
+    private let meetingTranscriptCleaner: any MeetingTranscriptCleaning
     private let launchAtLoginCoordinator: LaunchAtLoginCoordinator
     let transcriptionCoordinator = TranscriptionCoordinator()
     private let hotkeyMonitor = HotkeyMonitor()
@@ -586,6 +587,7 @@ public final class MuesliController: NSObject {
         dictationStore: DictationStore? = nil,
         meetingHookDispatcher: MeetingHookDispatching = MeetingHookRunner(),
         meetingMarkdownAutoExporter: MeetingMarkdownAutoExporting = MeetingMarkdownAutoExporter(),
+        meetingTranscriptCleaner: any MeetingTranscriptCleaning = ChatGPTMeetingTranscriptCleaner(),
         launchAtLoginManager: LaunchAtLoginManaging = SystemLaunchAtLoginManager(),
         audioDuckingController: AudioDuckingManaging = AudioDuckingController(),
         dictationAudioRoutingController: DictationAudioRouting = DictationAudioRouteController()
@@ -599,6 +601,7 @@ public final class MuesliController: NSObject {
         )
         self.meetingHookDispatcher = meetingHookDispatcher
         self.meetingMarkdownAutoExporter = meetingMarkdownAutoExporter
+        self.meetingTranscriptCleaner = meetingTranscriptCleaner
         self.launchAtLoginCoordinator = LaunchAtLoginCoordinator(manager: launchAtLoginManager)
         self.audioDuckingController = audioDuckingController
         self.dictationAudioRoutingController = dictationAudioRoutingController
@@ -4341,6 +4344,12 @@ public final class MuesliController: NSObject {
                 guard !rawTranscript.isEmpty else {
                     throw MeetingRetranscriptionError.emptyTranscript
                 }
+                async let pendingCleanup = MeetingTranscriptCleanupPipeline.cleanIfNeeded(
+                    transcript: rawTranscript,
+                    config: self.config,
+                    isChatGPTAuthenticated: self.chatGPTAuth.isAuthenticated,
+                    cleaner: self.meetingTranscriptCleaner
+                )
 
                 let templateSnapshot = MeetingTemplates.snapshot(
                     for: meeting,
@@ -4366,10 +4375,13 @@ public final class MuesliController: NSObject {
                     )
                 }
 
+                let cleanupResult = await pendingCleanup
+
                 do {
                     try self.dictationStore.updateMeetingTranscriptAndSummary(
                         id: meeting.id,
-                        rawTranscript: rawTranscript,
+                        rawTranscript: cleanupResult.transcript,
+                        rawOriginalTranscript: cleanupResult.originalTranscript,
                         formattedNotes: formattedNotes,
                         selectedTemplateID: templateSnapshot.id,
                         selectedTemplateName: templateSnapshot.name,

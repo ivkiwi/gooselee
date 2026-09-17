@@ -1957,6 +1957,7 @@ public final class DictationStore {
     public func updateMeetingTranscriptAndSummary(
         id: Int64,
         rawTranscript: String,
+        rawOriginalTranscript: String? = nil,
         formattedNotes: String,
         selectedTemplateID: String,
         selectedTemplateName: String,
@@ -1969,7 +1970,7 @@ public final class DictationStore {
         let wordCount = Self.countWords(in: rawTranscript) + Self.countWords(in: manualNotes)
         let sql = """
         UPDATE meetings
-        SET raw_transcript = ?, raw_original_transcript = NULL, formatted_notes = ?, meeting_status = ?, word_count = ?, selected_template_id = ?, selected_template_name = ?, selected_template_kind = ?, selected_template_prompt = ?, updated_at = ?, sync_dirty = 1
+        SET raw_transcript = ?, raw_original_transcript = ?, formatted_notes = ?, meeting_status = ?, word_count = ?, selected_template_id = ?, selected_template_name = ?, selected_template_kind = ?, selected_template_prompt = ?, updated_at = ?, sync_dirty = 1
         WHERE id = ?
         """
         var statement: OpaquePointer?
@@ -1978,15 +1979,16 @@ public final class DictationStore {
         }
         defer { sqlite3_finalize(statement) }
         sqlite3_bind_text(statement, 1, (rawTranscript as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(statement, 2, (formattedNotes as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(statement, 3, (MeetingStatus.completed.rawValue as NSString).utf8String, -1, nil)
-        sqlite3_bind_int(statement, 4, Int32(wordCount))
-        sqlite3_bind_text(statement, 5, (selectedTemplateID as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(statement, 6, (selectedTemplateName as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(statement, 7, (selectedTemplateKind.rawValue as NSString).utf8String, -1, nil)
-        sqlite3_bind_text(statement, 8, (selectedTemplatePrompt as NSString).utf8String, -1, nil)
-        sqlite3_bind_double(statement, 9, Date().timeIntervalSince1970)
-        sqlite3_bind_int64(statement, 10, id)
+        bindOptionalText(rawOriginalTranscript, at: 2, statement: statement)
+        sqlite3_bind_text(statement, 3, (formattedNotes as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(statement, 4, (MeetingStatus.completed.rawValue as NSString).utf8String, -1, nil)
+        sqlite3_bind_int(statement, 5, Int32(wordCount))
+        sqlite3_bind_text(statement, 6, (selectedTemplateID as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(statement, 7, (selectedTemplateName as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(statement, 8, (selectedTemplateKind.rawValue as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(statement, 9, (selectedTemplatePrompt as NSString).utf8String, -1, nil)
+        sqlite3_bind_double(statement, 10, Date().timeIntervalSince1970)
+        sqlite3_bind_int64(statement, 11, id)
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw lastError(db)
         }

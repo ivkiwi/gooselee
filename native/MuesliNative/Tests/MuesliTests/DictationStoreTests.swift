@@ -1613,7 +1613,8 @@ struct DictationStoreTests {
 
         try store.updateMeetingTranscriptAndSummary(
             id: meetingID,
-            rawTranscript: "Recovered transcript words",
+            rawTranscript: "Recovered cleaned transcript words",
+            rawOriginalTranscript: "Recovered raw transcript words",
             formattedNotes: "## Summary\nRecovered notes",
             selectedTemplateID: "auto",
             selectedTemplateName: "Auto",
@@ -1622,10 +1623,11 @@ struct DictationStoreTests {
         )
 
         let updated = try #require(try store.meeting(id: meetingID))
-        #expect(updated.rawTranscript == "Recovered transcript words")
+        #expect(updated.rawTranscript == "Recovered cleaned transcript words")
+        #expect(updated.rawOriginalTranscript == "Recovered raw transcript words")
         #expect(updated.formattedNotes == "## Summary\nRecovered notes")
         #expect(updated.status == .completed)
-        #expect(updated.wordCount == 5)
+        #expect(updated.wordCount == 6)
         #expect(updated.savedRecordingPath == "/tmp/recovered.wav")
         #expect(updated.manualNotes == "Manual note")
     }

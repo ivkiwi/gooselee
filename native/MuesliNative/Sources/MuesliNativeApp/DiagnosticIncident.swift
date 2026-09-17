@@ -1,7 +1,6 @@
 import Foundation
 
 enum DiagnosticIncidentKind: String, Codable, CaseIterable, Sendable {
-    case manualReport = "manual_report"
     case dictationAudioFailed = "dictation_audio_failed"
     case dictationTranscriptionFailed = "dictation_transcription_failed"
     case streamingDictationStartFailed = "streaming_dictation_start_failed"
@@ -12,8 +11,6 @@ enum DiagnosticIncidentKind: String, Codable, CaseIterable, Sendable {
 
     var title: String {
         switch self {
-        case .manualReport:
-            return "Manual problem report"
         case .dictationAudioFailed:
             return "Dictation audio capture failed"
         case .dictationTranscriptionFailed:

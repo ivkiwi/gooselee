@@ -3,10 +3,8 @@ import MuesliCore
 
 struct AboutView: View {
     let appState: AppState
-    let openDiagnosticReport: () -> Void
 
     private let githubURL = "https://github.com/ivkiwi/guesli"
-    private let donateURL = "https://buymeacoffee.com/phequals7"
 
     private var version: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.0"
@@ -50,38 +48,9 @@ struct AboutView: View {
                 // MARK: - Support
                 sectionHeader("Support")
                 aboutCard {
-                    aboutRow("Support Development") {
-                        Button {
-                            if let url = URL(string: donateURL) { NSWorkspace.shared.open(url) }
-                        } label: {
-                            HStack(spacing: 6) {
-                                Image(systemName: "heart.fill")
-                                    .font(.system(size: 12))
-                                Text("Donate")
-                                    .font(.system(size: 13, weight: .semibold))
-                            }
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, MuesliTheme.spacing20)
-                            .padding(.vertical, MuesliTheme.spacing8)
-                            .background(MuesliTheme.success)
-                            .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    Divider().background(MuesliTheme.surfaceBorder)
-
                     aboutRow("Source Code") {
                         actionButton("View on GitHub", icon: "arrow.up.right.square") {
                             if let url = URL(string: githubURL) { NSWorkspace.shared.open(url) }
-                        }
-                    }
-
-                    Divider().background(MuesliTheme.surfaceBorder)
-
-                    aboutRow("Report a Problem") {
-                        actionButton("Open Report", icon: "exclamationmark.bubble") {
-                            openDiagnosticReport()
                         }
                     }
                 }

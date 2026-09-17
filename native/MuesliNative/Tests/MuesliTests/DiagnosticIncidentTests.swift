@@ -158,9 +158,9 @@ struct DiagnosticIncidentTests {
     @Test("GitHub issue URL is prefilled for Guesli")
     func githubIssueURLIsPrefilled() throws {
         let incident = DiagnosticIncident(
-            kind: .manualReport,
-            severity: .info,
-            stage: "manual_report",
+            kind: .meetingProcessingFailed,
+            severity: .error,
+            stage: "meeting_processing",
             backend: nil,
             error: nil,
             metadata: DiagnosticAppMetadata(
@@ -299,21 +299,5 @@ struct DiagnosticIncidentReporterTests {
         #expect(logged.map(\.id) == [first.id, second.id, third.id])
         #expect(restartedPrompted.isEmpty)
         #expect(appState.pendingDiagnosticIncident == nil)
-    }
-
-    @Test("manual reports prompt without writing incident log")
-    func manualReportsDoNotWriteIncidentLog() {
-        let appState = AppState()
-        var logged: [DiagnosticIncident] = []
-        let reporter = DiagnosticIncidentReporter(
-            appState: appState,
-            incidentSink: { logged.append($0) }
-        )
-
-        reporter.recordManualReport()
-
-        #expect(logged.isEmpty)
-        #expect(appState.pendingDiagnosticIncident?.kind == .manualReport)
-        #expect(appState.pendingDiagnosticIncident?.severity == .info)
     }
 }

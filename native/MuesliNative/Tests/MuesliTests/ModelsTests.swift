@@ -431,10 +431,6 @@ struct AppConfigTests {
         #expect(config.resolvedAutoExportMarkdownContent == .notes)
         #expect(config.autoExportFileFormat == MeetingAutoExportFileFormat.markdown.rawValue)
         #expect(config.resolvedAutoExportFileFormat == .markdown)
-        #expect(config.contributionPromptNextWordCount == nil)
-        #expect(config.contributionPromptNextMeetingCount == nil)
-        #expect(config.contributionGitHubStarClicked == false)
-        #expect(config.contributionBuyMeCoffeeClicked == false)
         #expect(config.upcomingMeetingsDayCount == UpcomingMeetingsWindow.defaultDayCount)
         #expect(config.hiddenCalendarEventSourceHints.isEmpty)
     }
@@ -482,10 +478,6 @@ struct AppConfigTests {
         config.meetingSummaryRetryCount = 5
         config.transcriptCleanupProvider = TranscriptCleanupProviderOption.chatGPT.rawValue
         config.enableLiveStreamingPartials = true
-        config.contributionPromptNextWordCount = 31_000
-        config.contributionPromptNextMeetingCount = 75
-        config.contributionGitHubStarClicked = true
-        config.contributionBuyMeCoffeeClicked = false
         config.upcomingMeetingsDayCount = UpcomingMeetingsWindow.today.dayCount
         config.hiddenCalendarEventSourceHints = [
             "ek-event-1": UnifiedCalendarEvent.CalendarSource.eventKit.rawValue,
@@ -537,10 +529,6 @@ struct AppConfigTests {
         #expect(decoded.meetingSummaryRetryCount == 5)
         #expect(decoded.transcriptCleanupProvider == TranscriptCleanupProviderOption.chatGPT.rawValue)
         #expect(decoded.enableLiveStreamingPartials == true)
-        #expect(decoded.contributionPromptNextWordCount == 31_000)
-        #expect(decoded.contributionPromptNextMeetingCount == 75)
-        #expect(decoded.contributionGitHubStarClicked == true)
-        #expect(decoded.contributionBuyMeCoffeeClicked == false)
         #expect(decoded.upcomingMeetingsDayCount == UpcomingMeetingsWindow.today.dayCount)
         #expect(decoded.hiddenCalendarEventSourceHints == config.hiddenCalendarEventSourceHints)
     }
@@ -554,9 +542,7 @@ struct AppConfigTests {
 
     @Test("JSON coding keys use snake_case")
     func snakeCaseKeys() throws {
-        var config = AppConfig()
-        config.contributionPromptNextWordCount = 1_000
-        config.contributionPromptNextMeetingCount = 25
+        let config = AppConfig()
         let data = try JSONEncoder().encode(config)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
@@ -592,10 +578,6 @@ struct AppConfigTests {
         #expect(json["auto_export_markdown_folder_path"] != nil)
         #expect(json["auto_export_markdown_content"] != nil)
         #expect(json["auto_export_file_format"] != nil)
-        #expect(json["contribution_prompt_next_word_count"] != nil)
-        #expect(json["contribution_prompt_next_meeting_count"] != nil)
-        #expect(json["contribution_github_star_clicked"] != nil)
-        #expect(json["contribution_buy_me_coffee_clicked"] != nil)
         #expect(json["lmstudio_url"] != nil)
         #expect(json["lmstudio_model"] != nil)
         #expect(json["custom_llm_url"] != nil)

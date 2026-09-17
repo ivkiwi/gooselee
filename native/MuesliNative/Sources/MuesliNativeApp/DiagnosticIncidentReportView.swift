@@ -5,43 +5,37 @@ struct DiagnosticIncidentReportView: View {
     let onOpenIssue: () -> Void
     let onDismiss: () -> Void
 
-    private var isManualReport: Bool {
-        incident.kind == .manualReport
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: MuesliTheme.spacing20) {
             HStack(alignment: .top, spacing: MuesliTheme.spacing12) {
-                Image(systemName: isManualReport ? "exclamationmark.bubble.fill" : "exclamationmark.triangle.fill")
+                Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(isManualReport ? MuesliTheme.accent : .orange)
+                    .foregroundStyle(.orange)
                 VStack(alignment: .leading, spacing: MuesliTheme.spacing4) {
-                    Text(isManualReport ? "Report a Problem" : "Diagnostic Failure Detected")
+                    Text("Diagnostic Failure Detected")
                         .font(MuesliTheme.title3())
                         .foregroundStyle(MuesliTheme.textPrimary)
-                    Text(isManualReport ? "\(AppIdentity.displayName) can prepare an anonymized GitHub issue for you to review before opening it." : "\(AppIdentity.displayName) detected a hard failure in \(incident.stage). You can review the anonymized report before opening a GitHub issue.")
+                    Text("\(AppIdentity.displayName) detected a hard failure in \(incident.stage). You can review the anonymized report before opening a GitHub issue.")
                         .font(MuesliTheme.callout())
                         .foregroundStyle(MuesliTheme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
-            if !isManualReport {
-                VStack(alignment: .leading, spacing: MuesliTheme.spacing8) {
-                    diagnosticSummaryRow("Failure", value: incident.kind.title)
-                    diagnosticSummaryRow("Stage", value: incident.stage)
-                    diagnosticSummaryRow("Model", value: incident.model)
-                    diagnosticSummaryRow("Error", value: "\(incident.errorDomain) \(incident.errorCode)")
-                    diagnosticSummaryRow("Meaning", value: incident.errorMeaning?.summary ?? "Unknown; use domain/code for lookup")
-                }
-                .padding(MuesliTheme.spacing12)
-                .background(Color.orange.opacity(0.10))
-                .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
-                .overlay(
-                    RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
-                        .stroke(Color.orange.opacity(0.24), lineWidth: 1)
-                )
+            VStack(alignment: .leading, spacing: MuesliTheme.spacing8) {
+                diagnosticSummaryRow("Failure", value: incident.kind.title)
+                diagnosticSummaryRow("Stage", value: incident.stage)
+                diagnosticSummaryRow("Model", value: incident.model)
+                diagnosticSummaryRow("Error", value: "\(incident.errorDomain) \(incident.errorCode)")
+                diagnosticSummaryRow("Meaning", value: incident.errorMeaning?.summary ?? "Unknown; use domain/code for lookup")
             }
+            .padding(MuesliTheme.spacing12)
+            .background(Color.orange.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall))
+            .overlay(
+                RoundedRectangle(cornerRadius: MuesliTheme.cornerSmall)
+                    .stroke(Color.orange.opacity(0.24), lineWidth: 1)
+            )
 
             Text("No transcript, audio, meeting title, calendar title, clipboard contents, screen text, API keys, auth tokens, local file paths, raw logs, or database contents are included.")
                 .font(MuesliTheme.caption())

@@ -31,6 +31,12 @@ struct SoundControllerTests {
 @Suite("MenuBarIconRenderer", .guesliHermeticSupport)
 struct MenuBarIconRendererTests {
 
+    @Test("options keep the compatibility ID but present it as the goose")
+    func optionsExposeGoose() {
+        let goose = MenuBarIconRenderer.options.first { $0.id == "guesli" }
+        #expect(goose?.label == "Goose")
+    }
+
     @Test("make(choice:) returns a non-nil image for SF Symbol")
     func makeReturnsImage() {
         let image = MenuBarIconRenderer.make(choice: "mic.fill")

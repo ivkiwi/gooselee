@@ -6,7 +6,6 @@
 .codanna/cache
 
 # FastEmbed cache
-.fastembed_cache.claude
 .fastembed_cache
 
 # MCP configuration
@@ -48,10 +47,12 @@ vendor/
 # Repository mapping
 .repomap.tags.cache.v1
 
-# Claude Code
-.claude/settings.local.json
-.claude/watcher.*
-.claude/repo_map*
+# Local code-intelligence and audit artifacts
+.codegraph/
+graphify-out/
+DIAG_COMPARE.md
+GAP_AUDIT.md
+
 # init-gitignore:end
 
 # Python
@@ -92,7 +93,6 @@ scripts/notarize_dmg.sh
 scripts/dev-test.sh
 
 # Legacy files (kept locally, not tracked)
-CLAUDE.md
 Context/
 app.py
 main.py
@@ -109,7 +109,6 @@ assets/menu_mic_template.png
 context.md
 
 # IDE
-.claude/
 *.swp
 *~
 .vercel

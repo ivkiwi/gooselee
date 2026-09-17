@@ -3,7 +3,7 @@ import AppKit
 enum MenuBarIconRenderer {
 
     static let options: [(id: String, label: String)] = [
-        ("guesli", "GooseLee Logo"),
+        ("guesli", "Goose"),
         ("mic.fill", "Microphone"),
         ("waveform", "Waveform"),
         ("bubble.left.fill", "Bubble"),
@@ -18,10 +18,11 @@ enum MenuBarIconRenderer {
     ]
 
     /// Returns a menu bar icon for the given choice.
-    /// "guesli" loads the bundled GooseLee menu icon; anything else renders an SF Symbol.
+    /// "guesli" is the compatibility ID for the bundled GooseLee goose;
+    /// anything else renders an SF Symbol.
     static func make(choice: String = "guesli") -> NSImage? {
         if choice == "guesli" {
-            if let url = Bundle.main.url(forResource: "menu_m_template", withExtension: "png"),
+            if let url = Bundle.main.url(forResource: "menu_goose_template", withExtension: "png"),
                let image = NSImage(contentsOf: url) {
                 image.isTemplate = true
                 image.size = NSSize(width: 18, height: 18)

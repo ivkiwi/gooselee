@@ -157,7 +157,7 @@ if [[ -f "$LOCALVQE_MODEL_PATH" ]]; then
 fi
 
 # Bundle assets
-cp "$ROOT/assets/menu_m_template.png" "$STAGED_APP_DIR/Contents/Resources/menu_m_template.png"
+cp "$ROOT/assets/menu_goose_template.png" "$STAGED_APP_DIR/Contents/Resources/menu_goose_template.png"
 cp "$ROOT/assets/gooselee.icns" "$STAGED_APP_DIR/Contents/Resources/gooselee.icns"
 cp "$ROOT/assets/zoom-app.png" "$STAGED_APP_DIR/Contents/Resources/zoom-app.png"
 cp "$ROOT/assets/Google_Meet_icon_(2020).svg.png" "$STAGED_APP_DIR/Contents/Resources/google-meet.png"

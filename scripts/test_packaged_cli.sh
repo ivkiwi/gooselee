@@ -11,6 +11,7 @@ CLI_BIN="$APP_PATH/Contents/MacOS/guesli-cli"
 GIGAAM_HELPER="$APP_PATH/Contents/MacOS/onnx-gigaam-helper"
 FLUIDAUDIO_LICENSE="$APP_PATH/Contents/Resources/FluidAudio-LICENSE-Apache-2.0.txt"
 APP_ICON="$APP_PATH/Contents/Resources/gooselee.icns"
+MENU_ICON="$APP_PATH/Contents/Resources/menu_goose_template.png"
 INFO_PLIST="$APP_PATH/Contents/Info.plist"
 SPEC_OUTPUT="$INSTALL_ROOT/guesli-cli-spec.json"
 TRANSCRIBE_HELP_OUTPUT="$INSTALL_ROOT/guesli-cli-transcribe-help.txt"
@@ -51,6 +52,7 @@ find "$APP_PATH/Contents/MacOS" -maxdepth 1 -name 'libonnxruntime*.dylib' -type 
 }
 [[ -s "$FLUIDAUDIO_LICENSE" ]] || { echo "Missing bundled FluidAudio Apache license" >&2; exit 1; }
 [[ -s "$APP_ICON" ]] || { echo "Missing bundled GooseLee app icon" >&2; exit 1; }
+[[ -s "$MENU_ICON" ]] || { echo "Missing bundled GooseLee menu icon" >&2; exit 1; }
 
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$INFO_PLIST")" == "GooseLee" ]] || {
   echo "Packaged app display name is not GooseLee" >&2

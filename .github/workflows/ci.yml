@@ -61,7 +61,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build (release)
-        run: swift build --package-path native/MuesliNative -c release --product MuesliNativeApp
+        run: swift build --package-path native/Guesli -c release --product Guesli
 
   browser-extension:
     needs: changes
@@ -74,8 +74,8 @@ jobs:
 
       - name: Check Meet speaker extension
         run: |
-          node --check browser-extension/muesli-meet-speaker/content.js
-          node --test browser-extension/muesli-meet-speaker/content.test.js
+          node --check browser-extension/guesli-meet-speaker/content.js
+          node --test browser-extension/guesli-meet-speaker/content.test.js
 
   # Swift tests — sharded by domain to reduce end-to-end wall time
   test_shards:
@@ -95,7 +95,7 @@ jobs:
       - name: Run test shard
         run: bash ./scripts/run_ci_test_shard.sh "${{ matrix.shard }}"
 
-  # Packaged CLI smoke test — verify the app bundle contains muesli-cli
+  # Packaged CLI smoke test — verify the app bundle contains guesli-cli
   cli-smoke:
     needs: changes
     if: needs.changes.outputs.native_or_packaging == 'true'

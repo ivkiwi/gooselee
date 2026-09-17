@@ -13,9 +13,9 @@ set -euo pipefail
 #   ./scripts/dev-reset-permissions.sh --bundle-id com.guesli.dev
 #   ./scripts/dev-reset-permissions.sh --dry-run
 
-BUNDLE_ID="${MUESLI_DEV_BUNDLE_ID:-com.guesli.dev}"
-APP_PROCESS_NAME="${MUESLI_DEV_PROCESS_NAME:-GuesliDev}"
-APP_BUNDLE_PATH="${MUESLI_DEV_APP_PATH:-/Applications/GuesliDev.app}"
+BUNDLE_ID="${GUESLI_DEV_BUNDLE_ID:-com.guesli.dev}"
+APP_PROCESS_NAME="${GUESLI_DEV_PROCESS_NAME:-GuesliDev}"
+APP_BUNDLE_PATH="${GUESLI_DEV_APP_PATH:-/Applications/GuesliDev.app}"
 DRY_RUN=0
 FORCE=0
 

@@ -1,0 +1,707 @@
+import CoreAudio
+import FluidAudio
+import Foundation
+import GuesliCore
+import Testing
+@testable import GuesliApp
+
+@Suite("Meet speaker bridge", .guesliHermeticSupport)
+struct MeetSpeakerBridgeTests {
+    @Test("parses extension speaker observation JSON")
+    func parsesObservationJSON() throws {
+        let data = """
+        {"meetingURL":"https://meet.google.com/abc-defg-hij","speakerName":"Alice Owner","activeSpeakers":["Alice Owner"],"participants":[{"name":"Alice Owner"},{"name":"Me","isSelf":true}],"source":"google-meet-extension"}
+        """.data(using: .utf8)!
+
+        let observation = try #require(MeetSpeakerBridgeServer.parseObservation(data))
+
+        #expect(observation.meetingURL == "https://meet.google.com/abc-defg-hij")
+        #expect(observation.speakerName == "Alice Owner")
+        #expect(observation.activeSpeakers == ["Alice Owner"])
+        #expect(observation.participants.map(\.name) == ["Alice Owner", "Me"])
+        #expect(observation.participants[1].isSelf)
+        #expect(observation.source == "google-meet-extension")
+    }
+
+    @Test("parses participants-only extension update")
+    func parsesParticipantsOnlyUpdate() throws {
+        let data = """
+        {"meetingURL":"https://meet.google.com/abc-defg-hij","participants":["Alice Owner",{"name":"Bob Reviewer"}],"source":"google-meet-extension"}
+        """.data(using: .utf8)!
+
+        let observation = try #require(MeetSpeakerBridgeServer.parseObservation(data))
+
+        #expect(observation.speakerName == nil)
+        #expect(observation.participants.map(\.name) == ["Alice Owner", "Bob Reviewer"])
+    }
+
+    @Test("parses client observation timestamp")
+    func parsesClientObservationTimestamp() throws {
+        let data = """
+        {"speakerName":"Alice Owner","activeSpeakers":["Alice Owner"],"observedAtMs":1710000000123,"source":"google-meet-extension"}
+        """.data(using: .utf8)!
+
+        let observation = try #require(MeetSpeakerBridgeServer.parseObservation(data))
+
+        #expect(abs(observation.observedAt.timeIntervalSince1970 - 1_710_000_000.123) < 0.001)
+        #expect(observation.activeSpeakers == ["Alice Owner"])
+    }
+
+    @Test("parses backup batch and inherits root metadata")
+    func parsesBackupBatch() {
+        let data = """
+        {"meetingURL":"https://meet.google.com/abc-defg-hij","source":"google-meet-extension-backup","observations":[{"speakerName":"Alice Owner","activeSpeakers":["Alice Owner"],"observedAtMs":1710000000123},{"participants":[{"name":"Bob Reviewer"}],"observedAtMs":1710000002123}]}
+        """.data(using: .utf8)!
+
+        let observations = MeetSpeakerBridgeServer.parseObservations(data)
+
+        #expect(observations.count == 2)
+        #expect(observations[0].speakerName == "Alice Owner")
+        #expect(observations[0].activeSpeakers == ["Alice Owner"])
+        #expect(observations[0].meetingURL == "https://meet.google.com/abc-defg-hij")
+        #expect(observations[0].source == "google-meet-extension-backup")
+        #expect(observations[1].participants.map(\.name) == ["Bob Reviewer"])
+        #expect(abs(observations[1].observedAt.timeIntervalSince1970 - 1_710_000_002.123) < 0.001)
+    }
+
+    @Test("filters clock-like speaker names from bridge payloads")
+    func filtersClockLikeSpeakerNamesFromBridgePayloads() throws {
+        let data = """
+        {"speakerName":"11:29","activeSpeakers":["11:29","Alice Owner"],"observedAtMs":1710000000123,"source":"google-meet-extension"}
+        """.data(using: .utf8)!
+
+        let observation = try #require(MeetSpeakerBridgeServer.parseObservation(data))
+
+        #expect(observation.speakerName == nil)
+        #expect(observation.activeSpeakers == ["Alice Owner"])
+    }
+
+    @Test("waits for complete Chrome POST body")
+    func waitsForCompleteChromePOSTBody() throws {
+        let body = #"{"speakerName":"Alice Owner","observedAtMs":1710000000123,"source":"google-meet-extension"}"#
+        let header = "POST /v1/meet-speaker HTTP/1.1\r\n"
+            + "Host: 127.0.0.1:1477\r\n"
+            + "Content-Type: application/json\r\n"
+            + "Content-Length: \(body.utf8.count)\r\n"
+            + "\r\n"
+        let headerData = Data(header.utf8)
+        let requestData = headerData + Data(body.utf8)
+
+        #expect(MeetSpeakerBridgeServer.completeHTTPRequestLength(headerData) == headerData.count + body.utf8.count)
+        #expect(MeetSpeakerBridgeServer.completeHTTPRequestLength(requestData) == requestData.count)
+    }
+
+    @Test("rejects complete oversized Chrome POST body")
+    func rejectsCompleteOversizedChromePOSTBody() throws {
+        let body = String(repeating: "x", count: 129 * 1024)
+        let header = "POST /v1/meet-speaker HTTP/1.1\r\n"
+            + "Host: 127.0.0.1:1477\r\n"
+            + "Content-Type: application/json\r\n"
+            + "Content-Length: \(body.utf8.count)\r\n"
+            + "\r\n"
+        let requestData = Data(header.utf8) + Data(body.utf8)
+
+        #expect(MeetSpeakerBridgeServer.completeHTTPRequestLength(requestData) == requestData.count)
+        #expect(MeetSpeakerBridgeServer.isOversizedHTTPRequestBuffer(requestData))
+    }
+
+    @Test("accepts Chrome private network preflight without body")
+    func acceptsChromePrivateNetworkPreflightWithoutBody() throws {
+        let request = "OPTIONS /v1/meet-speaker HTTP/1.1\r\n"
+            + "Host: 127.0.0.1:1477\r\n"
+            + "Access-Control-Request-Method: POST\r\n"
+            + "Access-Control-Request-Private-Network: true\r\n"
+            + "\r\n"
+        let data = Data(request.utf8)
+
+        #expect(MeetSpeakerBridgeServer.completeHTTPRequestLength(data) == data.count)
+    }
+
+    @Test("requires the configured bearer pairing token")
+    func requiresPairingToken() {
+        let authorized = "POST /v1/meet-speaker HTTP/1.1\r\nAuthorization: Bearer secret-token\r\n\r\n"
+        let wrong = "POST /v1/meet-speaker HTTP/1.1\r\nAuthorization: Bearer wrong-token\r\n\r\n"
+        let bodyInjection = "POST /v1/meet-speaker HTTP/1.1\r\nContent-Type: text/plain\r\n\r\nauthorization: Bearer secret-token"
+
+        #expect(MeetSpeakerBridgeServer.isAuthorizedRequest(authorized, pairingToken: "secret-token"))
+        #expect(!MeetSpeakerBridgeServer.isAuthorizedRequest(wrong, pairingToken: "secret-token"))
+        #expect(!MeetSpeakerBridgeServer.isAuthorizedRequest(bodyInjection, pairingToken: "secret-token"))
+        #expect(!MeetSpeakerBridgeServer.isAuthorizedRequest(authorized, pairingToken: ""))
+    }
+
+    @Test("bridge opt-in and pairing token survive config round-trip")
+    func bridgeConfigRoundTrip() throws {
+        var config = AppConfig()
+        config.enableMeetSpeakerBridge = true
+        config.meetSpeakerBridgePairingToken = "secret-token"
+
+        let decoded = try JSONDecoder().decode(AppConfig.self, from: JSONEncoder().encode(config))
+
+        #expect(decoded.enableMeetSpeakerBridge)
+        #expect(decoded.meetSpeakerBridgePairingToken == "secret-token")
+    }
+
+    @Test("bridge runs only for an enabled active Google Meet")
+    func bridgeActivationIsScopedToActiveGoogleMeet() throws {
+        let meetSource = try #require(MeetingAutoStopSource(
+            meetingURL: URL(string: "https://meet.google.com/abc-defg-hij")!
+        ))
+        let zoomSource = try #require(MeetingAutoStopSource(
+            meetingURL: URL(string: "https://zoom.us/j/123456")!
+        ))
+
+        #expect(MeetSpeakerBridgeActivation.shouldRun(
+            enabled: true,
+            pairingToken: "secret-token",
+            source: meetSource,
+            isMeetingActive: true
+        ))
+        #expect(!MeetSpeakerBridgeActivation.shouldRun(
+            enabled: false,
+            pairingToken: "secret-token",
+            source: meetSource,
+            isMeetingActive: true
+        ))
+        #expect(!MeetSpeakerBridgeActivation.shouldRun(
+            enabled: true,
+            pairingToken: "secret-token",
+            source: zoomSource,
+            isMeetingActive: true
+        ))
+        #expect(!MeetSpeakerBridgeActivation.shouldRun(
+            enabled: true,
+            pairingToken: "secret-token",
+            source: meetSource,
+            isMeetingActive: false
+        ))
+    }
+
+    @Test("maps observed Meet speaker names to diarization clusters")
+    func mapsSpeakerNamesToDiarizationClusters() {
+        let start = Date(timeIntervalSince1970: 1000)
+        let diarization = [
+            makeDiarSeg(speakerId: "spk_0", start: 0.0, end: 5.0),
+            makeDiarSeg(speakerId: "spk_1", start: 6.0, end: 12.0),
+        ]
+        let observations = repeatedObservations(name: "Alice Owner", start: start, firstOffset: 1.0, count: 20)
+            + repeatedObservations(name: "Bob Reviewer", start: start, firstOffset: 7.0, count: 20)
+
+        let map = MeetingSession.speakerNameMap(
+            diarizationSegments: diarization,
+            observations: observations,
+            meetingStart: start
+        )
+
+        #expect(map["spk_0"] == "Alice Owner")
+        #expect(map["spk_1"] == "Bob Reviewer")
+    }
+
+    @Test("speaker map uses offset diarization timeline")
+    func speakerMapUsesOffsetDiarizationTimeline() {
+        let start = Date(timeIntervalSince1970: 1000)
+        let diarization = [
+            makeDiarSeg(speakerId: "spk_0", start: 31.0, end: 36.0),
+        ]
+        let observations = [
+            observation(name: "Alice Owner", activeSpeakers: ["Alice Owner"], start: start, offset: 32.0),
+        ]
+
+        let map = MeetingSession.speakerNameMap(
+            diarizationSegments: diarization,
+            observations: observations,
+            meetingStart: start
+        )
+
+        #expect(map["spk_0"] == "Alice Owner")
+    }
+
+    @Test("speaker map keeps sparse short exclusive speaker observations")
+    func speakerMapKeepsSparseShortExclusiveSpeakerObservations() {
+        let start = Date(timeIntervalSince1970: 1000)
+        let diarization = [
+            makeDiarSeg(speakerId: "spk_0", start: 0.0, end: 5.0),
+            makeDiarSeg(speakerId: "spk_1", start: 10.0, end: 10.8),
+        ]
+        let observations = [
+            observation(name: "Alice Owner", activeSpeakers: ["Alice Owner"], start: start, offset: 1.0),
+            observation(name: "Bob Reviewer", activeSpeakers: ["Bob Reviewer"], start: start, offset: 10.4),
+        ]
+
+        let map = MeetingSession.speakerNameMap(
+            diarizationSegments: diarization,
+            observations: observations,
+            meetingStart: start
+        )
+
+        #expect(map["spk_0"] == "Alice Owner")
+        #expect(map["spk_1"] == "Bob Reviewer")
+    }
+
+    @Test("speaker map ignores clock labels from Meet chrome")
+    func speakerMapIgnoresClockLabelsFromMeetChrome() {
+        let start = Date(timeIntervalSince1970: 1000)
+        let diarization = [
+            makeDiarSeg(speakerId: "spk_0", start: 0.0, end: 5.0),
+        ]
+        let observations = [
+            MeetSpeakerObservation(
+                meetingURL: nil,
+                speakerName: "11:19",
+                activeSpeakers: [],
+                participants: [MeetingParticipant(name: "Alice Owner", email: nil, isOrganizer: false, isSelf: false)],
+                observedAt: start.addingTimeInterval(1.0),
+                source: "test"
+            ),
+            observation(name: "Alice Owner", activeSpeakers: ["Alice Owner"], start: start, offset: 2.0),
+        ]
+
+        let map = MeetingSession.speakerNameMap(
+            diarizationSegments: diarization,
+            observations: observations,
+            meetingStart: start
+        )
+
+        #expect(map["spk_0"] == "Alice Owner")
+    }
+
+    @Test("speaker map allows one observed speaker across split diarization clusters")
+    func speakerMapAllowsOneObservedSpeakerAcrossSplitDiarizationClusters() {
+        let start = Date(timeIntervalSince1970: 1000)
+        let diarization = [
+            makeDiarSeg(speakerId: "spk_0", start: 0.0, end: 5.0),
+            makeDiarSeg(speakerId: "spk_1", start: 6.0, end: 12.0),
+        ]
+        let observations = [
+            observation(name: "Alice Owner", activeSpeakers: ["Alice Owner"], start: start, offset: 1.0),
+            observation(name: "Alice Owner", activeSpeakers: ["Alice Owner"], start: start, offset: 8.0),
+        ]
+
+        let map = MeetingSession.speakerNameMap(
+            diarizationSegments: diarization,
+            observations: observations,
+            meetingStart: start
+        )
+
+        #expect(map["spk_0"] == "Alice Owner")
+        #expect(map["spk_1"] == "Alice Owner")
+    }
+
+    @Test("speaker map corrects dominant-speaker prior")
+    func speakerMapCorrectsDominantSpeakerPrior() {
+        let start = Date(timeIntervalSince1970: 1000)
+        let diarization = [
+            makeDiarSeg(speakerId: "spk_0", start: 0.0, end: 10.0),
+            makeDiarSeg(speakerId: "spk_1", start: 20.0, end: 30.0),
+        ]
+        let observations = repeatedObservations(name: "Alice Owner", start: start, firstOffset: 1.0, count: 80, step: 0.1)
+            + repeatedObservations(name: "Alice Owner", start: start, firstOffset: 20.2, count: 30, step: 0.1)
+            + repeatedObservations(name: "Bob Reviewer", start: start, firstOffset: 24.0, count: 20, step: 0.1)
+
+        let map = MeetingSession.speakerNameMap(
+            diarizationSegments: diarization,
+            observations: observations,
+            meetingStart: start
+        )
+
+        #expect(map["spk_0"] == "Alice Owner")
+        #expect(map["spk_1"] == "Bob Reviewer")
+    }
+
+    @Test("speaker map leaves ambiguous clusters unnamed")
+    func speakerMapLeavesAmbiguousClustersUnnamed() {
+        let start = Date(timeIntervalSince1970: 1000)
+        let diarization = [
+            makeDiarSeg(speakerId: "spk_0", start: 0.0, end: 10.0),
+        ]
+        let observations = repeatedObservations(name: "Alice Owner", start: start, firstOffset: 1.0, count: 20, step: 0.1)
+            + repeatedObservations(name: "Bob Reviewer", start: start, firstOffset: 5.0, count: 20, step: 0.1)
+
+        let map = MeetingSession.speakerNameMap(
+            diarizationSegments: diarization,
+            observations: observations,
+            meetingStart: start
+        )
+
+        #expect(map["spk_0"] == nil)
+    }
+
+    @Test("speaker map treats exclusive active-speaker windows as strong evidence")
+    func speakerMapTreatsExclusiveActiveSpeakerWindowsAsStrongEvidence() {
+        let start = Date(timeIntervalSince1970: 1000)
+        let diarization = [
+            makeDiarSeg(speakerId: "spk_0", start: 0.0, end: 5.0),
+        ]
+        let observations = [
+            observation(name: "Bob Reviewer", activeSpeakers: ["Bob Reviewer"], start: start, offset: 2.0),
+        ]
+
+        let map = MeetingSession.speakerNameMap(
+            diarizationSegments: diarization,
+            observations: observations,
+            meetingStart: start
+        )
+
+        #expect(map["spk_0"] == "Bob Reviewer")
+    }
+
+    @Test("speaker map accepts one normalized participant prefix")
+    func speakerMapAcceptsUniqueParticipantPrefix() {
+        let start = Date(timeIntervalSince1970: 1000)
+        let observation = MeetSpeakerObservation(
+            meetingURL: nil,
+            speakerName: "Kirill Pro",
+            activeSpeakers: ["Kirill Pro"],
+            participants: [
+                MeetingParticipant(name: "Kirill Prokhorov", email: nil, isOrganizer: false, isSelf: false),
+                MeetingParticipant(name: "Alice Owner", email: nil, isOrganizer: false, isSelf: false),
+            ],
+            observedAt: start.addingTimeInterval(1),
+            source: "test"
+        )
+
+        let map = MeetingSession.speakerNameMap(
+            diarizationSegments: [makeDiarSeg(speakerId: "spk_0", start: 0, end: 3)],
+            observations: [observation],
+            meetingStart: start
+        )
+
+        #expect(map["spk_0"] == "Kirill Prokhorov")
+    }
+
+    @Test("speaker map rejects ambiguous participant prefixes")
+    func speakerMapRejectsAmbiguousParticipantPrefix() {
+        let start = Date(timeIntervalSince1970: 1000)
+        let observation = MeetSpeakerObservation(
+            meetingURL: nil,
+            speakerName: "Anton Kuli",
+            activeSpeakers: ["Anton Kuli"],
+            participants: [
+                MeetingParticipant(name: "Anton Kulin", email: nil, isOrganizer: false, isSelf: false),
+                MeetingParticipant(name: "Anton Kulikov", email: nil, isOrganizer: false, isSelf: false),
+            ],
+            observedAt: start.addingTimeInterval(1),
+            source: "test"
+        )
+
+        let map = MeetingSession.speakerNameMap(
+            diarizationSegments: [makeDiarSeg(speakerId: "spk_0", start: 0, end: 3)],
+            observations: [observation],
+            meetingStart: start
+        )
+
+        #expect(map["spk_0"] == nil)
+    }
+
+    @Test("speaker map ignores unmatched backup events when scoring a real match")
+    func speakerMapIgnoresUnmatchedBackupEvents() {
+        let start = Date(timeIntervalSince1970: 1000)
+        let diarization = [
+            makeDiarSeg(speakerId: "spk_0", start: 10.0, end: 12.0),
+        ]
+        let observations = [
+            observation(name: "Alice Owner", activeSpeakers: ["Alice Owner"], start: start, offset: 11.0),
+        ] + (0..<20).map { index in
+            observation(
+                name: "Alice Owner",
+                activeSpeakers: ["Alice Owner"],
+                start: start,
+                offset: 100.0 + Double(index)
+            )
+        }
+
+        let map = MeetingSession.speakerNameMap(
+            diarizationSegments: diarization,
+            observations: observations,
+            meetingStart: start
+        )
+
+        #expect(map["spk_0"] == "Alice Owner")
+    }
+
+    @Test("merges calendar and observed Meet participants")
+    func mergesCalendarAndObservedMeetParticipants() {
+        let calendar = [
+            MeetingParticipant(name: "Alice Owner", email: "alice@example.com", isOrganizer: true, isSelf: false),
+        ]
+        let observations = [
+            MeetSpeakerObservation(
+                meetingURL: nil,
+                speakerName: nil,
+                participants: [
+                    MeetingParticipant(name: "Alice Owner", email: nil, isOrganizer: false, isSelf: false),
+                    MeetingParticipant(name: "Bob Reviewer", email: nil, isOrganizer: false, isSelf: false),
+                ],
+                observedAt: Date(),
+                source: "test"
+            ),
+        ]
+
+        let merged = MeetingSession.mergedParticipants(
+            calendar,
+            MeetingSession.observedParticipants(from: observations)
+        )
+
+        #expect(merged.map(\.summaryLabel) == ["Alice Owner <alice@example.com>", "Bob Reviewer"])
+    }
+
+    @Test("summary context includes participant candidates with anti-guessing guard")
+    func summaryContextIncludesParticipantCandidates() {
+        let context = MeetingSession.summaryContext(
+            participants: [
+                MeetingParticipant(name: "Alice Owner", email: "alice@example.com", isOrganizer: true, isSelf: false),
+                MeetingParticipant(name: "Me", email: "me@example.com", isOrganizer: false, isSelf: true),
+            ]
+        )
+
+        #expect(context.contains("Meeting participant candidates:"))
+        #expect(context.contains("- Alice Owner <alice@example.com>"))
+        #expect(!context.contains("- Me <me@example.com>"))
+        #expect(context.contains("Do not assign a Speaker N label"))
+    }
+
+    @Test("persists speaker observations as per-meeting JSONL")
+    func persistsSpeakerObservationsAsPerMeetingJSONL() throws {
+        let supportDirectory = GuesliPaths.defaultSupportDirectoryURL()
+        let meetingID: Int64 = 28
+        let logURL = MeetSpeakerObservationLog.fileURL(
+            meetingID: meetingID,
+            supportDirectory: supportDirectory
+        )
+        try? FileManager.default.removeItem(at: logURL)
+
+        let observedAt = Date(timeIntervalSince1970: 1_710_000_000.123)
+        let observation = MeetSpeakerObservation(
+            meetingURL: "https://meet.google.com/abc-defg-hij",
+            speakerName: "Alice Owner",
+            activeSpeakers: ["Alice Owner"],
+            participants: [
+                MeetingParticipant(
+                    name: "Alice Owner",
+                    email: "alice@example.com",
+                    isOrganizer: true,
+                    isSelf: false
+                ),
+                MeetingParticipant(
+                    name: "Me",
+                    email: "me@example.com",
+                    isOrganizer: false,
+                    isSelf: true
+                ),
+            ],
+            observedAt: observedAt,
+            source: "google-meet-extension"
+        )
+
+        try MeetSpeakerObservationLog.append(
+            observation,
+            meetingID: meetingID,
+            supportDirectory: supportDirectory
+        )
+
+        let loaded = try MeetSpeakerObservationLog.load(
+            meetingID: meetingID,
+            supportDirectory: supportDirectory
+        )
+        let stored = try #require(loaded.first)
+        let logLines = try String(contentsOf: logURL, encoding: .utf8)
+            .split(separator: "\n", omittingEmptySubsequences: true)
+
+        #expect(loaded.count == 1)
+        #expect(stored.meetingURL == observation.meetingURL)
+        #expect(stored.speakerName == "Alice Owner")
+        #expect(stored.activeSpeakers == ["Alice Owner"])
+        #expect(stored.participants.map { $0.summaryLabel } == [
+            "Alice Owner <alice@example.com>",
+            "Me <me@example.com>",
+        ])
+        #expect(abs(stored.observedAt.timeIntervalSince1970 - observedAt.timeIntervalSince1970) < 0.001)
+        #expect(stored.source == "google-meet-extension")
+        #expect(logLines.count == 1)
+    }
+
+    @Test("missing speaker observation log loads empty")
+    func missingSpeakerObservationLogLoadsEmpty() throws {
+        let loaded = try MeetSpeakerObservationLog.load(
+            meetingID: 404,
+            supportDirectory: GuesliPaths.defaultSupportDirectoryURL()
+        )
+
+        #expect(loaded.isEmpty)
+    }
+
+#if DEBUG
+    @Test("bridge ingest attaches observation to active meeting session")
+    func bridgeIngestAttachesObservationToActiveMeetingSession() throws {
+        let start = Date(timeIntervalSince1970: 1_710_000_000)
+        let data = """
+        {"meetingURL":"https://meet.google.com/abc-defg-hij","speakerName":"Alice Owner","activeSpeakers":["Alice Owner"],"participants":[{"name":"Alice Owner"},{"name":"Bob Reviewer"}],"observedAtMs":1710000001000,"source":"google-meet-extension"}
+        """.data(using: .utf8)!
+        let observation = try #require(MeetSpeakerBridgeServer.parseObservations(data).first)
+        let session = makeSession()
+        session.setRecordingForTesting(true)
+
+        let route = MeetSpeakerObservationRouting.route(
+            matchesActiveSource: true,
+            isTemporallyRelevant: true,
+            hasActiveRecordingSession: session.isRecording,
+            canBufferForPendingMeeting: false
+        )
+        #expect(route == .recordToActiveMeeting)
+        if route == .recordToActiveMeeting {
+            session.recordSpeakerObservation(observation)
+        }
+
+        let stored = session.speakerObservationsForTesting()
+        #expect(stored.count == 1)
+        #expect(session.speakerObservationStats() == MeetSpeakerObservationStats(
+            observationsReceived: 1,
+            speakerEvents: 1,
+            participantSnapshots: 1
+        ))
+
+        let speakerMap = MeetingSession.speakerNameMap(
+            diarizationSegments: [makeDiarSeg(speakerId: "spk_0", start: 0.0, end: 3.0)],
+            observations: stored,
+            meetingStart: start
+        )
+        #expect(speakerMap["spk_0"] == "Alice Owner")
+        #expect(MeetingSession.observedParticipants(from: stored).map(\.name) == ["Alice Owner", "Bob Reviewer"])
+    }
+#endif
+
+    @Test("bridge routing drops observations when no meeting is active")
+    func bridgeRoutingDropsObservationsWhenNoMeetingIsActive() throws {
+        let data = """
+        {"meetingURL":"https://meet.google.com/abc-defg-hij","speakerName":"Alice Owner","source":"google-meet-extension"}
+        """.data(using: .utf8)!
+        let observation = try #require(MeetSpeakerBridgeServer.parseObservation(data))
+        let route = MeetSpeakerObservationRouting.route(
+            matchesActiveSource: true,
+            isTemporallyRelevant: true,
+            hasActiveRecordingSession: false,
+            canBufferForPendingMeeting: false
+        )
+        var stats = MeetSpeakerBridgeRoutingStats()
+
+        stats.recordReceived(observation)
+        if route == .dropNoActiveMeeting {
+            stats.droppedNoActiveMeeting += 1
+        }
+
+        #expect(route == .dropNoActiveMeeting)
+        #expect(stats.received.observationsReceived == 1)
+        #expect(stats.received.speakerEvents == 1)
+        #expect(stats.droppedNoActiveMeeting == 1)
+        #expect(stats.matchedToMeeting == 0)
+    }
+
+    @Test("bridge routing drops stale backup observations")
+    func bridgeRoutingDropsStaleBackupObservations() {
+        let route = MeetSpeakerObservationRouting.route(
+            matchesActiveSource: true,
+            isTemporallyRelevant: false,
+            hasActiveRecordingSession: true,
+            canBufferForPendingMeeting: true
+        )
+
+        #expect(route == .dropStale)
+    }
+
+    @Test("bridge requires a matching Meet URL when recording source is known")
+    func bridgeRequiresMatchingMeetURLForKnownSource() throws {
+        let source = try #require(MeetingAutoStopSource(
+            meetingURL: URL(string: "https://meet.google.com/abc-defg-hij")!
+        ))
+
+        #expect(MeetSpeakerObservationRouting.matches(
+            meetingURL: "https://meet.google.com/abc-defg-hij?authuser=1",
+            activeSource: source
+        ))
+        #expect(!MeetSpeakerObservationRouting.matches(meetingURL: nil, activeSource: source))
+        #expect(!MeetSpeakerObservationRouting.matches(
+            meetingURL: "https://meet.google.com/other-room",
+            activeSource: source
+        ))
+    }
+
+    private func makeDiarSeg(speakerId: String, start: Float, end: Float) -> TimedSpeakerSegment {
+        TimedSpeakerSegment(
+            speakerId: speakerId,
+            embedding: [],
+            startTimeSeconds: start,
+            endTimeSeconds: end,
+            qualityScore: 1.0
+        )
+    }
+
+    private func observation(
+        name: String,
+        activeSpeakers: [String] = [],
+        start: Date,
+        offset: TimeInterval
+    ) -> MeetSpeakerObservation {
+        MeetSpeakerObservation(
+            meetingURL: nil,
+            speakerName: name,
+            activeSpeakers: activeSpeakers,
+            participants: [MeetingParticipant(name: name, email: nil, isOrganizer: false, isSelf: false)],
+            observedAt: start.addingTimeInterval(offset),
+            source: "test"
+        )
+    }
+
+    private func repeatedObservations(
+        name: String,
+        start: Date,
+        firstOffset: TimeInterval,
+        count: Int,
+        step: TimeInterval = 0.1
+    ) -> [MeetSpeakerObservation] {
+        (0..<count).map {
+            observation(name: name, start: start, offset: firstOffset + TimeInterval($0) * step)
+        }
+    }
+
+#if DEBUG
+    private func makeSession() -> MeetingSession {
+        MeetingSession(
+            title: "Bridge test",
+            calendarEventID: nil,
+            backend: .parakeetMultilingual,
+            runtime: RuntimePaths(
+                repoRoot: FileManager.default.temporaryDirectory,
+                menuIcon: nil,
+                appIcon: nil,
+                bundlePath: nil
+            ),
+            config: AppConfig(),
+            transcriptionCoordinator: TranscriptionCoordinator(),
+            meetingMicRecorder: MeetSpeakerBridgeFakeMeetingMicRecorder()
+        )
+    }
+#endif
+}
+
+#if DEBUG
+private final class MeetSpeakerBridgeFakeMeetingMicRecorder: MeetingMicRecording {
+    var preferredInputDeviceID: AudioObjectID?
+    var onRawPCMSamples: (([Int16]) -> Void)?
+    var onRecordingFailed: ((Error) -> Void)?
+
+    func prepare() throws {}
+    func start() throws {}
+    func pause() {}
+    func resume() {}
+    func stop() -> URL? { nil }
+    func cancel() {}
+    func currentPower() -> Float { -80 }
+
+    func diagnosticsSnapshot() -> MeetingMicRecorderDiagnosticsSnapshot {
+        MeetingMicRecorderDiagnosticsSnapshot(
+            recorderKind: .systemDefaultStreaming,
+            preferredInputDeviceID: preferredInputDeviceID,
+            route: nil
+        )
+    }
+}
+#endif

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Guesli Dev Build Lanes"
+  short_description: "Build local Guesli dev lanes safely across worktrees."
+  default_prompt: "Use the Guesli dev build lanes workflow for local-only or signed dev app builds across multiple worktrees."

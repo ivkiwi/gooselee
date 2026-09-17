@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo="${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 sha="${GITHUB_SHA:?GITHUB_SHA is required}"
-gh_bin="${MUESLI_GH_BIN:-gh}"
+gh_bin="${GUESLI_GH_BIN:-gh}"
 
 if [[ ! "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
   echo "ERROR: invalid GITHUB_REPOSITORY: $repo" >&2

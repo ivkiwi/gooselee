@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-version="${MUESLI_RELEASE_VERSION:-}"
+version="${GUESLI_RELEASE_VERSION:-}"
 if [[ -z "$version" ]]; then
   version="0.0.0-beta.${GITHUB_RUN_NUMBER:?GITHUB_RUN_NUMBER is required}"
 fi

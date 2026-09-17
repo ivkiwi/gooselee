@@ -2,23 +2,23 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-source "$ROOT/scripts/muesli_spm_cache.sh"
+source "$ROOT/scripts/guesli_spm_cache.sh"
 source "$ROOT/scripts/localvqe_runtime.sh"
-PACKAGE_DIR="$ROOT/native/MuesliNative"
+PACKAGE_DIR="$ROOT/native/Guesli"
 DIST_DIR="$ROOT/dist-native"
-INSTALL_DIR="${MUESLI_INSTALL_DIR:-/Applications}"
+INSTALL_DIR="${GUESLI_INSTALL_DIR:-/Applications}"
 BUILD_CONFIG="${1:-release}"
-APP_BINARY="MuesliNativeApp"
-CLI_BINARY="muesli-cli"
-APP_NAME="${MUESLI_APP_NAME:-Guesli}"
-APP_DISPLAY_NAME="${MUESLI_DISPLAY_NAME:-$APP_NAME}"
-APP_BUNDLE_NAME="${MUESLI_APP_BUNDLE_NAME:-$APP_NAME.app}"
-APP_EXECUTABLE_NAME="${MUESLI_EXECUTABLE_NAME:-Guesli}"
-APP_SUPPORT_DIR_NAME="${MUESLI_SUPPORT_DIR_NAME:-Guesli}"
-BUNDLE_ID="${MUESLI_BUNDLE_ID:-com.guesli.app}"
-DEFAULT_APP_VERSION="0.8.3.8"
-APP_VERSION="${MUESLI_BUILD_VERSION:-$DEFAULT_APP_VERSION}"
-APP_SHORT_VERSION="${MUESLI_SHORT_VERSION:-$APP_VERSION}"
+APP_BINARY="Guesli"
+CLI_BINARY="guesli-cli"
+APP_NAME="${GUESLI_APP_NAME:-Guesli}"
+APP_DISPLAY_NAME="${GUESLI_DISPLAY_NAME:-$APP_NAME}"
+APP_BUNDLE_NAME="${GUESLI_APP_BUNDLE_NAME:-$APP_NAME.app}"
+APP_EXECUTABLE_NAME="${GUESLI_EXECUTABLE_NAME:-Guesli}"
+APP_SUPPORT_DIR_NAME="${GUESLI_SUPPORT_DIR_NAME:-Guesli}"
+BUNDLE_ID="${GUESLI_BUNDLE_ID:-com.guesli.app}"
+DEFAULT_APP_VERSION="0.8.3.9"
+APP_VERSION="${GUESLI_BUILD_VERSION:-$DEFAULT_APP_VERSION}"
+APP_SHORT_VERSION="${GUESLI_SHORT_VERSION:-$APP_VERSION}"
 
 sparkle_bundle_version() {
   local version="$1"
@@ -57,27 +57,27 @@ if [[ "${1:-}" == "--print-bundle-version" ]]; then
   exit
 fi
 
-APP_BUNDLE_VERSION="${MUESLI_BUNDLE_VERSION:-$(sparkle_bundle_version "$APP_SHORT_VERSION")}"
-SPARKLE_FEED_URL="${MUESLI_SPARKLE_FEED_URL-https://raw.githubusercontent.com/ivkiwi/guesli/sparkle-feed/docs/appcast-guesli.xml}"
-SPARKLE_EDKEY="${MUESLI_SPARKLE_EDKEY-x1xV1WAX32xkX4Yl4dxV9HctwCP/dm/K/9YUzWxk7Kc=}"
+APP_BUNDLE_VERSION="${GUESLI_BUNDLE_VERSION:-$(sparkle_bundle_version "$APP_SHORT_VERSION")}"
+SPARKLE_FEED_URL="${GUESLI_SPARKLE_FEED_URL-https://raw.githubusercontent.com/ivkiwi/guesli/sparkle-feed/docs/appcast-guesli.xml}"
+SPARKLE_EDKEY="${GUESLI_SPARKLE_EDKEY-x1xV1WAX32xkX4Yl4dxV9HctwCP/dm/K/9YUzWxk7Kc=}"
 STAGED_APP_DIR="$DIST_DIR/$APP_BUNDLE_NAME"
 APP_DIR="$INSTALL_DIR/$APP_BUNDLE_NAME"
 DEFAULT_SIGN_IDENTITY="Developer ID Application: Pranav Hari Guruvayurappan (58W55QJ567)"
-SIGN_IDENTITY="${MUESLI_SIGN_IDENTITY:-$DEFAULT_SIGN_IDENTITY}"
-SKIP_SIGN="${MUESLI_SKIP_SIGN:-0}"
-PROVISIONING_PROFILE="${MUESLI_PROVISIONING_PROFILE:-}"
-CODESIGN_TIMESTAMP="${MUESLI_CODESIGN_TIMESTAMP:---timestamp}"
+SIGN_IDENTITY="${GUESLI_SIGN_IDENTITY:-$DEFAULT_SIGN_IDENTITY}"
+SKIP_SIGN="${GUESLI_SKIP_SIGN:-0}"
+PROVISIONING_PROFILE="${GUESLI_PROVISIONING_PROFILE:-}"
+CODESIGN_TIMESTAMP="${GUESLI_CODESIGN_TIMESTAMP:---timestamp}"
 if [[ "$CODESIGN_TIMESTAMP" == "none" ]]; then
   CODESIGN_TIMESTAMP="--timestamp=none"
 fi
 
 SWIFT_BUILD_ARGS=(--package-path "$PACKAGE_DIR" -c "$BUILD_CONFIG")
-if ! muesli_spm_scratch_disabled; then
+if ! guesli_spm_scratch_disabled; then
   DEFAULT_SCRATCH_CHANNEL="release"
   if [[ "$BUILD_CONFIG" == "debug" ]]; then
-    DEFAULT_SCRATCH_CHANNEL="$(muesli_worktree_spm_scratch_channel dev "$ROOT")"
+    DEFAULT_SCRATCH_CHANNEL="$(guesli_worktree_spm_scratch_channel dev "$ROOT")"
   fi
-  SWIFTPM_SCRATCH_PATH="$(muesli_resolve_spm_scratch_path "$DEFAULT_SCRATCH_CHANNEL")"
+  SWIFTPM_SCRATCH_PATH="$(guesli_resolve_spm_scratch_path "$DEFAULT_SCRATCH_CHANNEL")"
   mkdir -p "$SWIFTPM_SCRATCH_PATH"
   SWIFT_BUILD_ARGS+=(--scratch-path "$SWIFTPM_SCRATCH_PATH")
   echo "Using SwiftPM scratch path: $SWIFTPM_SCRATCH_PATH"
@@ -132,17 +132,17 @@ done
 
 # Bundle the complete LocalVQE runtime when available. Release packaging sets
 # both BUILD and REQUIRE so a half-present runtime can never silently ship.
-LOCALVQE_LIB_DIR="${MUESLI_LOCALVQE_LIB_DIR:-$ROOT/native/MuesliNative/LocalVQE/lib}"
-BUILD_LOCALVQE="${MUESLI_BUILD_LOCALVQE:-0}"
-REQUIRE_LOCALVQE="${MUESLI_REQUIRE_LOCALVQE:-0}"
-if ! muesli_localvqe_runtime_is_complete "$LOCALVQE_LIB_DIR" >/dev/null 2>&1 && [[ "$BUILD_LOCALVQE" == "1" ]]; then
-  MUESLI_LOCALVQE_LIB_DIR="$LOCALVQE_LIB_DIR" "$ROOT/scripts/build_localvqe.sh"
+LOCALVQE_LIB_DIR="${GUESLI_LOCALVQE_LIB_DIR:-$ROOT/native/Guesli/LocalVQE/lib}"
+BUILD_LOCALVQE="${GUESLI_BUILD_LOCALVQE:-0}"
+REQUIRE_LOCALVQE="${GUESLI_REQUIRE_LOCALVQE:-0}"
+if ! guesli_localvqe_runtime_is_complete "$LOCALVQE_LIB_DIR" >/dev/null 2>&1 && [[ "$BUILD_LOCALVQE" == "1" ]]; then
+  GUESLI_LOCALVQE_LIB_DIR="$LOCALVQE_LIB_DIR" "$ROOT/scripts/build_localvqe.sh"
 fi
-if muesli_localvqe_runtime_is_complete "$LOCALVQE_LIB_DIR"; then
+if guesli_localvqe_runtime_is_complete "$LOCALVQE_LIB_DIR"; then
   while IFS= read -r dylib; do
     [[ -n "$dylib" ]] || continue
     cp -P "$dylib" "$STAGED_APP_DIR/Contents/MacOS/$(basename "$dylib")"
-  done < <(muesli_collect_localvqe_runtime "$LOCALVQE_LIB_DIR")
+  done < <(guesli_collect_localvqe_runtime "$LOCALVQE_LIB_DIR")
   echo "Bundled complete LocalVQE runtime from $LOCALVQE_LIB_DIR"
 elif [[ "$REQUIRE_LOCALVQE" == "1" ]]; then
   echo "ERROR: complete LocalVQE runtime is required for this build." >&2
@@ -150,7 +150,7 @@ elif [[ "$REQUIRE_LOCALVQE" == "1" ]]; then
 else
   echo "Warning: LocalVQE runtime unavailable; meeting AEC will use DTLN." >&2
 fi
-LOCALVQE_MODEL_PATH="${MUESLI_LOCALVQE_MODEL_PATH:-$ROOT/native/MuesliNative/LocalVQE/models/localvqe-v1.2-1.3M-f32.gguf}"
+LOCALVQE_MODEL_PATH="${GUESLI_LOCALVQE_MODEL_PATH:-$ROOT/native/Guesli/LocalVQE/models/localvqe-v1.2-1.3M-f32.gguf}"
 if [[ -f "$LOCALVQE_MODEL_PATH" ]]; then
   mkdir -p "$STAGED_APP_DIR/Contents/Resources/Models/localvqe"
   cp "$LOCALVQE_MODEL_PATH" "$STAGED_APP_DIR/Contents/Resources/Models/localvqe/localvqe-v1.2-1.3M-f32.gguf"
@@ -158,7 +158,7 @@ fi
 
 # Bundle assets
 cp "$ROOT/assets/menu_m_template.png" "$STAGED_APP_DIR/Contents/Resources/menu_m_template.png"
-cp "$ROOT/assets/muesli.icns" "$STAGED_APP_DIR/Contents/Resources/muesli.icns"
+cp "$ROOT/assets/guesli.icns" "$STAGED_APP_DIR/Contents/Resources/guesli.icns"
 cp "$ROOT/assets/zoom-app.png" "$STAGED_APP_DIR/Contents/Resources/zoom-app.png"
 cp "$ROOT/assets/Google_Meet_icon_(2020).svg.png" "$STAGED_APP_DIR/Contents/Resources/google-meet.png"
 cp "$ROOT/assets/Microsoft_Office_Teams_(2025–present).svg.png" "$STAGED_APP_DIR/Contents/Resources/teams.png"
@@ -166,7 +166,7 @@ cp "$ROOT/assets/Slack_icon_2019.svg.png" "$STAGED_APP_DIR/Contents/Resources/sl
 cp "$ROOT/assets/Nvidia_logo.svg.png" "$STAGED_APP_DIR/Contents/Resources/nvidia-logo.png"
 cp "$ROOT/assets/OpenAI_Logo.svg.png" "$STAGED_APP_DIR/Contents/Resources/openai-logo.png"
 cp "$ROOT/assets/Qwen_logo.svg.png" "$STAGED_APP_DIR/Contents/Resources/qwen-logo.png"
-cp "$ROOT/native/MuesliNative/ThirdPartyLicenses/FluidAudio-Apache-2.0.txt" \
+cp "$ROOT/native/Guesli/ThirdPartyLicenses/FluidAudio-Apache-2.0.txt" \
   "$STAGED_APP_DIR/Contents/Resources/FluidAudio-LICENSE-Apache-2.0.txt"
 if [[ -d "$ROOT/assets/fonts" ]]; then
   ditto "$ROOT/assets/fonts" "$STAGED_APP_DIR/Contents/Resources/fonts"
@@ -195,8 +195,8 @@ cat > "$STAGED_APP_DIR/Contents/Info.plist" <<PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleIconFile</key>
-  <string>muesli.icns</string>
-  <key>MuesliSupportDirectoryName</key>
+  <string>guesli.icns</string>
+  <key>GuesliSupportDirectoryName</key>
   <string>$APP_SUPPORT_DIR_NAME</string>
   <key>LSUIElement</key>
   <true/>
@@ -243,7 +243,7 @@ xattr -cr "$APP_DIR" 2>/dev/null || true
 if [[ "$SKIP_SIGN" != "1" ]]; then
   if ! security find-identity -v -p codesigning | grep -Fq "$SIGN_IDENTITY"; then
     echo "Signing identity not found: $SIGN_IDENTITY" >&2
-    echo "For local contributor builds without this certificate, run: MUESLI_SKIP_SIGN=1 ./scripts/dev-test.sh" >&2
+    echo "For local contributor builds without this certificate, run: GUESLI_SKIP_SIGN=1 ./scripts/dev-test.sh" >&2
     exit 1
   fi
 
@@ -297,18 +297,18 @@ if [[ "$SKIP_SIGN" != "1" ]]; then
 
   codesign --force --options runtime "$CODESIGN_TIMESTAMP" \
     --sign "$SIGN_IDENTITY" \
-    "$APP_DIR/Contents/MacOS/muesli-cli"
+    "$APP_DIR/Contents/MacOS/guesli-cli"
 
   codesign --force --options runtime "$CODESIGN_TIMESTAMP" \
     --sign "$SIGN_IDENTITY" \
     "$APP_DIR/Contents/MacOS/onnx-gigaam-helper"
 
   # Sign the app bundle with hardened runtime, secure timestamp, and entitlements
-  ENTITLEMENTS="${MUESLI_ENTITLEMENTS:-$ROOT/scripts/Muesli.entitlements}"
+  ENTITLEMENTS="${GUESLI_ENTITLEMENTS:-$ROOT/scripts/Guesli.entitlements}"
   CODESIGN_ENTITLEMENTS="$ENTITLEMENTS"
   TEMP_ENTITLEMENTS=""
-  APS_ENVIRONMENT="${MUESLI_APS_ENVIRONMENT:-}"
-  ICLOUD_CONTAINER_ENVIRONMENT="${MUESLI_ICLOUD_CONTAINER_ENVIRONMENT:-}"
+  APS_ENVIRONMENT="${GUESLI_APS_ENVIRONMENT:-}"
+  ICLOUD_CONTAINER_ENVIRONMENT="${GUESLI_ICLOUD_CONTAINER_ENVIRONMENT:-}"
   PROFILE_PLIST=""
   SIGN_TEMP_FILES=()
   cleanup_sign_temp_files() {
@@ -319,7 +319,7 @@ if [[ "$SKIP_SIGN" != "1" ]]; then
   }
   trap cleanup_sign_temp_files EXIT
   if [[ -n "$PROVISIONING_PROFILE" ]]; then
-    PROFILE_PLIST="$(mktemp "${TMPDIR:-/tmp}/muesli-profile.XXXXXX")"
+    PROFILE_PLIST="$(mktemp "${TMPDIR:-/tmp}/guesli-profile.XXXXXX")"
     SIGN_TEMP_FILES+=("$PROFILE_PLIST")
     if ! security cms -D -i "$PROVISIONING_PROFILE" > "$PROFILE_PLIST" 2>/dev/null; then
       echo "ERROR: could not decode provisioning profile: $PROVISIONING_PROFILE" >&2
@@ -349,7 +349,7 @@ if [[ "$SKIP_SIGN" != "1" ]]; then
   fi
 
   if [[ -n "$APS_ENVIRONMENT" || -n "$PROFILE_PLIST" ]]; then
-    TEMP_ENTITLEMENTS="$(mktemp "${TMPDIR:-/tmp}/muesli-entitlements.XXXXXX")"
+    TEMP_ENTITLEMENTS="$(mktemp "${TMPDIR:-/tmp}/guesli-entitlements.XXXXXX")"
     SIGN_TEMP_FILES+=("$TEMP_ENTITLEMENTS")
     cp "$ENTITLEMENTS" "$TEMP_ENTITLEMENTS"
     copy_profile_string_entitlement() {
@@ -423,20 +423,20 @@ else
   # Note: ad-hoc signatures have no stable designated requirement, so the cdhash changes on
   # every rebuild and macOS privacy grants must be re-approved after each dev build. For grants
   # that persist across rebuilds, create a self-signed code-signing certificate and pass its name
-  # via MUESLI_SIGN_IDENTITY. No hardened runtime here: ad-hoc has no Team ID, so library
+  # via GUESLI_SIGN_IDENTITY. No hardened runtime here: ad-hoc has no Team ID, so library
   # validation would block dlopen of the bundled frameworks/dylibs.
   LOCAL_SIGN_IDENTITY="-"
-  if [[ -n "${MUESLI_SIGN_IDENTITY:-}" ]]; then
-    LOCAL_SIGN_IDENTITY="$MUESLI_SIGN_IDENTITY"
+  if [[ -n "${GUESLI_SIGN_IDENTITY:-}" ]]; then
+    LOCAL_SIGN_IDENTITY="$GUESLI_SIGN_IDENTITY"
     if ! security find-identity -v -p codesigning | grep -Fq "$LOCAL_SIGN_IDENTITY"; then
       echo "Signing identity not found: $LOCAL_SIGN_IDENTITY" >&2
       exit 1
     fi
-    echo "Local signing with MUESLI_SIGN_IDENTITY=$LOCAL_SIGN_IDENTITY (MUESLI_SKIP_SIGN=1)..."
+    echo "Local signing with GUESLI_SIGN_IDENTITY=$LOCAL_SIGN_IDENTITY (GUESLI_SKIP_SIGN=1)..."
   else
-    echo "Ad-hoc signing for local dev (MUESLI_SKIP_SIGN=1; no Developer ID)..."
+    echo "Ad-hoc signing for local dev (GUESLI_SKIP_SIGN=1; no Developer ID)..."
   fi
-  ENTITLEMENTS="${MUESLI_ENTITLEMENTS:-$ROOT/scripts/MuesliLocalOnly.entitlements}"
+  ENTITLEMENTS="${GUESLI_ENTITLEMENTS:-$ROOT/scripts/GuesliLocalOnly.entitlements}"
 
   find "$APP_DIR/Contents/MacOS" -maxdepth 1 -name "*.framework" -type d | while read -r framework; do
     # Sign every nested standalone Mach-O (e.g. Sparkle's Versions/B/Autoupdate),
@@ -464,8 +464,8 @@ else
     codesign --force --sign "$LOCAL_SIGN_IDENTITY" "$library"
   done
 
-  if [[ -f "$APP_DIR/Contents/MacOS/muesli-cli" ]]; then
-    codesign --force --sign "$LOCAL_SIGN_IDENTITY" "$APP_DIR/Contents/MacOS/muesli-cli"
+  if [[ -f "$APP_DIR/Contents/MacOS/guesli-cli" ]]; then
+    codesign --force --sign "$LOCAL_SIGN_IDENTITY" "$APP_DIR/Contents/MacOS/guesli-cli"
   fi
   if [[ -f "$APP_DIR/Contents/MacOS/onnx-gigaam-helper" ]]; then
     codesign --force --sign "$LOCAL_SIGN_IDENTITY" "$APP_DIR/Contents/MacOS/onnx-gigaam-helper"

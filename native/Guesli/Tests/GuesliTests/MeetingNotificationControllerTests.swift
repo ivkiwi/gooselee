@@ -1,0 +1,490 @@
+import AppKit
+import Foundation
+import Testing
+@testable import GuesliApp
+
+@Suite("MeetingNotificationController", .guesliHermeticSupport)
+struct MeetingNotificationControllerTests {
+    @Test("Slack candidates map to the Slack notification platform")
+    func slackCandidateMapsToSlackNotificationPlatform() {
+        #expect(MeetingPlatform(.slack) == .slack)
+    }
+
+    @Test("Unsupported candidate platforms do not get notification icons")
+    func unsupportedCandidatePlatformsDoNotMapToNotificationPlatforms() {
+        #expect(MeetingPlatform(.whatsApp) == nil)
+        #expect(MeetingPlatform(.unknown) == nil)
+    }
+
+    @Test("Auto-dismiss without a dedicated handler still fires close cleanup")
+    @MainActor
+    func autoDismissWithoutHandlerFiresCloseCleanup() {
+        #expect(MeetingNotificationController.suppressesCloseCallbackDuringAutoDismiss(hasAutoDismissHandler: false) == false)
+    }
+
+    @Test("Detection auto-dismiss owns its cleanup path")
+    @MainActor
+    func detectionAutoDismissOwnsCleanupPath() {
+        #expect(MeetingNotificationController.suppressesCloseCallbackDuringAutoDismiss(hasAutoDismissHandler: true))
+    }
+
+    @Test("Auto-dismiss callback is skipped when hover pauses during fade-out")
+    @MainActor
+    func autoDismissCallbackSkippedWhenPausedDuringFadeOut() {
+        #expect(MeetingNotificationController.firesAutoDismissCallbackAfterFade(wasDismissPaused: false))
+        #expect(!MeetingNotificationController.firesAutoDismissCallbackAfterFade(wasDismissPaused: true))
+    }
+
+    @Test("Single-action prompts use available text width")
+    @MainActor
+    func singleActionPromptsUseAvailableTextWidth() {
+        let subtitle = "Still recording. Stop if the meeting ended." as NSString
+        let subtitleWidth = subtitle.size(withAttributes: [.font: NSFont.systemFont(ofSize: 11)]).width
+        let cardWidth = MeetingNotificationController.singleActionCardWidth(
+            requiredTextWidth: subtitleWidth,
+            textX: 14
+        )
+        let textWidth = MeetingNotificationController.singleActionTextWidth(cardWidth: cardWidth, textX: 14)
+
+        #expect(cardWidth > 344)
+        #expect(textWidth >= subtitleWidth)
+    }
+
+    @Test("Default join action arms the matching primary button")
+    func defaultJoinActionArmsMatchingPrimaryButton() {
+        #expect(MeetingJoinDefaultAction.joinAndRecord
+            .resolved(hasJoinAndRecord: true, hasJoinOnly: true) == .joinAndRecord)
+        #expect(MeetingJoinDefaultAction.joinOnly
+            .resolved(hasJoinAndRecord: true, hasJoinOnly: true) == .joinOnly)
+        #expect(MeetingJoinDefaultAction.recordOnly
+            .resolved(hasJoinAndRecord: true, hasJoinOnly: true) == .recordOnly)
+    }
+
+    @Test("Join defaults fall back to record only without a join link")
+    func joinDefaultsFallBackToRecordOnlyWithoutJoinLink() {
+        #expect(MeetingJoinDefaultAction.joinAndRecord
+            .resolved(hasJoinAndRecord: false, hasJoinOnly: false) == .recordOnly)
+        #expect(MeetingJoinDefaultAction.joinOnly
+            .resolved(hasJoinAndRecord: false, hasJoinOnly: false) == .recordOnly)
+        #expect(MeetingJoinDefaultAction.joinAndRecord
+            .availableAlternatives(hasJoinAndRecord: false, hasJoinOnly: false).isEmpty)
+    }
+
+    @Test("Dropdown offers the two actions that are not armed")
+    func dropdownOffersTheTwoActionsThatAreNotArmed() {
+        #expect(MeetingJoinDefaultAction.joinAndRecord
+            .availableAlternatives(hasJoinAndRecord: true, hasJoinOnly: true) == [.joinOnly, .recordOnly])
+        #expect(MeetingJoinDefaultAction.recordOnly
+            .availableAlternatives(hasJoinAndRecord: true, hasJoinOnly: true) == [.joinAndRecord, .joinOnly])
+        #expect(MeetingJoinDefaultAction.joinOnly
+            .availableAlternatives(hasJoinAndRecord: true, hasJoinOnly: true) == [.joinAndRecord, .recordOnly])
+    }
+
+    @Test("Existing installs keep Join & Record as the default")
+    func existingInstallsKeepJoinAndRecordAsDefault() throws {
+        let config = try JSONDecoder().decode(AppConfig.self, from: Data("{}".utf8))
+        #expect(config.meetingJoinDefaultAction == .joinAndRecord)
+        #expect(MeetingJoinDefaultAction.fallback == .joinAndRecord)
+    }
+
+    @Test("Saved default action round-trips through config JSON")
+    func savedDefaultActionRoundTripsThroughConfigJSON() throws {
+        var config = try JSONDecoder().decode(AppConfig.self, from: Data("{}".utf8))
+        config.meetingJoinDefaultAction = .recordOnly
+
+        let encoded = try JSONEncoder().encode(config)
+        let json = try #require(try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        #expect(json["meeting_join_default_action"] as? String == "record_only")
+
+        let decoded = try JSONDecoder().decode(AppConfig.self, from: encoded)
+        #expect(decoded.meetingJoinDefaultAction == .recordOnly)
+    }
+
+    @Test("Every join action label fits the split button")
+    @MainActor
+    func everyJoinActionLabelFitsSplitButton() {
+        for action in MeetingJoinDefaultAction.allCases {
+            #expect(
+                MeetingNotificationController.splitButtonLabelFits(action.buttonLabel),
+                "\(action.buttonLabel) overflows the \(MeetingNotificationController.splitButtonWidth)pt split button"
+            )
+        }
+    }
+
+    @Test("Completion notification can show during recording but not over prompts")
+    func completionNotificationAllowsRecordingButRequiresFreeNotificationSurface() {
+        #expect(MeetingCompletionNotificationPolicy.shouldShow(
+            hasPresentedMeetingCandidate: false,
+            isShowingCalendarNotification: false,
+            isMeetingNotificationVisible: false
+        ))
+
+        #expect(!MeetingCompletionNotificationPolicy.shouldShow(
+            hasPresentedMeetingCandidate: true,
+            isShowingCalendarNotification: false,
+            isMeetingNotificationVisible: true
+        ))
+
+        #expect(!MeetingCompletionNotificationPolicy.shouldShow(
+            hasPresentedMeetingCandidate: false,
+            isShowingCalendarNotification: true,
+            isMeetingNotificationVisible: true
+        ))
+    }
+
+    @Test("Scheduled meeting prompts require a joinable calendar event")
+    func scheduledMeetingPromptsRequireJoinableCalendarEvent() {
+        let now = Date(timeIntervalSinceReferenceDate: 1_000)
+        let windowEnd = now.addingTimeInterval(5 * 60)
+        let meetingURL = URL(string: "https://meet.google.com/abc-defg-hij")!
+
+        let joinable = unifiedCalendarEvent(
+            id: "joinable",
+            startDate: now.addingTimeInterval(60),
+            meetingURL: meetingURL
+        )
+        let lunch = unifiedCalendarEvent(
+            id: "lunch",
+            startDate: now.addingTimeInterval(60),
+            meetingURL: nil
+        )
+        let allDay = unifiedCalendarEvent(
+            id: "all-day",
+            startDate: now.addingTimeInterval(60),
+            isAllDay: true,
+            meetingURL: meetingURL
+        )
+        let hidden = unifiedCalendarEvent(
+            id: "hidden",
+            startDate: now.addingTimeInterval(60),
+            meetingURL: meetingURL
+        )
+        let later = unifiedCalendarEvent(
+            id: "later",
+            startDate: now.addingTimeInterval(10 * 60),
+            meetingURL: meetingURL
+        )
+
+        #expect(ScheduledMeetingNotificationPolicy.shouldShowUpcomingPrompt(
+            for: joinable,
+            now: now,
+            windowEnd: windowEnd,
+            hiddenEventIDs: []
+        ))
+        #expect(!ScheduledMeetingNotificationPolicy.shouldShowUpcomingPrompt(
+            for: lunch,
+            now: now,
+            windowEnd: windowEnd,
+            hiddenEventIDs: []
+        ))
+        #expect(!ScheduledMeetingNotificationPolicy.shouldShowUpcomingPrompt(
+            for: allDay,
+            now: now,
+            windowEnd: windowEnd,
+            hiddenEventIDs: []
+        ))
+        #expect(!ScheduledMeetingNotificationPolicy.shouldShowUpcomingPrompt(
+            for: hidden,
+            now: now,
+            windowEnd: windowEnd,
+            hiddenEventIDs: ["hidden"]
+        ))
+        #expect(!ScheduledMeetingNotificationPolicy.shouldShowUpcomingPrompt(
+            for: later,
+            now: now,
+            windowEnd: windowEnd,
+            hiddenEventIDs: []
+        ))
+    }
+
+    @Test("Scheduled meeting prompt candidates are sorted")
+    func scheduledMeetingPromptCandidatesAreSorted() {
+        let now = Date(timeIntervalSinceReferenceDate: 2_000)
+        let meetingURL = URL(string: "https://us02web.zoom.us/j/123456789")!
+        let later = unifiedCalendarEvent(id: "later", startDate: now.addingTimeInterval(240), meetingURL: meetingURL)
+        let sooner = unifiedCalendarEvent(id: "sooner", startDate: now.addingTimeInterval(60), meetingURL: meetingURL)
+        let hidden = unifiedCalendarEvent(id: "hidden", startDate: now.addingTimeInterval(30), meetingURL: meetingURL)
+        let personal = unifiedCalendarEvent(id: "personal", startDate: now.addingTimeInterval(45), meetingURL: nil)
+
+        let candidates = ScheduledMeetingNotificationPolicy.upcomingCandidates(
+            from: [later, personal, hidden, sooner],
+            now: now,
+            hiddenEventIDs: ["hidden"],
+            leadTime: 5 * 60
+        )
+
+        #expect(candidates.map(\.id) == ["sooner", "later"])
+    }
+
+    @Test("Default scheduled prompts wait until meeting start")
+    func defaultScheduledPromptsWaitUntilMeetingStart() {
+        let now = Date(timeIntervalSinceReferenceDate: 2_500)
+        let meetingURL = URL(string: "https://meet.google.com/abc-defg-hij")!
+        let beforeStart = unifiedCalendarEvent(id: "before", startDate: now.addingTimeInterval(60), meetingURL: meetingURL)
+        let justStarted = unifiedCalendarEvent(id: "started", startDate: now.addingTimeInterval(-30), meetingURL: meetingURL)
+        let stale = unifiedCalendarEvent(id: "stale", startDate: now.addingTimeInterval(-120), meetingURL: meetingURL)
+
+        let candidates = ScheduledMeetingNotificationPolicy.upcomingCandidates(
+            from: [beforeStart, justStarted, stale],
+            now: now,
+            hiddenEventIDs: []
+        )
+
+        #expect(candidates.map(\.id) == ["started"])
+    }
+
+    @Test("Auto-record candidates ignore reminder lead time")
+    func autoRecordCandidatesIgnoreReminderLeadTime() {
+        let now = Date(timeIntervalSinceReferenceDate: 2_750)
+        let meetingURL = URL(string: "https://meet.google.com/abc-defg-hij")!
+        let beforeStart = unifiedCalendarEvent(id: "before", startDate: now.addingTimeInterval(5 * 60), meetingURL: meetingURL)
+        let justStarted = unifiedCalendarEvent(id: "started", startDate: now.addingTimeInterval(-30), meetingURL: meetingURL)
+        let noLink = unifiedCalendarEvent(id: "no-link", startDate: now.addingTimeInterval(-30), meetingURL: nil)
+
+        let reminderCandidates = ScheduledMeetingNotificationPolicy.upcomingCandidates(
+            from: [beforeStart, justStarted],
+            now: now,
+            hiddenEventIDs: [],
+            leadTime: 5 * 60
+        )
+        let autoRecordCandidates = ScheduledMeetingNotificationPolicy.autoRecordCandidates(
+            from: [beforeStart, justStarted, noLink],
+            now: now,
+            hiddenEventIDs: []
+        )
+
+        #expect(reminderCandidates.map(\.id) == ["before"])
+        #expect(autoRecordCandidates.map(\.id) == ["started"])
+    }
+
+    @Test("Auto-record claims recently started meetings within the catch-up window")
+    func autoRecordClaimsRecentlyStartedMeetingsWithinCatchUpWindow() {
+        let now = Date(timeIntervalSinceReferenceDate: 4_000)
+        let meetingURL = URL(string: "https://meet.google.com/abc-defg-hij")!
+        let justStarted = unifiedCalendarEvent(id: "just", startDate: now.addingTimeInterval(-30), meetingURL: meetingURL)
+        let recentlyStarted = unifiedCalendarEvent(id: "recent", startDate: now.addingTimeInterval(-4 * 60), meetingURL: meetingURL)
+        let longAgo = unifiedCalendarEvent(id: "old", startDate: now.addingTimeInterval(-6 * 60), meetingURL: meetingURL)
+        let future = unifiedCalendarEvent(id: "future", startDate: now.addingTimeInterval(60), meetingURL: meetingURL)
+        let noLink = unifiedCalendarEvent(id: "no-link", startDate: now.addingTimeInterval(-30), meetingURL: nil)
+
+        let candidates = ScheduledMeetingNotificationPolicy.autoRecordCandidates(
+            from: [longAgo, future, recentlyStarted, justStarted, noLink],
+            now: now,
+            hiddenEventIDs: []
+        )
+
+        #expect(candidates.map(\.id) == ["recent", "just"])
+    }
+
+    @Test("Auto-record wake candidates are upcoming joinable events within the horizon")
+    func autoRecordWakeCandidatesAreUpcomingJoinableWithinHorizon() {
+        let now = Date(timeIntervalSinceReferenceDate: 5_000)
+        let meetingURL = URL(string: "https://teams.microsoft.com/l/meetup-join/abc")!
+        let soon = unifiedCalendarEvent(id: "soon", startDate: now.addingTimeInterval(5 * 60), meetingURL: meetingURL)
+        let later = unifiedCalendarEvent(id: "later", startDate: now.addingTimeInterval(3 * 60 * 60), meetingURL: meetingURL)
+        let started = unifiedCalendarEvent(id: "started", startDate: now.addingTimeInterval(-30), meetingURL: meetingURL)
+        let beyondHorizon = unifiedCalendarEvent(id: "beyond", startDate: now.addingTimeInterval(20 * 60 * 60), meetingURL: meetingURL)
+        let noLink = unifiedCalendarEvent(id: "no-link", startDate: now.addingTimeInterval(10 * 60), meetingURL: nil)
+        let hidden = unifiedCalendarEvent(id: "hidden", startDate: now.addingTimeInterval(8 * 60), meetingURL: meetingURL)
+        let allDay = unifiedCalendarEvent(id: "all-day", startDate: now.addingTimeInterval(8 * 60), isAllDay: true, meetingURL: meetingURL)
+
+        let candidates = ScheduledMeetingNotificationPolicy.autoRecordWakeCandidates(
+            from: [later, soon, started, beyondHorizon, noLink, hidden, allDay],
+            now: now,
+            hiddenEventIDs: ["hidden"]
+        )
+
+        #expect(candidates.map(\.id) == ["soon", "later"])
+    }
+
+    @Test("Starting now scheduled prompts require a join link")
+    func startingNowScheduledPromptsRequireJoinLink() {
+        #expect(ScheduledMeetingNotificationPolicy.shouldShowStartingNowPrompt(
+            meetingURL: URL(string: "https://teams.microsoft.com/l/meetup-join/abc")
+        ))
+        #expect(!ScheduledMeetingNotificationPolicy.shouldShowStartingNowPrompt(meetingURL: nil))
+    }
+
+    @Test("Starting now scheduled prompts revalidate current calendar event policy")
+    func startingNowScheduledPromptsRevalidateCurrentCalendarEventPolicy() {
+        let startDate = Date(timeIntervalSinceReferenceDate: 3_000)
+        let meetingURL = URL(string: "https://meet.google.com/abc-defg-hij")!
+        let joinable = unifiedCalendarEvent(id: "meeting", startDate: startDate, meetingURL: meetingURL)
+        let hidden = unifiedCalendarEvent(id: "meeting", startDate: startDate, meetingURL: meetingURL)
+        let noLink = unifiedCalendarEvent(id: "meeting", startDate: startDate, meetingURL: nil)
+        let allDay = unifiedCalendarEvent(id: "meeting", startDate: startDate, isAllDay: true, meetingURL: meetingURL)
+        let rescheduled = unifiedCalendarEvent(id: "meeting", startDate: startDate.addingTimeInterval(60), meetingURL: meetingURL)
+
+        #expect(ScheduledMeetingNotificationPolicy.startingNowCandidate(
+            from: [joinable],
+            eventID: "meeting",
+            startDate: startDate,
+            hiddenEventIDs: []
+        ) == joinable)
+        #expect(ScheduledMeetingNotificationPolicy.startingNowCandidate(
+            from: [hidden],
+            eventID: "meeting",
+            startDate: startDate,
+            hiddenEventIDs: ["meeting"]
+        ) == nil)
+        #expect(ScheduledMeetingNotificationPolicy.startingNowCandidate(
+            from: [noLink],
+            eventID: "meeting",
+            startDate: startDate,
+            hiddenEventIDs: []
+        ) == nil)
+        #expect(ScheduledMeetingNotificationPolicy.startingNowCandidate(
+            from: [allDay],
+            eventID: "meeting",
+            startDate: startDate,
+            hiddenEventIDs: []
+        ) == nil)
+        #expect(ScheduledMeetingNotificationPolicy.startingNowCandidate(
+            from: [rescheduled],
+            eventID: "meeting",
+            startDate: startDate,
+            hiddenEventIDs: []
+        ) == nil)
+    }
+
+    @Test("Scheduled prompt user actions cancel starting-now timers")
+    func scheduledPromptUserActionsCancelStartingNowTimers() throws {
+        let source = try guesliControllerSource()
+        let scheduledPrompt = try sourceSection(
+            in: source,
+            from: "private func handleUpcomingMeeting",
+            to: "private func cancelMeetingStartingNowTimer"
+        )
+        let cancelCall = "self.cancelMeetingStartingNowTimer(notificationKey: notificationKey)"
+        let startRecording = try sourceSection(in: scheduledPrompt, from: "onStartRecording:", to: "onJoinAndRecord:")
+        let joinAndRecord = try sourceSection(in: scheduledPrompt, from: "onJoinAndRecord:", to: "onJoinOnly:")
+        let joinOnly = try sourceSection(in: scheduledPrompt, from: "onJoinOnly:", to: "onDismiss:")
+        let dismiss = try sourceSection(in: scheduledPrompt, from: "onDismiss:", to: "onClose:")
+
+        #expect(try index(of: cancelCall, in: startRecording) <
+            index(of: "self.recordOnly", in: startRecording))
+        #expect(try index(of: cancelCall, in: joinAndRecord) <
+            index(of: "self.joinAndRecord", in: joinAndRecord))
+        #expect(try index(of: cancelCall, in: joinOnly) <
+            index(of: "self.joinOnly", in: joinOnly))
+        #expect(try index(of: cancelCall, in: dismiss) <
+            index(of: "self.meetingMonitor.suppress", in: dismiss))
+    }
+
+    @Test("Calendar auto-record starts provisionally and discards without join evidence")
+    func calendarAutoRecordDiscardsWithoutJoinEvidence() throws {
+        let source = try guesliControllerSource()
+        let autoRecord = try sourceSection(
+            in: source,
+            from: "private func autoRecordEventIfNeeded",
+            to: "private func syncAutoRecordWakes"
+        )
+
+        #expect(autoRecord.contains("meetingURL: meetingURL"))
+        #expect(autoRecord.contains("calendarEventID: event.id"))
+        #expect(autoRecord.contains("scheduleCalendarAutoRecordConfirmation"))
+        #expect(autoRecord.contains("PendingMeetingJoinRecordingPolicy.shouldStartRecording"))
+        #expect(autoRecord.contains("Self.calendarAutoRecordConfirmationTimeout"))
+        #expect(autoRecord.contains("self.discardMeetingRecording()"))
+        #expect(autoRecord.contains("[calendar] auto-record starting"))
+        #expect(autoRecord.contains("onStartResolved: { [weak self] didStart in"))
+        #expect(try index(of: "onStartResolved:", in: autoRecord) <
+            index(of: "showAutoRecordStartedNotification", in: autoRecord))
+        #expect(autoRecord.contains("showAutoRecordStartedNotification(event, notificationKey: key)"))
+        #expect(autoRecord.contains("[calendar] auto-record started"))
+        #expect(autoRecord.contains("self.autoRecordedCalendarEventIDs.remove(key)"))
+    }
+
+    @Test("Post-mode recording starts before model preload")
+    func postModeRecordingDoesNotAwaitPreload() throws {
+        let source = try guesliControllerSource()
+        let start = try sourceSection(
+            in: source,
+            from: "private func startMeetingRecordingWithSystemAudioRecovery",
+            to: "private func checkMeetingStartStillCurrent"
+        )
+
+        #expect(start.contains("if config.resolvedMeetingProcessingMode != .post"))
+        #expect(try index(of: "activeMeetingSession = meetingSession", in: start) <
+            index(of: "await transcriptionCoordinator.preload(", in: start))
+    }
+
+    @Test("Stop cancels a meeting that is still preparing")
+    func stopCancelsMeetingPreparation() throws {
+        let source = try guesliControllerSource()
+        let stop = try sourceSection(
+            in: source,
+            from: "func stopMeetingRecording()",
+            to: "func revealMeetingRecordingInFinder"
+        )
+
+        #expect(stop.contains("if isStartingMeetingRecording"))
+        #expect(stop.contains("cancelMeetingPreparation()"))
+    }
+
+    @Test("Calendar refresh re-arms on wake outside the timer path")
+    func calendarRefreshRearmsOnWake() throws {
+        let source = try guesliControllerSource()
+        let observerSection = try sourceSection(
+            in: source,
+            from: "private func installCalendarPersistentRefreshObservers",
+            to: "private func removeCalendarPersistentRefreshObservers"
+        )
+
+        #expect(observerSection.contains("NSWorkspace.didWakeNotification"))
+        #expect(observerSection.contains("reason: \"wake\""))
+    }
+
+    private func unifiedCalendarEvent(
+        id: String,
+        startDate: Date,
+        isAllDay: Bool = false,
+        meetingURL: URL?
+    ) -> UnifiedCalendarEvent {
+        UnifiedCalendarEvent(
+            id: id,
+            title: id,
+            startDate: startDate,
+            endDate: startDate.addingTimeInterval(30 * 60),
+            isAllDay: isAllDay,
+            source: .eventKit,
+            meetingURL: meetingURL
+        )
+    }
+
+    private func guesliControllerSource() throws -> String {
+        let testFileURL = URL(fileURLWithPath: #filePath)
+        let packageRoot = testFileURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let controllerURL = packageRoot
+            .appendingPathComponent("Sources")
+            .appendingPathComponent("GuesliApp")
+            .appendingPathComponent("GuesliController.swift")
+        return try String(contentsOf: controllerURL, encoding: .utf8)
+    }
+
+    private func sourceSection(in source: String, from start: String, to end: String) throws -> String {
+        guard let startRange = source.range(of: start),
+              let endRange = source[startRange.upperBound...].range(of: end) else {
+            throw TestFailure("Could not find source section from \(start) to \(end)")
+        }
+        return String(source[startRange.lowerBound..<endRange.lowerBound])
+    }
+
+    private func index(of needle: String, in haystack: String) throws -> String.Index {
+        guard let range = haystack.range(of: needle) else {
+            throw TestFailure("Could not find \(needle)")
+        }
+        return range.lowerBound
+    }
+}
+
+private struct TestFailure: Error, CustomStringConvertible {
+    let description: String
+
+    init(_ description: String) {
+        self.description = description
+    }
+}

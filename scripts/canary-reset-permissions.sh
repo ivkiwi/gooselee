@@ -5,11 +5,11 @@ set -euo pipefail
 #
 # Usage:
 #   ./scripts/canary-reset-permissions.sh
-#   ./scripts/canary-reset-permissions.sh --bundle-id com.muesli.canary
+#   ./scripts/canary-reset-permissions.sh --bundle-id com.guesli.canary
 #   ./scripts/canary-reset-permissions.sh --dry-run
 
-BUNDLE_ID="${MUESLI_CANARY_BUNDLE_ID:-com.muesli.canary}"
-APP_PROCESS_NAME="${MUESLI_CANARY_PROCESS_NAME:-GuesliCanary}"
+BUNDLE_ID="${GUESLI_CANARY_BUNDLE_ID:-com.guesli.canary}"
+APP_PROCESS_NAME="${GUESLI_CANARY_PROCESS_NAME:-GuesliCanary}"
 DRY_RUN=0
 FORCE=0
 

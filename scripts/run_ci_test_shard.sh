@@ -14,7 +14,7 @@ case "${shard}" in
       ConfigStoreTests
       LegacyInstallationPreservationTests
       DictationStoreTests
-      MuesliCLITests
+      GuesliCLITests
       ChatGPTAuthTests
       ChatGPTTokenStorageTests
       FloatingIndicatorVisibilityTests
@@ -85,7 +85,7 @@ case "${shard}" in
     ;;
 esac
 
-args=(--package-path native/MuesliNative)
+args=(--package-path native/Guesli)
 for filter in "${filters[@]}"; do
   args+=(--filter "${filter}")
 done

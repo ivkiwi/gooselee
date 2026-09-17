@@ -1,0 +1,84 @@
+// swift-tools-version: 5.9
+import PackageDescription
+
+let package = Package(
+    name: "Guesli",
+    platforms: [
+        .macOS("14.2"),
+    ],
+    products: [
+        .library(name: "GuesliCore", targets: ["GuesliCore"]),
+        .library(name: "GuesliAppCore", targets: ["GuesliApp"]),
+        .executable(name: "Guesli", targets: ["GuesliAppShell"]),
+        .executable(name: "guesli-cli", targets: ["GuesliCLI"]),
+    ],
+    dependencies: [
+        .package(url: "https://github.com/apple/swift-argument-parser", from: "1.3.0"),
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.15.6"),
+        // Ghost Pepper uses this LLM.swift fork for local Qwen cleanup. Before production, replace it with upstream
+        // eastriverlee/LLM.swift once explicit Qwen/ChatML template behavior is validated against our GGUF models.
+        .package(url: "https://github.com/obra/LLM.swift.git", revision: "f1e1e11982dbc59662be191b8bed408dfb48e9df"),
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.3"),
+        .package(url: "https://github.com/MimicScribe/dtln-aec-coreml.git", from: "0.4.0-beta"),
+        .package(url: "https://github.com/apple/swift-atomics.git", from: "1.2.0"),
+    ],
+    targets: [
+        .target(
+            name: "GuesliCore",
+            dependencies: [],
+            path: "Sources/GuesliCore",
+            linkerSettings: [
+                .linkedLibrary("sqlite3"),
+            ]
+        ),
+        .target(
+            name: "GuesliApp",
+            dependencies: [
+                "GuesliCore",
+                .product(name: "FluidAudio", package: "FluidAudio"),
+                .product(name: "LLM", package: "LLM.swift"),
+                .product(name: "Sparkle", package: "Sparkle"),
+                .product(name: "Atomics", package: "swift-atomics"),
+                .product(name: "DTLNAecCoreML", package: "dtln-aec-coreml"),
+                .product(name: "DTLNAec512", package: "dtln-aec-coreml"),
+                "LocalVQEBridge",
+            ],
+            path: "Sources/GuesliApp",
+            linkerSettings: [
+                .linkedLibrary("sqlite3"),
+            ]
+        ),
+        .executableTarget(
+            name: "GuesliAppShell",
+            dependencies: ["GuesliApp"],
+            path: "Sources/GuesliAppShell",
+            swiftSettings: [
+                .unsafeFlags(["-parse-as-library"]),
+            ]
+        ),
+        .executableTarget(
+            name: "GuesliCLI",
+            dependencies: [
+                "GuesliCore",
+                "GuesliApp",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                .product(name: "FluidAudio", package: "FluidAudio"),
+            ],
+            path: "Sources/GuesliCLI"
+        ),
+        .target(
+            name: "LocalVQEBridge",
+            path: "Sources/LocalVQEBridge",
+            publicHeadersPath: "include"
+        ),
+        .testTarget(
+            name: "GuesliTests",
+            dependencies: ["GuesliApp", "GuesliCore", "GuesliCLI", "LocalVQEBridge"],
+            path: "Tests/GuesliTests",
+            linkerSettings: [
+                .linkedLibrary("sqlite3"),
+            ]
+        ),
+    ],
+    cxxLanguageStandard: .cxx17
+)

@@ -3,15 +3,15 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_CONFIG="${1:-debug}"
-INSTALL_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/muesli-packaging-test.XXXXXX")"
+INSTALL_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/guesli-packaging-test.XXXXXX")"
 APP_BUNDLE_NAME="GuesliPackagingTest.app"
 APP_PATH="$INSTALL_ROOT/$APP_BUNDLE_NAME"
 APP_BIN="$APP_PATH/Contents/MacOS/Guesli"
-CLI_BIN="$APP_PATH/Contents/MacOS/muesli-cli"
+CLI_BIN="$APP_PATH/Contents/MacOS/guesli-cli"
 GIGAAM_HELPER="$APP_PATH/Contents/MacOS/onnx-gigaam-helper"
 FLUIDAUDIO_LICENSE="$APP_PATH/Contents/Resources/FluidAudio-LICENSE-Apache-2.0.txt"
-SPEC_OUTPUT="$INSTALL_ROOT/muesli-cli-spec.json"
-TRANSCRIBE_HELP_OUTPUT="$INSTALL_ROOT/muesli-cli-transcribe-help.txt"
+SPEC_OUTPUT="$INSTALL_ROOT/guesli-cli-spec.json"
+TRANSCRIBE_HELP_OUTPUT="$INSTALL_ROOT/guesli-cli-transcribe-help.txt"
 
 cleanup() {
   rm -rf "$INSTALL_ROOT"
@@ -19,9 +19,9 @@ cleanup() {
 trap cleanup EXIT
 
 echo "Building isolated app bundle in $INSTALL_ROOT"
-MUESLI_INSTALL_DIR="$INSTALL_ROOT" \
-MUESLI_APP_BUNDLE_NAME="$APP_BUNDLE_NAME" \
-MUESLI_SKIP_SIGN=1 \
+GUESLI_INSTALL_DIR="$INSTALL_ROOT" \
+GUESLI_APP_BUNDLE_NAME="$APP_BUNDLE_NAME" \
+GUESLI_SKIP_SIGN=1 \
 "$ROOT/scripts/build_native_app.sh" "$BUILD_CONFIG"
 
 if [[ ! -d "$APP_PATH" ]]; then
@@ -52,13 +52,13 @@ find "$APP_PATH/Contents/MacOS" -maxdepth 1 -name 'libonnxruntime*.dylib' -type 
 "$CLI_BIN" spec > "$SPEC_OUTPUT"
 "$CLI_BIN" transcribe --help > "$TRANSCRIBE_HELP_OUTPUT"
 
-if ! grep -q '"command" : "muesli-cli spec"' "$SPEC_OUTPUT"; then
+if ! grep -q '"command" : "guesli-cli spec"' "$SPEC_OUTPUT"; then
   echo "Packaged CLI did not return the expected spec payload." >&2
   cat "$SPEC_OUTPUT" >&2
   exit 1
 fi
 
-if ! grep -q 'USAGE: muesli-cli transcribe' "$TRANSCRIBE_HELP_OUTPUT"; then
+if ! grep -q 'USAGE: guesli-cli transcribe' "$TRANSCRIBE_HELP_OUTPUT"; then
   echo "Packaged CLI did not return transcribe help." >&2
   cat "$TRANSCRIBE_HELP_OUTPUT" >&2
   exit 1

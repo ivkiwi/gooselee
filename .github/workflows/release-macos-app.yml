@@ -39,7 +39,7 @@ jobs:
         id: meta
         shell: bash
         env:
-          MUESLI_RELEASE_VERSION: ${{ inputs.version }}
+          GUESLI_RELEASE_VERSION: ${{ inputs.version }}
         run: |
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             echo "This workflow publishes branch builds only." >&2
@@ -52,7 +52,7 @@ jobs:
           TAG_NAME="beta-${SAFE_VERSION}-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
           RELEASE_TITLE="Guesli Beta ${VERSION}"
           PRERELEASE="true"
-          RELEASE_NOTES=$'Russian-focused Guesli build: Muesli fork with telemetry removed and Google Meet speaker bridge included.\n\nThis build uses the stable self-signed Guesli Dev identity with local-only entitlements, so macOS privacy grants survive Guesli updates. It is not Apple-notarized; first launch may require System Settings > Privacy & Security > Open Anyway.'
+          RELEASE_NOTES=$'Russian-first Guesli build: lightweight local meeting recording, transcription, and summaries with the optional Google Meet speaker bridge.\n\nThis build uses the stable self-signed Guesli Dev identity with local-only entitlements, so macOS privacy grants survive Guesli updates. It is not Apple-notarized; first launch may require System Settings > Privacy & Security > Open Anyway.'
           ASSET_SUFFIX="-selfsigned-unnotarized"
 
           APP_DIR="dist/Guesli.app"
@@ -77,13 +77,13 @@ jobs:
 
       - name: Check browser extension
         run: |
-          node --check browser-extension/muesli-meet-speaker/content.js
-          node --test browser-extension/muesli-meet-speaker/content.test.js
+          node --check browser-extension/guesli-meet-speaker/content.js
+          node --test browser-extension/guesli-meet-speaker/content.test.js
 
       - name: Run Meet speaker tests
         run: |
-          if [[ -f native/MuesliNative/Tests/MuesliTests/MeetSpeakerBridgeTests.swift ]]; then
-            swift test --package-path native/MuesliNative --scratch-path "$RUNNER_TEMP/muesli-spm" --filter MeetSpeakerBridgeTests
+          if [[ -f native/Guesli/Tests/GuesliTests/MeetSpeakerBridgeTests.swift ]]; then
+            swift test --package-path native/Guesli --scratch-path "$RUNNER_TEMP/guesli-spm" --filter MeetSpeakerBridgeTests
           else
             echo "Meet speaker bridge tests are not present on this ref; skipping focused test step."
           fi
@@ -92,11 +92,11 @@ jobs:
         env:
           LOCALVQE_REPO: ${{ runner.temp }}/LocalVQE
           LOCALVQE_BUILD_DIR: ${{ runner.temp }}/localvqe-build
-          MUESLI_LOCALVQE_LIB_DIR: ${{ runner.temp }}/localvqe/lib
+          GUESLI_LOCALVQE_LIB_DIR: ${{ runner.temp }}/localvqe/lib
         run: |
           ./scripts/build_localvqe.sh
           source ./scripts/localvqe_runtime.sh
-          muesli_localvqe_runtime_is_complete "$MUESLI_LOCALVQE_LIB_DIR"
+          guesli_localvqe_runtime_is_complete "$GUESLI_LOCALVQE_LIB_DIR"
 
       - name: Install Guesli signing identity
         timeout-minutes: 2
@@ -124,24 +124,24 @@ jobs:
 
       - name: Build app bundle
         env:
-          MUESLI_INSTALL_DIR: ${{ github.workspace }}/dist
-          MUESLI_BUILD_VERSION: ${{ steps.meta.outputs.version }}
-          MUESLI_BUNDLE_VERSION: ${{ steps.meta.outputs.bundle_version }}
-          MUESLI_SHORT_VERSION: ${{ steps.meta.outputs.version }}
-          MUESLI_APP_NAME: Guesli
-          MUESLI_DISPLAY_NAME: Guesli
-          MUESLI_APP_BUNDLE_NAME: Guesli.app
-          MUESLI_EXECUTABLE_NAME: Guesli
-          MUESLI_SUPPORT_DIR_NAME: Guesli
-          MUESLI_BUNDLE_ID: com.guesli.app
-          MUESLI_SPARKLE_FEED_URL: https://raw.githubusercontent.com/ivkiwi/guesli/sparkle-feed/docs/appcast-guesli.xml
-          MUESLI_SPARKLE_EDKEY: x1xV1WAX32xkX4Yl4dxV9HctwCP/dm/K/9YUzWxk7Kc=
-          MUESLI_ENTITLEMENTS: ${{ github.workspace }}/scripts/MuesliLocalOnly.entitlements
-          MUESLI_SKIP_SIGN: "1"
-          MUESLI_SIGN_IDENTITY: Guesli Dev
-          MUESLI_SWIFTPM_SCRATCH_PATH: ${{ runner.temp }}/muesli-spm
-          MUESLI_LOCALVQE_LIB_DIR: ${{ runner.temp }}/localvqe/lib
-          MUESLI_REQUIRE_LOCALVQE: "1"
+          GUESLI_INSTALL_DIR: ${{ github.workspace }}/dist
+          GUESLI_BUILD_VERSION: ${{ steps.meta.outputs.version }}
+          GUESLI_BUNDLE_VERSION: ${{ steps.meta.outputs.bundle_version }}
+          GUESLI_SHORT_VERSION: ${{ steps.meta.outputs.version }}
+          GUESLI_APP_NAME: Guesli
+          GUESLI_DISPLAY_NAME: Guesli
+          GUESLI_APP_BUNDLE_NAME: Guesli.app
+          GUESLI_EXECUTABLE_NAME: Guesli
+          GUESLI_SUPPORT_DIR_NAME: Guesli
+          GUESLI_BUNDLE_ID: com.guesli.app
+          GUESLI_SPARKLE_FEED_URL: https://raw.githubusercontent.com/ivkiwi/guesli/sparkle-feed/docs/appcast-guesli.xml
+          GUESLI_SPARKLE_EDKEY: x1xV1WAX32xkX4Yl4dxV9HctwCP/dm/K/9YUzWxk7Kc=
+          GUESLI_ENTITLEMENTS: ${{ github.workspace }}/scripts/GuesliLocalOnly.entitlements
+          GUESLI_SKIP_SIGN: "1"
+          GUESLI_SIGN_IDENTITY: Guesli Dev
+          GUESLI_SWIFTPM_SCRATCH_PATH: ${{ runner.temp }}/guesli-spm
+          GUESLI_LOCALVQE_LIB_DIR: ${{ runner.temp }}/localvqe/lib
+          GUESLI_REQUIRE_LOCALVQE: "1"
         run: ./scripts/build_native_app.sh release
 
       - name: Verify packaged app
@@ -154,12 +154,12 @@ jobs:
 
           test -d "$APP_DIR"
           test -x "$APP_BIN"
-          test -x "$APP_DIR/Contents/MacOS/muesli-cli"
+          test -x "$APP_DIR/Contents/MacOS/guesli-cli"
           test -x "$APP_DIR/Contents/MacOS/onnx-gigaam-helper"
           find "$APP_DIR/Contents/MacOS" -maxdepth 1 -name 'libonnxruntime*.dylib' \( -type f -o -type l \) | grep -q .
           otool -L "$APP_DIR/Contents/MacOS/onnx-gigaam-helper" | grep -Fq 'libonnxruntime'
           source ./scripts/localvqe_runtime.sh
-          muesli_localvqe_runtime_is_complete "$APP_DIR/Contents/MacOS"
+          guesli_localvqe_runtime_is_complete "$APP_DIR/Contents/MacOS"
 
           codesign --verify --deep --strict --verbose=2 "$APP_DIR"
           codesign -dvv "$APP_DIR" 2>&1 | grep -F 'Authority=Guesli Dev'
@@ -178,7 +178,7 @@ jobs:
             exit 1
           fi
 
-          "$APP_DIR/Contents/MacOS/muesli-cli" spec >/dev/null
+          "$APP_DIR/Contents/MacOS/guesli-cli" spec >/dev/null
 
       - name: Package app zip
         run: |
@@ -197,9 +197,9 @@ jobs:
       - name: Package Meet speaker extension
         run: |
           EXTENSION_ZIP="${{ steps.meta.outputs.extension_zip }}"
-          if [[ -d browser-extension/muesli-meet-speaker ]]; then
+          if [[ -d browser-extension/guesli-meet-speaker ]]; then
             mkdir -p "$(dirname "$EXTENSION_ZIP")"
-            /usr/bin/ditto -c -k --keepParent browser-extension/muesli-meet-speaker "$EXTENSION_ZIP"
+            /usr/bin/ditto -c -k --keepParent browser-extension/guesli-meet-speaker "$EXTENSION_ZIP"
           else
             echo "Meet speaker extension is not present on this ref; skipping extension package."
           fi
@@ -214,7 +214,7 @@ jobs:
           compression-level: 0
 
       - name: Upload Meet speaker extension artifact
-        if: hashFiles('browser-extension/muesli-meet-speaker/content.js') != ''
+        if: hashFiles('browser-extension/guesli-meet-speaker/content.js') != ''
         uses: actions/upload-artifact@v4
         with:
           name: Guesli-Meet-Speaker-Bridge
@@ -280,7 +280,7 @@ jobs:
           UPDATES_DIR="$RUNNER_TEMP/guesli-sparkle"
           mkdir -p "$UPDATES_DIR"
           cp "$DMG_PATH" "$UPDATES_DIR/"
-          GENERATE_APPCAST="$RUNNER_TEMP/muesli-spm/artifacts/sparkle/Sparkle/bin/generate_appcast"
+          GENERATE_APPCAST="$RUNNER_TEMP/guesli-spm/artifacts/sparkle/Sparkle/bin/generate_appcast"
           printf '%s' "$SPARKLE_PRIVATE_KEY" | "$GENERATE_APPCAST" \
             --ed-key-file - \
             --download-url-prefix "https://github.com/ivkiwi/guesli/releases/download/${TAG_NAME}/" \

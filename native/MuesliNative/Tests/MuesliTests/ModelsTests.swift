@@ -113,14 +113,19 @@ struct BackendOptionTests {
         #expect(!BackendOption.experimental.contains(.cohereTranscribe))
     }
 
-    @Test("onboarding offers Russian-first model plus conservative fallbacks")
+    @Test("onboarding exposes only the supported three-model catalog")
     func onboardingModelChoices() {
-        #expect(BackendOption.onboarding == [.gigaAMV3Russian, .parakeetMultilingual, .whisperTinyEnglish, .whisperSmall, .cohereTranscribe, .nemotron35Multilingual])
-        for option in BackendOption.experimental {
-            #expect(!BackendOption.onboarding.contains(option))
+        let expected = [BackendOption.gigaAMV3Russian, .parakeetMultilingual, .nemotron35Multilingual]
+        #expect(BackendOption.primaryCatalog == expected)
+        #expect(BackendOption.onboarding == expected)
+    }
+
+    @Test("hidden legacy models remain resolvable during migration")
+    func legacyModelsRemainResolvable() {
+        for option in BackendOption.legacy {
+            #expect(BackendOption.resolve(backend: option.backend, model: option.model) == option)
+            #expect(!BackendOption.primaryCatalog.contains(option))
         }
-        #expect(BackendOption.onboarding.contains(.gigaAMV3Russian))
-        #expect(BackendOption.onboarding.contains(.nemotron35Multilingual))
     }
 
     @Test("only Nemotron backends use streaming dictation")

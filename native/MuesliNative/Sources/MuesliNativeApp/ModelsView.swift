@@ -15,9 +15,6 @@ struct ModelsView: View {
     @State private var downloadedModels: Set<String> = []
     @State private var downloadTasks: [String: Task<Void, Never>] = [:]
     @State private var modelToDelete: BackendOption?
-    @State private var selectedParakeetModel: String
-    @State private var selectedWhisperModel: String
-    @State private var showExperimental: Bool
     @State private var isLiveCaptionModelDownloaded = false
     @State private var isDownloadingLiveCaptionModel = false
     @State private var liveCaptionDownloadProgress = 0.0
@@ -37,10 +34,6 @@ struct ModelsView: View {
         self.appState = appState
         self.controller = controller
 
-        let active = appState.selectedBackend
-        _selectedParakeetModel = State(initialValue: BackendOption.parakeetFamily.contains(active) ? active.model : BackendOption.parakeetMultilingual.model)
-        _selectedWhisperModel = State(initialValue: BackendOption.whisperFamily.contains(active) ? active.model : BackendOption.whisperSmall.model)
-        _showExperimental = State(initialValue: false)
         _editedSystemPrompt = State(initialValue: appState.config.postProcessorSystemPrompt)
     }
 
@@ -56,32 +49,10 @@ struct ModelsView: View {
                     .foregroundStyle(MuesliTheme.textSecondary)
 
                 modelCard(option: .gigaAMV3Russian)
-
-                familyCard(
-                    title: "Parakeet Family",
-                    subtitle: "NVIDIA speech models for fast everyday dictation.",
-                    defaultBadge: "Newest: Unified",
-                    logo: "nvidia-logo",
-                    selection: $selectedParakeetModel,
-                    options: BackendOption.parakeetFamily
-                )
-
-                familyCard(
-                    title: "Whisper",
-                    subtitle: "OpenAI Whisper variants. Runs on Apple Neural Engine via CoreML.",
-                    defaultBadge: "Default: Small",
-                    logo: "openai-logo",
-                    selection: $selectedWhisperModel,
-                    options: BackendOption.whisperFamily
-                )
-
-                modelCard(option: .cohereTranscribe, logo: "cohere-logo")
-
+                modelCard(option: .parakeetMultilingual, logo: "nvidia-logo")
                 modelCard(option: .nemotron35Multilingual, logo: "nvidia-logo")
 
                 liveCaptionModelCard
-
-                experimentalSection
 
                 postProcessorSection
 
@@ -110,11 +81,7 @@ struct ModelsView: View {
             checkDownloadedModels()
             isLiveCaptionModelDownloaded = MeetingParakeetLiveCaptionModelStore.isDownloaded()
             checkDownloadedPostProcModels()
-            syncSelectionsFromActiveBackend()
             checkNemotron35Update()
-        }
-        .onChange(of: appState.selectedBackend.model) { _, _ in
-            syncSelectionsFromActiveBackend()
         }
         .alert(
             "Delete \"\(modelToDelete?.label ?? "")\"?",
@@ -183,7 +150,7 @@ struct ModelsView: View {
                             .foregroundStyle(MuesliTheme.textTertiary)
                     }
 
-                    Text("Optional low-latency meeting preview. Final transcript still uses the selected meeting model. Never downloaded automatically.")
+                    Text("Optional low-latency preview for English meetings only. Final transcript still uses the selected meeting model. Never downloaded or enabled automatically.")
                         .font(MuesliTheme.caption())
                         .foregroundStyle(MuesliTheme.textSecondary)
                 }
@@ -294,60 +261,6 @@ struct ModelsView: View {
                 DiagnosticsLog.write("[muesli-native] live-caption model delete failed: \(error.localizedDescription)")
             }
         }
-    }
-
-    private var experimentalSection: some View {
-        VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
-            Button {
-                showExperimental.toggle()
-            } label: {
-                HStack(alignment: .firstTextBaseline, spacing: MuesliTheme.spacing12) {
-                    VStack(alignment: .leading, spacing: MuesliTheme.spacing4) {
-                        HStack(spacing: 6) {
-                            Image(systemName: showExperimental ? "chevron.down" : "chevron.right")
-                                .font(.system(size: 9, weight: .semibold))
-                                .foregroundStyle(MuesliTheme.textTertiary)
-
-                            Text("Experimental")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(MuesliTheme.textSecondary)
-                        }
-
-                        Text("SenseVoice, Qwen, and legacy streaming backends. Hidden by default because these are still slower and less polished.")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(MuesliTheme.textPrimary)
-                            .opacity(0.8)
-                    }
-
-                    Spacer()
-
-                    Text("IYKYK")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(MuesliTheme.textTertiary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(MuesliTheme.surfacePrimary)
-                        .clipShape(Capsule())
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if showExperimental {
-                VStack(spacing: MuesliTheme.spacing12) {
-                    ForEach(BackendOption.experimental, id: \.model) { option in
-                        modelCard(option: option, logo: logoForBackend(option))
-                    }
-                }
-            }
-        }
-        .padding(MuesliTheme.spacing16)
-        .background(MuesliTheme.backgroundRaised)
-        .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium))
-        .overlay(
-            RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium)
-                .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
-        )
     }
 
     private var cohereLanguageSelection: Binding<CohereTranscribeLanguage> {
@@ -619,118 +532,6 @@ struct ModelsView: View {
         )
     }
 
-    private func familyCard(
-        title: String,
-        subtitle: String,
-        defaultBadge: String,
-        logo: String? = nil,
-        selection: Binding<String>,
-        options: [BackendOption]
-    ) -> some View {
-        let selectedOption = options.first(where: { $0.model == selection.wrappedValue }) ?? options[0]
-        let isActive = appState.selectedBackend == selectedOption
-        let isDownloaded = downloadedModels.contains(selectedOption.model)
-        let isDownloading = downloadingModels.contains(selectedOption.model)
-        let progress = downloadProgress[selectedOption.model] ?? 0
-
-        return VStack(alignment: .leading, spacing: MuesliTheme.spacing12) {
-            HStack(alignment: .top, spacing: MuesliTheme.spacing12) {
-                brandLogo(logo)
-                VStack(alignment: .leading, spacing: MuesliTheme.spacing4) {
-                    HStack(spacing: MuesliTheme.spacing8) {
-                        Text(title)
-                            .font(MuesliTheme.headline())
-                            .foregroundStyle(MuesliTheme.textPrimary)
-
-                        Text(defaultBadge)
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(MuesliTheme.accent)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(MuesliTheme.accentSubtle)
-                            .clipShape(Capsule())
-                    }
-
-                    Text(subtitle)
-                        .font(MuesliTheme.caption())
-                        .foregroundStyle(MuesliTheme.textSecondary)
-                }
-
-                Spacer()
-
-                familyStatusBadge(isActive: isActive, isDownloaded: isDownloaded)
-            }
-
-            HStack(alignment: .center, spacing: MuesliTheme.spacing12) {
-                Text("Variant")
-                    .font(MuesliTheme.caption())
-                    .foregroundStyle(MuesliTheme.textTertiary)
-                    .frame(width: 52, alignment: .leading)
-
-                Picker("", selection: selection) {
-                    ForEach(options, id: \.model) { option in
-                        Text(option.label).tag(option.model)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .frame(maxWidth: 220, alignment: .leading)
-
-                Text(selectedOption.sizeLabel)
-                    .font(MuesliTheme.caption())
-                    .foregroundStyle(MuesliTheme.textTertiary)
-            }
-
-            Text(selectedOption.description)
-                .font(MuesliTheme.caption())
-                .foregroundStyle(MuesliTheme.textSecondary)
-
-            if isDownloading {
-                VStack(alignment: .leading, spacing: 4) {
-                    ProgressView(value: progress)
-                        .tint(MuesliTheme.accent)
-                    Text(downloadStatusText(for: selectedOption, progress: progress))
-                        .font(.system(size: 11))
-                        .foregroundStyle(MuesliTheme.textTertiary)
-                }
-            } else if let message = downloadMessages[selectedOption.model] {
-                Text(message)
-                    .font(.system(size: 11))
-                    .foregroundStyle(MuesliTheme.textTertiary)
-            }
-
-            actionButtons(for: selectedOption, isActive: isActive, isDownloaded: isDownloaded, isDownloading: isDownloading)
-        }
-        .padding(MuesliTheme.spacing16)
-        .background(MuesliTheme.backgroundRaised)
-        .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium))
-        .overlay(
-            RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium)
-                .strokeBorder(isActive ? MuesliTheme.accent.opacity(0.5) : MuesliTheme.surfaceBorder, lineWidth: isActive ? 1.5 : 1)
-        )
-    }
-
-    @ViewBuilder
-    private func familyStatusBadge(isActive: Bool, isDownloaded: Bool) -> some View {
-        if isActive {
-            Text("Active")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(MuesliTheme.success)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(MuesliTheme.success.opacity(0.15))
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-        } else if isDownloaded {
-            Text("Downloaded")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(MuesliTheme.textTertiary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(MuesliTheme.surfacePrimary)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-        }
-    }
-
     @ViewBuilder
     private func brandLogo(_ name: String?) -> some View {
         if let name,
@@ -742,19 +543,6 @@ struct ModelsView: View {
                 .frame(width: 24, height: 24)
                 .clipShape(RoundedRectangle(cornerRadius: 4))
                 .padding(.top, 2)
-        }
-    }
-
-    private func logoForBackend(_ option: BackendOption) -> String? {
-        switch option.backend {
-        case "fluidaudio": return "nvidia-logo"
-        case "whisper": return "openai-logo"
-        case "cohere": return "cohere-logo"
-        case "gigaam_v3": return nil
-        case "qwen": return "qwen-logo"
-        case "nemotron35": return "nvidia-logo"
-        case "sensevoice": return "qwen-logo"
-        default: return nil
         }
     }
 
@@ -1417,19 +1205,6 @@ struct ModelsView: View {
         Task {
             let available = await Nemotron35StreamingTranscriber.updateAvailable()
             await MainActor.run { nemotron35UpdateAvailable = available }
-        }
-    }
-
-    private func syncSelectionsFromActiveBackend() {
-        let active = appState.selectedBackend
-        if BackendOption.parakeetFamily.contains(active) {
-            selectedParakeetModel = active.model
-        }
-        if BackendOption.whisperFamily.contains(active) {
-            selectedWhisperModel = active.model
-        }
-        if BackendOption.experimental.contains(active) {
-            return
         }
     }
 

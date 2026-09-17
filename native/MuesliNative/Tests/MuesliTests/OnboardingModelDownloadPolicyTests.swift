@@ -12,17 +12,17 @@ struct OnboardingModelDownloadPolicyTests {
 
         #expect(!alternatives.contains(.gigaAMV3Russian))
         #expect(!alternatives.contains(.parakeetMultilingual))
-        #expect(alternatives == [.whisperTinyEnglish, .whisperSmall, .cohereTranscribe, .nemotron35Multilingual])
+        #expect(alternatives == [.nemotron35Multilingual])
     }
 
-    @Test("alternative models keep selected secondary option visible first")
-    func alternativeModelsKeepSelectedSecondaryFirst() {
+    @Test("alternative models do not re-expose a selected legacy option")
+    func alternativeModelsHideSelectedLegacyOption() {
         let alternatives = makeOnboardingAlternativeModels(
             selectedBackend: .whisperSmall,
             onboardingOptions: [.gigaAMV3Russian, .parakeetMultilingual, .cohereTranscribe]
         )
 
-        #expect(alternatives == [.whisperSmall, .cohereTranscribe])
+        #expect(alternatives == [.cohereTranscribe])
     }
 
     @Test("GigaAM stale download progress resets when model is missing")

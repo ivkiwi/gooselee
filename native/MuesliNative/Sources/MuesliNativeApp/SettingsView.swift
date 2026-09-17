@@ -320,7 +320,7 @@ struct SettingsView: View {
 
     private func refreshDownloadedModelOptions() {
         controller.refreshMeetingTranscriptionSelectionForAvailability()
-        downloadedBackendOptions = BackendOption.downloaded
+        downloadedBackendOptions = BackendOption.downloadedPrimaryCatalog
         downloadedPostProcOptions = PostProcessorOption.downloaded
     }
 

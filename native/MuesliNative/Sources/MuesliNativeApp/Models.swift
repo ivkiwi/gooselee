@@ -133,13 +133,26 @@ struct BackendOption: Equatable {
         .senseVoiceSmall, .qwen3Asr,
     ]
 
-    /// Models available for download and use.
-    static let all: [BackendOption] = [.gigaAMV3Russian] + parakeetFamily + whisperFamily + [.cohereTranscribe, .nemotron35Multilingual] + experimental
+    /// The supported product catalog. Legacy options remain resolvable below so an
+    /// existing installation is never silently switched before its migration runs.
+    static let primaryCatalog: [BackendOption] = [
+        .gigaAMV3Russian,
+        .parakeetMultilingual,
+        .nemotron35Multilingual,
+    ]
+
+    static let legacy: [BackendOption] = [
+        .parakeetUnified,
+        .parakeetEnglish,
+    ] + whisperFamily + [.cohereTranscribe] + experimental
+
+    /// All runtime-resolvable models, including hidden legacy selections.
+    static let all: [BackendOption] = primaryCatalog + legacy
 
     /// Curated first-run choices shown in onboarding's "Other models" section.
     /// This is a deliberate hand-picked list, not a derived rule. Experimental models
     /// are excluded by default.
-    static let onboarding: [BackendOption] = [.gigaAMV3Russian, .parakeetMultilingual, .whisperTinyEnglish, .whisperSmall, .cohereTranscribe, .nemotron35Multilingual]
+    static let onboarding: [BackendOption] = primaryCatalog
 
     /// Models coming soon — shown greyed out in the Models tab.
     static let comingSoon: [BackendOption] = []
@@ -147,6 +160,10 @@ struct BackendOption: Equatable {
     /// Only models that have been downloaded and are ready for inference.
     static var downloaded: [BackendOption] {
         all.filter { $0.isDownloaded }
+    }
+
+    static var downloadedPrimaryCatalog: [BackendOption] {
+        primaryCatalog.filter { $0.isDownloaded }
     }
 
     static var downloadedMeetingTranscription: [BackendOption] {

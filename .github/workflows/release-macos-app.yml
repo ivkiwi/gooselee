@@ -303,6 +303,7 @@ jobs:
             --short-version "$SHORT_VERSION" \
             --app-name Guesli \
             --asset-url "$ASSET_URL" \
+            --legacy-asset-url-prefix https://github.com/ivkiwi/guesli/releases/download/ \
             --require-runtimes \
             --self-signed-artifact
 
@@ -331,6 +332,7 @@ jobs:
             --short-version "$SHORT_VERSION" \
             --app-name Guesli \
             --asset-url "$ASSET_URL" \
+            --legacy-asset-url-prefix https://github.com/ivkiwi/guesli/releases/download/ \
             --require-runtimes \
             --self-signed-artifact; then
             echo "ERROR: forged Sparkle signature was accepted." >&2

@@ -118,6 +118,11 @@ struct MeetingDetailView: View {
                     Divider()
                         .background(MuesliTheme.surfaceBorder)
 
+                    if let summaryError = meeting.summaryError,
+                       !summaryError.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        summaryFailureBanner(message: summaryError, meeting: meeting)
+                    }
+
                     content(for: meeting)
                 }
                 .background(MuesliTheme.backgroundBase)
@@ -182,6 +187,50 @@ struct MeetingDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Are you sure you want to delete this meeting? Saved notes, transcript, and any retained recording will be removed.")
+        }
+    }
+
+    private func summaryFailureBanner(message: String, meeting: MeetingRecord) -> some View {
+        HStack(alignment: .top, spacing: MuesliTheme.spacing8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(MuesliTheme.transcribing)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Summary failed — previous notes were kept")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(MuesliTheme.textPrimary)
+                Text(message)
+                    .font(.system(size: 11))
+                    .foregroundStyle(MuesliTheme.textSecondary)
+                    .lineLimit(3)
+            }
+            Spacer(minLength: MuesliTheme.spacing8)
+            Button("Try Again") {
+                retryFailedSummary(for: meeting)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(isSummarizing)
+        }
+        .padding(.horizontal, 40)
+        .padding(.vertical, MuesliTheme.spacing8)
+        .background(MuesliTheme.transcribing.opacity(0.10))
+    }
+
+    private func retryFailedSummary(for meeting: MeetingRecord) {
+        guard !isSummarizing else { return }
+        isSummarizing = true
+        controller.resummarize(meeting: meeting) { result in
+            isSummarizing = false
+            switch result {
+            case .success:
+                if let updated = controller.meeting(id: meeting.id) {
+                    syncLocalState(with: updated)
+                }
+            case .failure(let error):
+                if !(error is CancellationError) {
+                    summaryErrorMessage = error.localizedDescription
+                }
+            }
         }
     }
 

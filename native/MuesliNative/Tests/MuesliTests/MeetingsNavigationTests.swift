@@ -633,6 +633,49 @@ struct MeetingsNavigationTests {
         #expect(storedMeeting?.savedRecordingPath == nil)
     }
 
+    @Test("failed summary keeps previously generated notes")
+    func failedSummaryKeepsPreviouslyGeneratedNotes() throws {
+        let store = try makeStore()
+        let controller = makeController(dictationStore: store)
+        let start = Date()
+        let meetingID = try store.insertMeeting(
+            title: "Existing Meeting",
+            calendarEventID: nil,
+            startTime: start,
+            endTime: start.addingTimeInterval(60),
+            rawTranscript: "Old transcript",
+            formattedNotes: "## Summary\nTrusted existing notes",
+            micAudioPath: nil,
+            systemAudioPath: nil
+        )
+        let result = MeetingSessionResult(
+            title: "Existing Meeting",
+            originalTitle: "Existing Meeting",
+            calendarEventID: nil,
+            startTime: start,
+            endTime: start.addingTimeInterval(120),
+            durationSeconds: 120,
+            rawTranscript: "New complete transcript",
+            formattedNotes: "## Summary failed\nTemporary fallback",
+            summaryError: "Provider unavailable",
+            retainedRecordingURL: nil,
+            retainedRecordingError: nil,
+            systemRecordingURL: nil,
+            templateSnapshot: MeetingTemplates.auto.snapshot
+        )
+
+        _ = try controller.persistCompletedMeetingResult(
+            result,
+            existingMeetingID: meetingID,
+            preparedRecordingSave: .none
+        )
+
+        let stored = try #require(try store.meeting(id: meetingID))
+        #expect(stored.rawTranscript == "New complete transcript")
+        #expect(stored.formattedNotes == "## Summary\nTrusted existing notes")
+        #expect(stored.summaryError == "Provider unavailable")
+    }
+
     @Test("persistCompletedMeetingResult honors prompt recording save decision")
     func persistCompletedMeetingResultHonorsPromptRecordingSaveDecision() async throws {
         let store = try makeStore()

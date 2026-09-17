@@ -269,6 +269,7 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
     public let selectedTemplateName: String?
     public let selectedTemplateKind: MeetingTemplateKind?
     public let selectedTemplatePrompt: String?
+    public let summaryError: String?
     public let source: MeetingSource
     public let followUpToID: Int64?
 
@@ -292,6 +293,7 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
         selectedTemplateName: String? = nil,
         selectedTemplateKind: MeetingTemplateKind? = nil,
         selectedTemplatePrompt: String? = nil,
+        summaryError: String? = nil,
         source: MeetingSource = .meeting,
         followUpToID: Int64? = nil
     ) {
@@ -314,6 +316,7 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
         self.selectedTemplateName = selectedTemplateName
         self.selectedTemplateKind = selectedTemplateKind
         self.selectedTemplatePrompt = selectedTemplatePrompt
+        self.summaryError = summaryError
         self.source = source
         self.followUpToID = followUpToID
     }
@@ -338,6 +341,7 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
         case selectedTemplateName
         case selectedTemplateKind
         case selectedTemplatePrompt
+        case summaryError
         case source
         case followUpToID
     }
@@ -364,6 +368,7 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
             selectedTemplateName: try c.decodeIfPresent(String.self, forKey: .selectedTemplateName),
             selectedTemplateKind: try c.decodeIfPresent(MeetingTemplateKind.self, forKey: .selectedTemplateKind),
             selectedTemplatePrompt: try c.decodeIfPresent(String.self, forKey: .selectedTemplatePrompt),
+            summaryError: try c.decodeIfPresent(String.self, forKey: .summaryError),
             source: (try? c.decode(MeetingSource.self, forKey: .source)) ?? .meeting,
             followUpToID: try c.decodeIfPresent(Int64.self, forKey: .followUpToID)
         )

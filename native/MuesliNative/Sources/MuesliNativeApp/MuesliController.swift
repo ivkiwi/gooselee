@@ -4278,6 +4278,19 @@ public final class MuesliController: NSObject {
                 self.meetingSummaryRequestGate.finish(requestID, meetingID: meeting.id)
                 self.meetingSummaryTasks.removeValue(forKey: meeting.id)
                 DiagnosticsLog.write("[muesli-native] failed to generate or persist meeting summary: \(error.localizedDescription)")
+                if error is MeetingSummaryError {
+                    do {
+                        try self.dictationStore.updateMeetingSummaryError(
+                            id: meeting.id,
+                            message: error.localizedDescription
+                        )
+                        self.scheduleICloudSyncAfterLocalChange()
+                        self.syncAppState()
+                        self.historyWindowController?.reload()
+                    } catch {
+                        DiagnosticsLog.write("[muesli-native] failed to persist meeting summary error: \(error.localizedDescription)")
+                    }
+                }
                 await MainActor.run {
                     if error is MeetingSummaryError {
                         completion(.failure(error))
@@ -4356,6 +4369,7 @@ public final class MuesliController: NSObject {
                     customTemplates: self.config.customMeetingTemplates
                 )
                 let formattedNotes: String
+                let summaryError: String?
                 do {
                     formattedNotes = try await MeetingSummaryClient.summarize(
                         transcript: rawTranscript,
@@ -4365,14 +4379,19 @@ public final class MuesliController: NSObject {
                         existingNotes: self.notesContextForResummary(meeting),
                         manualNotesToRetain: meeting.manualNotes
                     )
+                    summaryError = nil
                 } catch {
                     DiagnosticsLog.write("[muesli-native] re-transcription summary generation failed: \(error.localizedDescription)")
-                    formattedNotes = MeetingSummaryClient.summaryFailureNotes(
-                        transcript: rawTranscript,
-                        meetingTitle: meeting.title,
-                        error: error,
-                        manualNotes: meeting.manualNotes
-                    )
+                    let existingNotes = meeting.formattedNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+                    formattedNotes = existingNotes.isEmpty
+                        ? MeetingSummaryClient.summaryFailureNotes(
+                            transcript: rawTranscript,
+                            meetingTitle: meeting.title,
+                            error: error,
+                            manualNotes: meeting.manualNotes
+                        )
+                        : meeting.formattedNotes
+                    summaryError = error.localizedDescription
                 }
 
                 let cleanupResult = await pendingCleanup
@@ -4383,6 +4402,7 @@ public final class MuesliController: NSObject {
                         rawTranscript: cleanupResult.transcript,
                         rawOriginalTranscript: cleanupResult.originalTranscript,
                         formattedNotes: formattedNotes,
+                        summaryError: summaryError,
                         selectedTemplateID: templateSnapshot.id,
                         selectedTemplateName: templateSnapshot.name,
                         selectedTemplateKind: templateSnapshot.kind,
@@ -5963,6 +5983,7 @@ public final class MuesliController: NSObject {
         rawTranscript: String,
         rawOriginalTranscript: String? = nil,
         formattedNotes: String,
+        summaryError: String? = nil,
         micAudioPath: String?,
         systemAudioPath: String?,
         savedRecordingPath: String?,
@@ -5986,6 +6007,7 @@ public final class MuesliController: NSObject {
             selectedTemplateName: selectedTemplateName,
             selectedTemplateKind: selectedTemplateKind,
             selectedTemplatePrompt: selectedTemplatePrompt,
+            summaryError: summaryError,
             source: .audioImport
         )
         scheduleICloudSyncAfterLocalChange()
@@ -7079,6 +7101,14 @@ public final class MuesliController: NSObject {
             ?? (preservesPriorRecording ? existingMeeting?.micAudioPath : nil)
         let systemAudioPath = existingRecordingPath(result.sourceSystemRecordingURL)
             ?? (preservesPriorRecording ? existingMeeting?.systemAudioPath : nil)
+        let formattedNotes: String
+        if result.summaryError != nil,
+           let existingNotes = existingMeeting?.formattedNotes,
+           !existingNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            formattedNotes = existingNotes
+        } else {
+            formattedNotes = result.formattedNotes
+        }
 
         do {
             if let existingMeetingID {
@@ -7091,7 +7121,8 @@ public final class MuesliController: NSObject {
                     endTime: result.endTime,
                     rawTranscript: result.rawTranscript,
                     rawOriginalTranscript: result.rawOriginalTranscript,
-                    formattedNotes: result.formattedNotes,
+                    formattedNotes: formattedNotes,
+                    summaryError: result.summaryError,
                     micAudioPath: micAudioPath,
                     systemAudioPath: systemAudioPath,
                     savedRecordingPath: savedRecordingPath,
@@ -7112,14 +7143,15 @@ public final class MuesliController: NSObject {
                     endTime: result.endTime,
                     rawTranscript: result.rawTranscript,
                     rawOriginalTranscript: result.rawOriginalTranscript,
-                    formattedNotes: result.formattedNotes,
+                    formattedNotes: formattedNotes,
                     micAudioPath: micAudioPath,
                     systemAudioPath: systemAudioPath,
                     savedRecordingPath: savedRecordingPath,
                     selectedTemplateID: result.templateSnapshot.id,
                     selectedTemplateName: result.templateSnapshot.name,
                     selectedTemplateKind: result.templateSnapshot.kind,
-                    selectedTemplatePrompt: result.templateSnapshot.prompt
+                    selectedTemplatePrompt: result.templateSnapshot.prompt,
+                    summaryError: result.summaryError
                 )
             }
         } catch {

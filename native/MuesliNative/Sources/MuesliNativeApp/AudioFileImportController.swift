@@ -148,6 +148,7 @@ enum AudioFileImportController {
         let title: String
         let rawTranscript: String
         let formattedNotes: String
+        let summaryError: String?
         let durationSeconds: Double
         let wordCount: Int
     }
@@ -280,6 +281,7 @@ enum AudioFileImportController {
         progress("Generating summary...")
         let templateSnapshot = context.templateSnapshot
         let formattedNotes: String
+        let summaryError: String?
         do {
             formattedNotes = try await MeetingSummaryClient.summarize(
                 transcript: finalTranscript,
@@ -289,6 +291,7 @@ enum AudioFileImportController {
                 existingNotes: nil,
                 manualNotesToRetain: ""
             )
+            summaryError = nil
         } catch {
             fputs("[import] summary generation failed: \(error)\n", stderr)
             formattedNotes = MeetingSummaryClient.summaryFailureNotes(
@@ -297,6 +300,7 @@ enum AudioFileImportController {
                 error: error,
                 manualNotes: ""
             )
+            summaryError = error.localizedDescription
         }
 
         try Task.checkCancellation()
@@ -320,6 +324,7 @@ enum AudioFileImportController {
             rawTranscript: finalTranscript,
             rawOriginalTranscript: cleanupResult.originalTranscript,
             formattedNotes: formattedNotes,
+            summaryError: summaryError,
             micAudioPath: nil,
             systemAudioPath: nil,
             savedRecordingPath: savedRecordingPath,
@@ -334,6 +339,7 @@ enum AudioFileImportController {
             title: generatedTitle,
             rawTranscript: finalTranscript,
             formattedNotes: formattedNotes,
+            summaryError: summaryError,
             durationSeconds: duration,
             wordCount: wordCount
         )

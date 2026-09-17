@@ -201,6 +201,7 @@ struct MeetingSessionResult {
     let rawTranscript: String
     let rawOriginalTranscript: String?
     let formattedNotes: String
+    let summaryError: String?
     let retainedRecordingURL: URL?
     let retainedRecordingError: Error?
     let retainedRecordingSavedURL: URL?
@@ -220,6 +221,7 @@ struct MeetingSessionResult {
         rawTranscript: String,
         rawOriginalTranscript: String? = nil,
         formattedNotes: String,
+        summaryError: String? = nil,
         retainedRecordingURL: URL?,
         retainedRecordingError: Error?,
         retainedRecordingSavedURL: URL? = nil,
@@ -238,6 +240,7 @@ struct MeetingSessionResult {
         self.rawTranscript = rawTranscript
         self.rawOriginalTranscript = rawOriginalTranscript
         self.formattedNotes = formattedNotes
+        self.summaryError = summaryError
         self.retainedRecordingURL = retainedRecordingURL
         self.retainedRecordingError = retainedRecordingError
         self.retainedRecordingSavedURL = retainedRecordingSavedURL
@@ -265,6 +268,7 @@ struct MeetingSessionResult {
             rawTranscript: rawTranscript ?? self.rawTranscript,
             rawOriginalTranscript: rawOriginalTranscript ?? self.rawOriginalTranscript,
             formattedNotes: formattedNotes ?? self.formattedNotes,
+            summaryError: summaryError,
             retainedRecordingURL: retainedRecordingURL,
             retainedRecordingError: retainedRecordingError,
             retainedRecordingSavedURL: retainedRecordingSavedURL,
@@ -1438,6 +1442,7 @@ final class MeetingSession {
         fputs("[meeting] visual context drained chars=\(visualContext.count) participants=\(allParticipantCandidates.count) observedParticipants=\(observedParticipants.count) includedInPrompt=\(!summaryContext.isEmpty) useOCR=\(config.useCoreAudioTap)\n", stderr)
         onProgress?(.summarizingNotes)
         let formattedNotes: String
+        let summaryError: String?
         do {
             formattedNotes = try await withStopPhaseTimeout(
                 "summary_generation",
@@ -1453,6 +1458,7 @@ final class MeetingSession {
                     visualContext: summaryContext.isEmpty ? nil : summaryContext
                 )
             }
+            summaryError = nil
         } catch {
             logStopPhaseFailure(
                 "summary_generation",
@@ -1466,6 +1472,7 @@ final class MeetingSession {
                 error: error,
                 manualNotes: manualNotes
             )
+            summaryError = error.localizedDescription
         }
 
         let cleanupResult = await pendingCleanup
@@ -1500,6 +1507,7 @@ final class MeetingSession {
                 previous: previousMeetingNotes,
                 current: formattedNotes
             ),
+            summaryError: summaryError,
             retainedRecordingURL: retainedRecordingURL,
             retainedRecordingError: retainedRecordingWriterError,
             retainedRecordingSavedURL: retainedRecordingSavedURL,
@@ -1707,6 +1715,7 @@ final class MeetingSession {
         fputs("[meeting] visual context drained chars=\(visualContext.count) participants=\(allParticipantCandidates.count) observedParticipants=\(observedParticipants.count) includedInPrompt=\(!summaryContext.isEmpty) useOCR=\(config.useCoreAudioTap)\n", stderr)
         onProgress?(.summarizingNotes)
         let formattedNotes: String
+        let summaryError: String?
         do {
             formattedNotes = try await withStopPhaseTimeout(
                 "summary_generation",
@@ -1722,6 +1731,7 @@ final class MeetingSession {
                     visualContext: summaryContext.isEmpty ? nil : summaryContext
                 )
             }
+            summaryError = nil
         } catch {
             logStopPhaseFailure(
                 "summary_generation",
@@ -1735,6 +1745,7 @@ final class MeetingSession {
                 error: error,
                 manualNotes: manualNotes
             )
+            summaryError = error.localizedDescription
         }
 
         let cleanupResult = await pendingCleanup
@@ -1769,6 +1780,7 @@ final class MeetingSession {
                 previous: previousMeetingNotes,
                 current: formattedNotes
             ),
+            summaryError: summaryError,
             retainedRecordingURL: retainedRecordingURL,
             retainedRecordingError: retainedRecordingWriterError,
             retainedRecordingSavedURL: retainedRecordingSavedURL,

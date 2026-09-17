@@ -72,6 +72,7 @@ struct MeetingTemplateDefinition: Identifiable, Equatable, Sendable {
 
 enum MeetingTemplates {
     static let autoID = "auto"
+    static let simpleID = "simple-notes"
     static let customIconFallback = "square.and.pencil"
 
     struct CustomIconOption: Identifiable, Equatable, Sendable {
@@ -160,7 +161,38 @@ enum MeetingTemplates {
         """
     )
 
+    static let simple = MeetingTemplateDefinition(
+        id: simpleID,
+        title: "Simple Notes",
+        category: "General",
+        icon: "list.bullet.rectangle",
+        kind: .builtin,
+        promptBody: """
+        Write compact, useful meeting notes in the main language of the meeting. If the meeting is mixed-language and there is no clear main language, write in Russian. Keep names, product names, commands, ticket IDs, links, paths, metrics, and short important quotes in their original form.
+
+        Use exactly these sections, translating the headings to the meeting language when needed:
+
+        ## Коротко
+        - 3-6 concrete bullets covering the main outcome, important context, and what changed.
+
+        ## Решения
+        - Confirmed decisions and explicit non-decisions. Include the reason when stated.
+        - If none were made, write "Не зафиксировано."
+
+        ## Действия
+        - [ ] One action per item — owner: NAME/TBD — due: DATE/TBD.
+        - Include tentative follow-ups and checks; do not drop an action because owner or due date is unknown.
+
+        ## Риски и открытые вопросы
+        - Blockers, disagreements, dependencies, unknowns, and things that still need verification.
+        - If none were mentioned, write "Не зафиксировано."
+
+        Be concise, but never invent facts or omit a concrete decision or action.
+        """
+    )
+
     static let builtIns: [MeetingTemplateDefinition] = [
+        simple,
         MeetingTemplateDefinition(
             id: "one-to-one",
             title: "1 to 1",

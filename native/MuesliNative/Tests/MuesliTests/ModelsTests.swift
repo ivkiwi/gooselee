@@ -534,7 +534,7 @@ struct AppConfigTests {
         #expect(config.meetingTranscriptionBackend == BackendOption.gigaAMV3Russian.backend)
         #expect(config.meetingTranscriptionModel == BackendOption.gigaAMV3Russian.model)
         #expect(config.meetingSummaryBackend == "chatgpt")
-        #expect(config.defaultMeetingTemplateID == MeetingTemplates.autoID)
+        #expect(config.defaultMeetingTemplateID == MeetingTemplates.simpleID)
         #expect(config.meetingProcessingMode == MeetingProcessingMode.post.rawValue)
         #expect(config.resolvedMeetingProcessingMode == .post)
         #expect(config.meetingRecordingSavePolicy == .never)

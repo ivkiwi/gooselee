@@ -1127,7 +1127,7 @@ struct AppConfig: Codable {
     var meetingTranscriptionModel: String = BackendOption.gigaAMV3Russian.model
     var preferredMeetingBrowserBundleID: String = ""
     var meetingSummaryBackend: String = MeetingSummaryBackendOption.chatGPT.backend
-    var defaultMeetingTemplateID: String = MeetingTemplates.autoID
+    var defaultMeetingTemplateID: String = MeetingTemplates.simpleID
     var meetingProcessingMode: String = MeetingProcessingMode.post.rawValue
     var whisperModel: String = BackendOption.whisper.model
     var idleTimeout: Double = 120
@@ -1374,7 +1374,7 @@ struct AppConfig: Codable {
         meetingTranscriptionModel = (try? c.decode(String.self, forKey: .meetingTranscriptionModel)) ?? sttModel
         preferredMeetingBrowserBundleID = (try? c.decode(String.self, forKey: .preferredMeetingBrowserBundleID)) ?? defaults.preferredMeetingBrowserBundleID
         meetingSummaryBackend = (try? c.decode(String.self, forKey: .meetingSummaryBackend)) ?? defaults.meetingSummaryBackend
-        defaultMeetingTemplateID = (try? c.decode(String.self, forKey: .defaultMeetingTemplateID)) ?? defaults.defaultMeetingTemplateID
+        defaultMeetingTemplateID = (try? c.decode(String.self, forKey: .defaultMeetingTemplateID)) ?? MeetingTemplates.autoID
         meetingProcessingMode = MeetingProcessingMode
             .resolved(try? c.decode(String.self, forKey: .meetingProcessingMode))
             .rawValue

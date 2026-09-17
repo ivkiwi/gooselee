@@ -402,6 +402,7 @@ public final class MuesliController: NSObject {
     private static let pendingDictionaryCorrectionAccessibilityRequestProcessIDKey = "dictionaryCorrectionPrompts.pendingAccessibilityRequestProcessID"
     private static let dictionaryCorrectionAccessibilityIntentTimeout: TimeInterval = 24 * 60 * 60
     private static let pendingMeetingJoinRecordingTimeout: TimeInterval = 5 * 60
+    private static let calendarAutoRecordConfirmationTimeout: TimeInterval = 90
 
     private struct PendingMeetingJoinRecording {
         let id: UUID
@@ -410,6 +411,12 @@ public final class MuesliController: NSObject {
         let endDate: Date?
         let calendarOccurrence: CalendarOccurrenceReference?
         let presentation: MeetingStartPresentation
+    }
+
+    private struct ProvisionalCalendarAutoRecord {
+        let request: PendingMeetingJoinRecordingPolicy.Request
+        var meetingID: Int64?
+        var hasJoinEvidence: Bool
     }
 
     private let runtime: RuntimePaths
@@ -538,6 +545,8 @@ public final class MuesliController: NSObject {
     private var presentedMeetingCandidate: MeetingCandidate?
     private var pendingMeetingJoinRecording: PendingMeetingJoinRecording?
     private var pendingMeetingJoinRecordingTimeoutTask: Task<Void, Never>?
+    private var provisionalCalendarAutoRecord: ProvisionalCalendarAutoRecord?
+    private var calendarAutoRecordConfirmationTask: Task<Void, Never>?
     private var meetingEndTimer: Timer?
     private var activeMeetingCalendarEndDate: Date?
     private var latestMeetingActivityCandidate: MeetingCandidate?
@@ -2794,7 +2803,7 @@ public final class MuesliController: NSObject {
 
     private func syncMeetingDetectionMonitor() {
         let shouldRun = meetingFeatureMonitorsAllowed
-            && (config.showMeetingDetectionNotification || activeMeetingAutoStop.isArmed || pendingMeetingJoinRecording != nil)
+            && (config.showMeetingDetectionNotification || config.autoRecordMeetings || activeMeetingAutoStop.isArmed || pendingMeetingJoinRecording != nil)
         if shouldRun && !meetingDetectionMonitorStarted {
             meetingMonitor.start()
             meetingDetectionMonitorStarted = true
@@ -2826,22 +2835,45 @@ public final class MuesliController: NSObject {
             DiagnosticsLog.write("[calendar] auto-record skipped reason=meeting_active key=\(key)")
             return false
         }
+        guard let meetingURL = event.meetingURL,
+              let request = PendingMeetingJoinRecordingPolicy.Request(meetingURL: meetingURL) else {
+            DiagnosticsLog.write("[calendar] auto-record skipped reason=unsupported_meeting_url key=\(key)")
+            return false
+        }
+        let recentCandidate: MeetingCandidate? = latestMeetingActivityCandidate.flatMap { candidate in
+            guard let observedAt = latestMeetingActivityCandidateObservedAt,
+                  Date().timeIntervalSince(observedAt) <= 15 else { return nil }
+            return candidate
+        }
+        provisionalCalendarAutoRecord = ProvisionalCalendarAutoRecord(
+            request: request,
+            meetingID: nil,
+            hasJoinEvidence: PendingMeetingJoinRecordingPolicy.shouldStartRecording(
+                request: request,
+                candidate: recentCandidate
+            )
+        )
         autoRecordedCalendarEventIDs.insert(key)
         let didScheduleStart = startMeetingRecording(
             title: event.title,
             calendarOccurrence: event.resolvedCalendarOccurrence,
             openDocument: false,
             endDate: event.endDate,
-            autoStopSource: event.meetingURL.flatMap {
-                MeetingAutoStopSource(meetingURL: $0, calendarEventID: event.id)
-            },
+            autoStopSource: MeetingAutoStopSource(
+                meetingURL: meetingURL,
+                calendarEventID: event.id
+            ),
             startOrigin: .calendarAutoRecord,
             onStartResolved: { [weak self] didStart in
                 guard let self else { return }
                 if didStart {
+                    if let meetingID = self.activeMeetingID {
+                        self.scheduleCalendarAutoRecordConfirmation(meetingID: meetingID)
+                    }
                     DiagnosticsLog.write("[calendar] auto-record started key=\(key) title=\(event.title) source=\(event.source.rawValue)")
                     self.showAutoRecordStartedNotification(event, notificationKey: key)
                 } else {
+                    self.cancelCalendarAutoRecordConfirmation()
                     self.autoRecordedCalendarEventIDs.remove(key)
                     DiagnosticsLog.write("[calendar] auto-record failed key=\(key) title=\(event.title) source=\(event.source.rawValue)")
                 }
@@ -2850,10 +2882,56 @@ public final class MuesliController: NSObject {
         if didScheduleStart {
             DiagnosticsLog.write("[calendar] auto-record starting key=\(key) title=\(event.title) source=\(event.source.rawValue)")
         } else {
+            cancelCalendarAutoRecordConfirmation()
             DiagnosticsLog.write("[calendar] auto-record failed key=\(key) title=\(event.title) source=\(event.source.rawValue)")
             autoRecordedCalendarEventIDs.remove(key)
         }
         return didScheduleStart
+    }
+
+    private func scheduleCalendarAutoRecordConfirmation(meetingID: Int64) {
+        guard var provisional = provisionalCalendarAutoRecord else { return }
+        provisional.meetingID = meetingID
+        provisionalCalendarAutoRecord = provisional
+        if provisional.hasJoinEvidence {
+            DiagnosticsLog.write("[calendar] auto-record confirmed meeting_id=\(meetingID)")
+            cancelCalendarAutoRecordConfirmation()
+            return
+        }
+
+        calendarAutoRecordConfirmationTask?.cancel()
+        calendarAutoRecordConfirmationTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(
+                nanoseconds: UInt64(Self.calendarAutoRecordConfirmationTimeout * 1_000_000_000)
+            )
+            guard !Task.isCancelled,
+                  let self,
+                  self.provisionalCalendarAutoRecord?.meetingID == meetingID,
+                  self.activeMeetingID == meetingID else { return }
+            DiagnosticsLog.write("[calendar] auto-record discarded reason=no_join_evidence meeting_id=\(meetingID)")
+            self.cancelCalendarAutoRecordConfirmation()
+            self.discardMeetingRecording()
+        }
+    }
+
+    private func confirmCalendarAutoRecordIfReady(candidate: MeetingCandidate?) {
+        guard var provisional = provisionalCalendarAutoRecord,
+              !provisional.hasJoinEvidence,
+              PendingMeetingJoinRecordingPolicy.shouldStartRecording(
+                  request: provisional.request,
+                  candidate: candidate
+              ) else { return }
+        provisional.hasJoinEvidence = true
+        provisionalCalendarAutoRecord = provisional
+        guard let meetingID = provisional.meetingID else { return }
+        DiagnosticsLog.write("[calendar] auto-record confirmed meeting_id=\(meetingID)")
+        cancelCalendarAutoRecordConfirmation()
+    }
+
+    private func cancelCalendarAutoRecordConfirmation() {
+        calendarAutoRecordConfirmationTask?.cancel()
+        calendarAutoRecordConfirmationTask = nil
+        provisionalCalendarAutoRecord = nil
     }
 
     private func syncAutoRecordWakes() {
@@ -6497,6 +6575,8 @@ public final class MuesliController: NSObject {
 
     private func discardMeetingRecording(resolution: MeetingDiscardResolution = .discardRecording) {
         meetingRecordingHotkeyMonitor.cancelToggleMode()
+        meetingEndTimer?.invalidate()
+        meetingEndTimer = nil
         guard let sessionToDiscard = activeMeetingSession else {
             // Fallback recovery: reset indicator if session is nil
             guard !isStartingMeetingRecording else { return }
@@ -7897,6 +7977,7 @@ public final class MuesliController: NSObject {
     }
 
     private func disarmMeetingAutoStop() {
+        cancelCalendarAutoRecordConfirmation()
         activeMeetingAutoStop.disarm()
         activeMeetingSignalLossResponse = .none
         meetingSignalLossPromptState.resetForRecording()
@@ -7906,6 +7987,7 @@ public final class MuesliController: NSObject {
     }
 
     private func handleMeetingActivityCandidate(_ candidate: MeetingCandidate?) {
+        confirmCalendarAutoRecordIfReady(candidate: candidate)
         startPendingMeetingJoinRecordingIfReady(candidate: candidate)
 
         if !activeMeetingAutoStop.isArmed,

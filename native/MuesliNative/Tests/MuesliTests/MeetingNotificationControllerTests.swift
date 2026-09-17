@@ -371,8 +371,8 @@ struct MeetingNotificationControllerTests {
             index(of: "self.meetingMonitor.suppress", in: dismiss))
     }
 
-    @Test("Calendar auto-record reports success only after the async start resolves")
-    func calendarAutoRecordWaitsForResolvedStart() throws {
+    @Test("Calendar auto-record starts provisionally and discards without join evidence")
+    func calendarAutoRecordDiscardsWithoutJoinEvidence() throws {
         let source = try muesliControllerSource()
         let autoRecord = try sourceSection(
             in: source,
@@ -380,6 +380,12 @@ struct MeetingNotificationControllerTests {
             to: "private func syncAutoRecordWakes"
         )
 
+        #expect(autoRecord.contains("meetingURL: meetingURL"))
+        #expect(autoRecord.contains("calendarEventID: event.id"))
+        #expect(autoRecord.contains("scheduleCalendarAutoRecordConfirmation"))
+        #expect(autoRecord.contains("PendingMeetingJoinRecordingPolicy.shouldStartRecording"))
+        #expect(autoRecord.contains("Self.calendarAutoRecordConfirmationTimeout"))
+        #expect(autoRecord.contains("self.discardMeetingRecording()"))
         #expect(autoRecord.contains("[calendar] auto-record starting"))
         #expect(autoRecord.contains("onStartResolved: { [weak self] didStart in"))
         #expect(try index(of: "onStartResolved:", in: autoRecord) <

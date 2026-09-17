@@ -40,7 +40,7 @@ Guesli начинались как русский fork [Muesli](https://github.c
 
 Готовые сборки: [GitHub Releases](https://github.com/ivkiwi/guesli/releases).
 
-Разработка и локальная сборка описаны в [CONTRIBUTING.md](CONTRIBUTING.md). Проект распространяется по лицензии [MIT](LICENSE); исходный Muesli и его авторы сохраняют заслуженный credit и copyright.
+Проект распространяется по лицензии [MIT](LICENSE); исходный Muesli и его авторы сохраняют заслуженный credit и copyright.
 
 ## English
 

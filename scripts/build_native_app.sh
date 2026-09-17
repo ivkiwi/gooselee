@@ -166,7 +166,6 @@ cp "$ROOT/assets/Slack_icon_2019.svg.png" "$STAGED_APP_DIR/Contents/Resources/sl
 cp "$ROOT/assets/Nvidia_logo.svg.png" "$STAGED_APP_DIR/Contents/Resources/nvidia-logo.png"
 cp "$ROOT/assets/OpenAI_Logo.svg.png" "$STAGED_APP_DIR/Contents/Resources/openai-logo.png"
 cp "$ROOT/assets/Qwen_logo.svg.png" "$STAGED_APP_DIR/Contents/Resources/qwen-logo.png"
-cp "$ROOT/NOTICE" "$STAGED_APP_DIR/Contents/Resources/NOTICE"
 cp "$ROOT/native/MuesliNative/ThirdPartyLicenses/FluidAudio-Apache-2.0.txt" \
   "$STAGED_APP_DIR/Contents/Resources/FluidAudio-LICENSE-Apache-2.0.txt"
 if [[ -d "$ROOT/assets/fonts" ]]; then

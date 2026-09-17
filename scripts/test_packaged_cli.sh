@@ -9,7 +9,6 @@ APP_PATH="$INSTALL_ROOT/$APP_BUNDLE_NAME"
 APP_BIN="$APP_PATH/Contents/MacOS/Guesli"
 CLI_BIN="$APP_PATH/Contents/MacOS/muesli-cli"
 GIGAAM_HELPER="$APP_PATH/Contents/MacOS/onnx-gigaam-helper"
-NOTICE_FILE="$APP_PATH/Contents/Resources/NOTICE"
 FLUIDAUDIO_LICENSE="$APP_PATH/Contents/Resources/FluidAudio-LICENSE-Apache-2.0.txt"
 SPEC_OUTPUT="$INSTALL_ROOT/muesli-cli-spec.json"
 TRANSCRIBE_HELP_OUTPUT="$INSTALL_ROOT/muesli-cli-transcribe-help.txt"
@@ -48,7 +47,6 @@ find "$APP_PATH/Contents/MacOS" -maxdepth 1 -name 'libonnxruntime*.dylib' -type 
   echo "Missing ONNX Runtime dylib" >&2
   exit 1
 }
-[[ -s "$NOTICE_FILE" ]] || { echo "Missing bundled NOTICE" >&2; exit 1; }
 [[ -s "$FLUIDAUDIO_LICENSE" ]] || { echo "Missing bundled FluidAudio Apache license" >&2; exit 1; }
 
 "$CLI_BIN" spec > "$SPEC_OUTPUT"
@@ -71,4 +69,4 @@ echo "Verified:"
 echo "  - $APP_BIN"
 echo "  - $CLI_BIN"
 echo "  - $GIGAAM_HELPER"
-echo "  - bundled notices"
+echo "  - bundled third-party license"

@@ -39,14 +39,14 @@ SH
 chmod +x "$TMP/gh"
 
 SHA='0123456789abcdef0123456789abcdef01234567'
-GITHUB_REPOSITORY=ivkiwi/guesli GITHUB_SHA="$SHA" GUESLI_GH_BIN="$TMP/gh" \
+GITHUB_REPOSITORY=ivkiwi/gooselee GITHUB_SHA="$SHA" GUESLI_GH_BIN="$TMP/gh" \
   "$ROOT/scripts/require_successful_ci_gate.sh" >/dev/null
-if GITHUB_REPOSITORY=ivkiwi/guesli GITHUB_SHA="$SHA" GUESLI_GH_BIN="$TMP/gh" \
+if GITHUB_REPOSITORY=ivkiwi/gooselee GITHUB_SHA="$SHA" GUESLI_GH_BIN="$TMP/gh" \
   FAKE_GATE_RESULT=failure "$ROOT/scripts/require_successful_ci_gate.sh" >/dev/null 2>&1; then
   echo "Release gate accepted a CI run without successful ci-gate" >&2
   exit 1
 fi
-if GITHUB_REPOSITORY=ivkiwi/guesli GITHUB_SHA="$SHA" GUESLI_GH_BIN="$TMP/gh" \
+if GITHUB_REPOSITORY=ivkiwi/gooselee GITHUB_SHA="$SHA" GUESLI_GH_BIN="$TMP/gh" \
   FAKE_RUN_SHA=ffffffffffffffffffffffffffffffffffffffff \
   "$ROOT/scripts/require_successful_ci_gate.sh" >/dev/null 2>&1; then
   echo "Release gate accepted CI from a different commit" >&2

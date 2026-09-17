@@ -7,7 +7,7 @@ private enum GuesliShortcutsError: Swift.Error, CustomLocalizedStringResourceCon
     case notRunning
 
     var localizedStringResource: LocalizedStringResource {
-        "Guesli did not finish opening. Try again."
+        "GooseLee did not finish opening. Try again."
     }
 }
 

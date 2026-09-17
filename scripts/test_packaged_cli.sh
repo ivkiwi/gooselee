@@ -10,6 +10,8 @@ APP_BIN="$APP_PATH/Contents/MacOS/Guesli"
 CLI_BIN="$APP_PATH/Contents/MacOS/guesli-cli"
 GIGAAM_HELPER="$APP_PATH/Contents/MacOS/onnx-gigaam-helper"
 FLUIDAUDIO_LICENSE="$APP_PATH/Contents/Resources/FluidAudio-LICENSE-Apache-2.0.txt"
+APP_ICON="$APP_PATH/Contents/Resources/gooselee.icns"
+INFO_PLIST="$APP_PATH/Contents/Info.plist"
 SPEC_OUTPUT="$INSTALL_ROOT/guesli-cli-spec.json"
 TRANSCRIBE_HELP_OUTPUT="$INSTALL_ROOT/guesli-cli-transcribe-help.txt"
 
@@ -48,6 +50,24 @@ find "$APP_PATH/Contents/MacOS" -maxdepth 1 -name 'libonnxruntime*.dylib' -type 
   exit 1
 }
 [[ -s "$FLUIDAUDIO_LICENSE" ]] || { echo "Missing bundled FluidAudio Apache license" >&2; exit 1; }
+[[ -s "$APP_ICON" ]] || { echo "Missing bundled GooseLee app icon" >&2; exit 1; }
+
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$INFO_PLIST")" == "GooseLee" ]] || {
+  echo "Packaged app display name is not GooseLee" >&2
+  exit 1
+}
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$INFO_PLIST")" == "gooselee.icns" ]] || {
+  echo "Packaged app does not reference gooselee.icns" >&2
+  exit 1
+}
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :GuesliSupportDirectoryName' "$INFO_PLIST")" == "Guesli" ]] || {
+  echo "Branding change must preserve the Guesli support directory" >&2
+  exit 1
+}
+case "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST")" in
+  0.9.*) ;;
+  *) echo "Packaged app version is not in the 0.9 release line" >&2; exit 1 ;;
+esac
 
 "$CLI_BIN" spec > "$SPEC_OUTPUT"
 "$CLI_BIN" transcribe --help > "$TRANSCRIBE_HELP_OUTPUT"
@@ -70,3 +90,4 @@ echo "  - $APP_BIN"
 echo "  - $CLI_BIN"
 echo "  - $GIGAAM_HELPER"
 echo "  - bundled third-party license"
+echo "  - GooseLee display name, icon, and preserved Guesli data directory"

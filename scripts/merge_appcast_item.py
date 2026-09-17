@@ -8,7 +8,7 @@ from xml.dom import Node, minidom
 
 
 SPARKLE_NAMESPACE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
-ALLOWED_DOWNLOAD_PREFIX = "https://github.com/ivkiwi/guesli/releases/download/"
+ALLOWED_DOWNLOAD_PREFIX = "https://github.com/ivkiwi/gooselee/releases/download/"
 
 
 def items(document: minidom.Document) -> list[minidom.Element]:

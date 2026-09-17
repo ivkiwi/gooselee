@@ -11,12 +11,12 @@ BUILD_CONFIG="${1:-release}"
 APP_BINARY="Guesli"
 CLI_BINARY="guesli-cli"
 APP_NAME="${GUESLI_APP_NAME:-Guesli}"
-APP_DISPLAY_NAME="${GUESLI_DISPLAY_NAME:-$APP_NAME}"
+APP_DISPLAY_NAME="${GUESLI_DISPLAY_NAME:-GooseLee}"
 APP_BUNDLE_NAME="${GUESLI_APP_BUNDLE_NAME:-$APP_NAME.app}"
 APP_EXECUTABLE_NAME="${GUESLI_EXECUTABLE_NAME:-Guesli}"
 APP_SUPPORT_DIR_NAME="${GUESLI_SUPPORT_DIR_NAME:-Guesli}"
 BUNDLE_ID="${GUESLI_BUNDLE_ID:-com.guesli.app}"
-DEFAULT_APP_VERSION="0.8.3.9"
+DEFAULT_APP_VERSION="0.9.1"
 APP_VERSION="${GUESLI_BUILD_VERSION:-$DEFAULT_APP_VERSION}"
 APP_SHORT_VERSION="${GUESLI_SHORT_VERSION:-$APP_VERSION}"
 
@@ -58,7 +58,7 @@ if [[ "${1:-}" == "--print-bundle-version" ]]; then
 fi
 
 APP_BUNDLE_VERSION="${GUESLI_BUNDLE_VERSION:-$(sparkle_bundle_version "$APP_SHORT_VERSION")}"
-SPARKLE_FEED_URL="${GUESLI_SPARKLE_FEED_URL-https://raw.githubusercontent.com/ivkiwi/guesli/sparkle-feed/docs/appcast-guesli.xml}"
+SPARKLE_FEED_URL="${GUESLI_SPARKLE_FEED_URL-https://raw.githubusercontent.com/ivkiwi/gooselee/sparkle-feed/docs/appcast-guesli.xml}"
 SPARKLE_EDKEY="${GUESLI_SPARKLE_EDKEY-x1xV1WAX32xkX4Yl4dxV9HctwCP/dm/K/9YUzWxk7Kc=}"
 STAGED_APP_DIR="$DIST_DIR/$APP_BUNDLE_NAME"
 APP_DIR="$INSTALL_DIR/$APP_BUNDLE_NAME"
@@ -158,7 +158,7 @@ fi
 
 # Bundle assets
 cp "$ROOT/assets/menu_m_template.png" "$STAGED_APP_DIR/Contents/Resources/menu_m_template.png"
-cp "$ROOT/assets/guesli.icns" "$STAGED_APP_DIR/Contents/Resources/guesli.icns"
+cp "$ROOT/assets/gooselee.icns" "$STAGED_APP_DIR/Contents/Resources/gooselee.icns"
 cp "$ROOT/assets/zoom-app.png" "$STAGED_APP_DIR/Contents/Resources/zoom-app.png"
 cp "$ROOT/assets/Google_Meet_icon_(2020).svg.png" "$STAGED_APP_DIR/Contents/Resources/google-meet.png"
 cp "$ROOT/assets/Microsoft_Office_Teams_(2025–present).svg.png" "$STAGED_APP_DIR/Contents/Resources/teams.png"
@@ -195,7 +195,7 @@ cat > "$STAGED_APP_DIR/Contents/Info.plist" <<PLIST
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleIconFile</key>
-  <string>guesli.icns</string>
+  <string>gooselee.icns</string>
   <key>GuesliSupportDirectoryName</key>
   <string>$APP_SUPPORT_DIR_NAME</string>
   <key>LSUIElement</key>

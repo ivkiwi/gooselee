@@ -1,8 +1,8 @@
-# Guesli agent guide
+# GooseLee agent guide
 
-Guesli is an independent downstream product. Do not restore removed upstream
+GooseLee is an independent downstream product. Do not restore removed upstream
 features or merge upstream wholesale. Port individual fixes only when they fit
-Guesli's meeting-first, Russian-first scope.
+GooseLee's meeting-first, Russian-first scope.
 
 ## Product boundaries
 

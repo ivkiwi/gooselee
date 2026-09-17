@@ -387,7 +387,7 @@ struct GuesliAudioTranscriptionPipeline {
         if summaryRequested {
             sections.append("## Summary unavailable")
             if warnings.isEmpty {
-                sections.append("Guesli could not generate structured notes from the configured summary backend.")
+                sections.append("GooseLee could not generate structured notes from the configured summary backend.")
             } else {
                 sections.append(warnings.joined(separator: "\n"))
             }

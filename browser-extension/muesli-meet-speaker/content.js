@@ -1,4 +1,3 @@
-const MUESLI_BRIDGE_URL = "http://127.0.0.1:1477/v1/meet-speaker";
 const MIN_SEND_INTERVAL_MS = 900;
 const PARTICIPANT_REFRESH_INTERVAL_MS = 8000;
 const MAX_PARTICIPANTS = 80;
@@ -371,31 +370,9 @@ function removeBackupObservations(ids) {
 }
 
 async function postBridgePayload(payload) {
-  if (typeof chrome !== "undefined" && chrome.runtime?.sendMessage) {
-    try {
-      const response = await sendBackgroundMessage({ type: "muesli.postBridgePayload", payload });
-      if (!response?.ok) {
-        throw new Error(response?.error || "Guesli bridge request failed");
-      }
-      return;
-    } catch (error) {
-      if (!/Extension context invalidated/i.test(error?.message || "")) {
-        throw error;
-      }
-    }
-  }
-
-  await fetchBridgePayload(payload);
-}
-
-async function fetchBridgePayload(payload) {
-  const response = await fetch(MUESLI_BRIDGE_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  if (!response.ok) {
-    throw new Error(`Guesli bridge returned ${response.status}`);
+  const response = await sendBackgroundMessage({ type: "muesli.postBridgePayload", payload });
+  if (!response?.ok) {
+    throw new Error(response?.error || "Guesli bridge request failed");
   }
 }
 

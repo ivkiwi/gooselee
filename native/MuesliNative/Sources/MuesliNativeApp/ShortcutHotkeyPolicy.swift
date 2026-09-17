@@ -46,30 +46,9 @@ struct ShortcutHotkeyPolicy {
 
     static func validateDictationHotkey(
         _ hotkey: HotkeyConfig,
-        computerUseHotkey: HotkeyConfig,
-        isComputerUseEnabled: Bool,
         meetingRecordingHotkey: HotkeyConfig = .meetingRecordingDefault,
         isMeetingRecordingEnabled: Bool = false
     ) -> ShortcutHotkeyUpdateResult {
-        if isComputerUseEnabled && hotkeysConflict(hotkey, computerUseHotkey) {
-            return .conflict(message: conflictMessage)
-        }
-        if isMeetingRecordingEnabled && hotkeysConflict(hotkey, meetingRecordingHotkey) {
-            return .conflict(message: conflictMessage)
-        }
-        return .updated
-    }
-
-    static func validateComputerUseHotkey(
-        _ hotkey: HotkeyConfig,
-        dictationHotkey: HotkeyConfig,
-        isComputerUseEnabled: Bool,
-        meetingRecordingHotkey: HotkeyConfig = .meetingRecordingDefault,
-        isMeetingRecordingEnabled: Bool = false
-    ) -> ShortcutHotkeyUpdateResult {
-        if isComputerUseEnabled && hotkeysConflict(hotkey, dictationHotkey) {
-            return .conflict(message: conflictMessage)
-        }
         if isMeetingRecordingEnabled && hotkeysConflict(hotkey, meetingRecordingHotkey) {
             return .conflict(message: conflictMessage)
         }
@@ -78,14 +57,9 @@ struct ShortcutHotkeyPolicy {
 
     static func validateMeetingRecordingHotkey(
         _ hotkey: HotkeyConfig,
-        dictationHotkey: HotkeyConfig,
-        computerUseHotkey: HotkeyConfig,
-        isComputerUseEnabled: Bool
+        dictationHotkey: HotkeyConfig
     ) -> ShortcutHotkeyUpdateResult {
         if hotkeysConflict(hotkey, dictationHotkey) {
-            return .conflict(message: conflictMessage)
-        }
-        if isComputerUseEnabled && hotkeysConflict(hotkey, computerUseHotkey) {
             return .conflict(message: conflictMessage)
         }
         return .updated(notice: commonGlobalShortcutWarning(for: hotkey))
@@ -104,31 +78,6 @@ struct ShortcutHotkeyPolicy {
         ]
         let signature = HotkeySignature(modifiers: modifiers, keyCode: keyCode)
         return commonAppShortcuts.contains(signature) ? commonGlobalShortcutWarning : nil
-    }
-
-    static func resolvedComputerUseHotkeyWhenEnabling(
-        currentHotkey: HotkeyConfig,
-        dictationHotkey: HotkeyConfig,
-        meetingRecordingHotkey: HotkeyConfig = .meetingRecordingDefault,
-        isMeetingRecordingEnabled: Bool = false
-    ) -> (hotkey: HotkeyConfig, result: ShortcutHotkeyUpdateResult) {
-        var resolved = currentHotkey
-        var notice: String?
-
-        if hotkeysConflict(resolved, dictationHotkey) {
-            resolved = HotkeyConfig.computerUseDefault(avoiding: dictationHotkey)
-            notice = "Computer Use Command moved to \(resolved.label) to avoid matching Push to Talk."
-        }
-        if isMeetingRecordingEnabled && hotkeysConflict(resolved, meetingRecordingHotkey) {
-            let fallback = HotkeyConfig.computerUseDefault(avoiding: dictationHotkey)
-            if hotkeysConflict(fallback, dictationHotkey)
-                || hotkeysConflict(fallback, meetingRecordingHotkey) {
-                return (currentHotkey, .conflict(message: conflictMessage))
-            }
-            resolved = fallback
-            notice = "Computer Use Command moved to \(resolved.label) to avoid matching Meeting Recording."
-        }
-        return (resolved, .updated(notice: notice))
     }
 
     private struct HotkeySignature: Hashable {

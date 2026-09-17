@@ -9,7 +9,7 @@ import os
 enum MeetingParakeetLiveCaptionModelStore {
     static let repo = Repo.parakeetEou320
     static let sizeLabel = "~430 MB"
-    static let label = "Parakeet Realtime EOU"
+    static let label = "Parakeet Realtime EOU (English only)"
 
     static func cacheRoot(fileManager: FileManager = .default) -> URL {
         fileManager.homeDirectoryForCurrentUser

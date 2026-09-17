@@ -48,16 +48,47 @@ struct MeetSpeakerObservationStats: Equatable, Sendable {
     }
 }
 
+enum MeetSpeakerBridgeActivation {
+    static func isGoogleMeetSource(_ source: MeetingAutoStopSource?) -> Bool {
+        guard let source else { return false }
+        if source.candidateID?.hasPrefix("googleMeet:") == true
+            || source.suppressionID?.hasPrefix("googleMeet:") == true {
+            return true
+        }
+        guard let normalizedURL = source.normalizedURL,
+              let url = URL(string: normalizedURL) else { return false }
+        return url.host?.lowercased() == "meet.google.com"
+    }
+
+    static func shouldRun(
+        enabled: Bool,
+        pairingToken: String,
+        source: MeetingAutoStopSource?,
+        isMeetingActive: Bool
+    ) -> Bool {
+        enabled
+            && !pairingToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && isGoogleMeetSource(source)
+            && isMeetingActive
+    }
+}
+
 final class MeetSpeakerBridgeServer {
     static let port: NWEndpoint.Port = 1477
     static let path = "/v1/meet-speaker"
     private static let maxRequestBytes = 128 * 1024
 
     private var listener: NWListener?
+    private var pairingToken = ""
     var onObservation: ((MeetSpeakerObservation) -> Void)?
 
-    func start() {
-        guard listener == nil else { return }
+    func start(pairingToken: String) {
+        let pairingToken = pairingToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !pairingToken.isEmpty else { return }
+        if listener != nil {
+            self.pairingToken = pairingToken
+            return
+        }
         let params = NWParameters.tcp
         params.requiredLocalEndpoint = NWEndpoint.hostPort(host: .ipv4(.loopback), port: Self.port)
         guard let listener = try? NWListener(using: params) else {
@@ -76,6 +107,7 @@ final class MeetSpeakerBridgeServer {
         }
         listener.start(queue: .main)
         self.listener = listener
+        self.pairingToken = pairingToken
         DiagnosticsLog.write("[meet-speaker] bridge start port=\(Self.port)")
     }
 
@@ -83,6 +115,7 @@ final class MeetSpeakerBridgeServer {
         guard let listener else { return }
         listener.cancel()
         self.listener = nil
+        pairingToken = ""
         DiagnosticsLog.write("[meet-speaker] bridge stop port=\(Self.port)")
     }
 
@@ -95,6 +128,9 @@ final class MeetSpeakerBridgeServer {
         }
         guard request.hasPrefix("POST \(Self.path) ") else {
             return Self.http(status: "404 Not Found")
+        }
+        guard Self.isAuthorizedRequest(request, pairingToken: pairingToken) else {
+            return Self.http(status: "401 Unauthorized")
         }
         guard let body = Self.bodyData(from: data) else {
             return Self.http(status: "400 Bad Request")
@@ -322,12 +358,43 @@ final class MeetSpeakerBridgeServer {
         return false
     }
 
+    static func isAuthorizedRequest(_ request: String, pairingToken: String) -> Bool {
+        let expectedToken = pairingToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !expectedToken.isEmpty else { return false }
+        guard let headerEnd = request.range(of: "\r\n\r\n") else { return false }
+        let authorization = String(request[..<headerEnd.lowerBound])
+            .components(separatedBy: .newlines)
+            .compactMap { line -> String? in
+                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard trimmed.lowercased().hasPrefix("authorization:") else { return nil }
+                return String(trimmed.dropFirst("authorization:".count))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            .first
+        guard let authorization,
+              authorization.lowercased().hasPrefix("bearer ") else { return false }
+        let suppliedToken = String(authorization.dropFirst("bearer ".count))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return constantTimeEqual(suppliedToken, expectedToken)
+    }
+
+    private static func constantTimeEqual(_ lhs: String, _ rhs: String) -> Bool {
+        let lhsBytes = Array(lhs.utf8)
+        let rhsBytes = Array(rhs.utf8)
+        guard lhsBytes.count == rhsBytes.count else { return false }
+        var difference: UInt8 = 0
+        for index in lhsBytes.indices {
+            difference |= lhsBytes[index] ^ rhsBytes[index]
+        }
+        return difference == 0
+    }
+
     private static func http(status: String) -> String {
         """
         HTTP/1.1 \(status)\r
         Access-Control-Allow-Origin: *\r
         Access-Control-Allow-Methods: POST, OPTIONS\r
-        Access-Control-Allow-Headers: content-type\r
+        Access-Control-Allow-Headers: content-type, authorization\r
         Access-Control-Allow-Private-Network: true\r
         Content-Length: 0\r
         Connection: close\r

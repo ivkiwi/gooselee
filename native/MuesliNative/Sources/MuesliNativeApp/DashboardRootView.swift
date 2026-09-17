@@ -17,29 +17,6 @@ struct DashboardRootView: View {
         .navigationSplitViewStyle(.balanced)
         .frame(minWidth: 900, minHeight: 600)
         .preferredColorScheme(appState.config.darkMode ? .dark : .light)
-        .alert(
-            appState.contributionMilestonePrompt?.title ?? "Guesli milestone",
-            isPresented: Binding(
-                get: { appState.contributionMilestonePrompt != nil },
-                set: { if !$0 { controller.dismissContributionMilestonePrompt() } }
-            )
-        ) {
-            if appState.contributionMilestonePrompt?.showGitHubStar == true {
-                Button("Star on GitHub") {
-                    controller.openContributionMilestoneAction(.githubStar)
-                }
-            }
-            if appState.contributionMilestonePrompt?.showBuyMeCoffee == true {
-                Button("Buy Me a Coffee") {
-                    controller.openContributionMilestoneAction(.buyMeCoffee)
-                }
-            }
-            Button("Later", role: .cancel) {
-                controller.dismissContributionMilestonePrompt()
-            }
-        } message: {
-            Text(appState.contributionMilestonePrompt?.message ?? "")
-        }
         .sheet(
             item: Binding<DiagnosticIncident?>(
                 get: { appState.pendingDiagnosticIncident },
@@ -87,9 +64,7 @@ struct DashboardRootView: View {
             case .settings:
                 SettingsView(appState: appState, controller: controller)
             case .about:
-                AboutView(appState: appState) {
-                    controller.openManualDiagnosticReport()
-                }
+                AboutView(appState: appState)
             }
         }
     }

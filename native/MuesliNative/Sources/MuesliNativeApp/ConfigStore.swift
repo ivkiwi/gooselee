@@ -30,6 +30,25 @@ private enum RemovedGigaAMBackendMigration {
     }
 }
 
+private enum RemovedLegacyASRMigration {
+    static let fallback = BackendOption.parakeetMultilingual
+    static let removedBackends: Set<String> = [
+        "parakeet-unified",
+        "whisper",
+        "qwen",
+        "cohere",
+        "sensevoice",
+    ]
+    static let removedFluidAudioModels: Set<String> = [
+        "FluidInference/parakeet-tdt-0.6b-v2-coreml",
+    ]
+
+    static func matches(backend: String, model: String) -> Bool {
+        removedBackends.contains(backend)
+            || (backend == "fluidaudio" && removedFluidAudioModels.contains(model))
+    }
+}
+
 final class ConfigStore {
     private struct LegacySettingsImportResult {
         let didAttempt: Bool
@@ -84,14 +103,21 @@ final class ConfigStore {
         let legacyImport = importLegacySettingsIfNeeded(into: &config)
         let didMigrateRemovedCanaryQwen = migrateRemovedCanaryQwenSelection(in: &config)
         let didMigrateRemovedGigaAM = migrateRemovedGigaAMSelection(in: &config)
-        if legacyImport.didChangeConfig || didMigrateRemovedCanaryQwen || didMigrateRemovedGigaAM {
+        let didMigrateRemovedLegacyASR = migrateRemovedLegacyASRSelection(in: &config)
+        if legacyImport.didChangeConfig
+            || didMigrateRemovedCanaryQwen
+            || didMigrateRemovedGigaAM
+            || didMigrateRemovedLegacyASR {
             save(config)
         }
         if legacyImport.didAttempt {
             writeLegacySettingsMarker(importResult: legacyImport)
         }
-        if didMigrateRemovedCanaryQwen {
-            removeRemovedCanaryQwenModelCache()
+        if didMigrateRemovedCanaryQwen,
+           fileManager.fileExists(atPath: removedCanaryQwenModelCacheURL.path) {
+            DiagnosticsLog.write(
+                "[config-store] preserved removed Canary Qwen model cache at \(removedCanaryQwenModelCacheURL.path)"
+            )
         }
         return config
     }
@@ -158,15 +184,22 @@ final class ConfigStore {
         return didMigrate
     }
 
-    private func removeRemovedCanaryQwenModelCache() {
-        guard fileManager.fileExists(atPath: removedCanaryQwenModelCacheURL.path) else { return }
-        MuesliPaths.preconditionSafeForTestWrite(removedCanaryQwenModelCacheURL)
-        do {
-            try fileManager.removeItem(at: removedCanaryQwenModelCacheURL)
-            DiagnosticsLog.write("[config-store] removed Canary Qwen model cache at \(removedCanaryQwenModelCacheURL.path)")
-        } catch {
-            DiagnosticsLog.write("[config-store] failed to remove Canary Qwen model cache at \(removedCanaryQwenModelCacheURL.path): \(error.localizedDescription)")
+    private func migrateRemovedLegacyASRSelection(in config: inout AppConfig) -> Bool {
+        var didMigrate = false
+
+        func migrate(_ field: String, backend: inout String, model: inout String) {
+            guard RemovedLegacyASRMigration.matches(backend: backend, model: model) else { return }
+            backend = RemovedLegacyASRMigration.fallback.backend
+            model = RemovedLegacyASRMigration.fallback.model
+            didMigrate = true
+            DiagnosticsLog.write(
+                "[config-store] migrated removed legacy \(field) ASR backend to \(RemovedLegacyASRMigration.fallback.label)"
+            )
         }
+
+        migrate("dictation", backend: &config.sttBackend, model: &config.sttModel)
+        migrate("meeting", backend: &config.meetingTranscriptionBackend, model: &config.meetingTranscriptionModel)
+        return didMigrate
     }
 
     private func importLegacySettingsIfNeeded(into config: inout AppConfig) -> LegacySettingsImportResult {
@@ -215,20 +248,13 @@ final class ConfigStore {
         }
 
         importValue("dictation_hotkey", \.dictationHotkey)
-        importValue("computer_use_hotkey", \.computerUseHotkey)
-        importValue("enable_computer_use_hotkey", \.enableComputerUseHotkey)
         importValue("meeting_recording_hotkey", \.meetingRecordingHotkey)
         importValue("enable_meeting_recording_hotkey", \.enableMeetingRecordingHotkey)
-        importValue("enable_computer_use_planner", \.enableComputerUsePlanner)
-        importNonEmptyStringIfCurrentEmpty("computer_use_planner_model", \.computerUsePlannerModel)
-        importValue("computer_use_timeout_seconds", \.computerUseTimeoutSeconds)
 
         if config.dictationInputDeviceUID == nil, legacy.dictationInputDeviceUID != nil {
             config.dictationInputDeviceUID = legacy.dictationInputDeviceUID
             importedFields.append("dictation_input_device_uid")
         }
-        importValue("cohere_language_dictation", \.cohereLanguageDictation)
-        importValue("cohere_language_meetings", \.cohereLanguageMeetings)
         importValue("nemotron35_language", \.nemotron35Language)
 
         if config.preferredMeetingBrowserBundleID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -258,7 +284,6 @@ final class ConfigStore {
         importValue("enable_double_tap_dictation", \.enableDoubleTapDictation)
         importValue("paste_shortcut", \.pasteShortcut)
         importValue("hotkey_trigger_threshold_ms", \.hotkeyTriggerThresholdMS)
-        importValue("computer_use_hotkey_trigger_threshold_ms", \.computerUseHotkeyTriggerThresholdMS)
         importValue("meeting_recording_hotkey_trigger_threshold_ms", \.meetingRecordingHotkeyTriggerThresholdMS)
         importValue("launch_at_login", \.launchAtLogin)
         importValue("open_dashboard_on_launch", \.openDashboardOnLaunch)
@@ -309,12 +334,6 @@ final class ConfigStore {
         importValue("recording_color_hex", \.recordingColorHex)
         importValue("menu_bar_icon", \.menuBarIcon)
         importValue("show_next_meeting_in_menu_bar", \.showNextMeetingInMenuBar)
-        importValue("marauders_map_unlocked", \.maraudersMapUnlocked)
-        importValue("marauders_map_audio_clip", \.maraudersMapAudioClip)
-        if config.maraudersMapCustomAudioPath == nil, legacy.maraudersMapCustomAudioPath != nil {
-            config.maraudersMapCustomAudioPath = legacy.maraudersMapCustomAudioPath
-            importedFields.append("marauders_map_custom_audio_path")
-        }
 
         config.hiddenCalendarEventIDs = mergedStrings(
             current: config.hiddenCalendarEventIDs,
@@ -358,7 +377,6 @@ final class ConfigStore {
         importValue("post_processor_system_prompt", \.postProcessorSystemPrompt)
         importValue("enable_screen_context", \.enableScreenContext)
         importValue("use_core_audio_tap", \.useCoreAudioTap)
-        importValue("show_ios_companion_prompt", \.showIOSCompanionPrompt)
 
         return importedFields
     }

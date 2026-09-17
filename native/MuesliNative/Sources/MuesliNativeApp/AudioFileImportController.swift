@@ -148,6 +148,7 @@ enum AudioFileImportController {
         let title: String
         let rawTranscript: String
         let formattedNotes: String
+        let summaryError: String?
         let durationSeconds: Double
         let wordCount: Int
     }
@@ -190,7 +191,7 @@ enum AudioFileImportController {
 
         try Task.checkCancellation()
 
-        // Run VAD to skip silent files (prevents Cohere hallucinations on silence)
+        // Run VAD to skip silent files and avoid ASR hallucinations on silence.
         if let vadManager = await transcriptionCoordinator.getVadManager() {
             do {
                 let vadResults = try await vadManager.process(wavURL)
@@ -212,7 +213,6 @@ enum AudioFileImportController {
             at: wavURL,
             samples: audioSamples,
             backend: backend,
-            cohereLanguage: config.resolvedCohereLanguageMeetings
         )
         let rawTranscript = transcription.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !rawTranscript.isEmpty else {
@@ -266,20 +266,16 @@ enum AudioFileImportController {
         try Task.checkCancellation()
 
         let wordCount = DictationStore.countWords(in: finalTranscript)
-        let generatedTitle: String
-        progress("Generating title...")
-        if let autoTitle = await MeetingSummaryClient.generateTitle(transcript: finalTranscript, config: config),
-           !autoTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            generatedTitle = autoTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        } else {
-            generatedTitle = title
-        }
+        let generatedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Meeting"
+            : title
 
         try Task.checkCancellation()
 
         progress("Generating summary...")
         let templateSnapshot = context.templateSnapshot
         let formattedNotes: String
+        let summaryError: String?
         do {
             formattedNotes = try await MeetingSummaryClient.summarize(
                 transcript: finalTranscript,
@@ -289,6 +285,7 @@ enum AudioFileImportController {
                 existingNotes: nil,
                 manualNotesToRetain: ""
             )
+            summaryError = nil
         } catch {
             fputs("[import] summary generation failed: \(error)\n", stderr)
             formattedNotes = MeetingSummaryClient.summaryFailureNotes(
@@ -297,6 +294,7 @@ enum AudioFileImportController {
                 error: error,
                 manualNotes: ""
             )
+            summaryError = error.localizedDescription
         }
 
         try Task.checkCancellation()
@@ -320,6 +318,7 @@ enum AudioFileImportController {
             rawTranscript: finalTranscript,
             rawOriginalTranscript: cleanupResult.originalTranscript,
             formattedNotes: formattedNotes,
+            summaryError: summaryError,
             micAudioPath: nil,
             systemAudioPath: nil,
             savedRecordingPath: savedRecordingPath,
@@ -334,6 +333,7 @@ enum AudioFileImportController {
             title: generatedTitle,
             rawTranscript: finalTranscript,
             formattedNotes: formattedNotes,
+            summaryError: summaryError,
             durationSeconds: duration,
             wordCount: wordCount
         )

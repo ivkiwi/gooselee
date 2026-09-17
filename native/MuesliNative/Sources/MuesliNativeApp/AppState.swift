@@ -104,6 +104,7 @@ final class AppState {
     var googleCalendarListLoadState: GoogleCalendarListLoadState = .idle
     var sparkleUpdateStatus: SparkleUpdateStatus = .idle
     var sparkleLastCheckedAt: Date?
+    var canUseICloudSync: Bool = false
     var iCloudSyncStatus: String?
     var isICloudSyncInProgress: Bool = false
     var isICloudBridgeActivationPending: Bool = false
@@ -126,7 +127,6 @@ final class AppState {
     }
     var iCloudLastSyncSummary: String?
     var iCloudLastSyncedAt: Date?
-    var contributionMilestonePrompt: ContributionMilestonePrompt?
     var modelPreparationTitle: String?
     var modelPreparationDetail: String?
     var modelPreparationProgress: Double?

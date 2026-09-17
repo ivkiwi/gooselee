@@ -16,7 +16,7 @@ APP_BUNDLE_NAME="${MUESLI_APP_BUNDLE_NAME:-$APP_NAME.app}"
 APP_EXECUTABLE_NAME="${MUESLI_EXECUTABLE_NAME:-Guesli}"
 APP_SUPPORT_DIR_NAME="${MUESLI_SUPPORT_DIR_NAME:-Guesli}"
 BUNDLE_ID="${MUESLI_BUNDLE_ID:-com.guesli.app}"
-DEFAULT_APP_VERSION="0.8.3.4"
+DEFAULT_APP_VERSION="0.8.3.8"
 APP_VERSION="${MUESLI_BUILD_VERSION:-$DEFAULT_APP_VERSION}"
 APP_SHORT_VERSION="${MUESLI_SHORT_VERSION:-$APP_VERSION}"
 
@@ -165,11 +165,9 @@ cp "$ROOT/assets/Microsoft_Office_Teams_(2025–present).svg.png" "$STAGED_APP_D
 cp "$ROOT/assets/Slack_icon_2019.svg.png" "$STAGED_APP_DIR/Contents/Resources/slack.png"
 cp "$ROOT/assets/Nvidia_logo.svg.png" "$STAGED_APP_DIR/Contents/Resources/nvidia-logo.png"
 cp "$ROOT/assets/OpenAI_Logo.svg.png" "$STAGED_APP_DIR/Contents/Resources/openai-logo.png"
-cp "$ROOT/assets/cohere.png" "$STAGED_APP_DIR/Contents/Resources/cohere-logo.png"
 cp "$ROOT/assets/Qwen_logo.svg.png" "$STAGED_APP_DIR/Contents/Resources/qwen-logo.png"
-cp "$ROOT/NOTICE" "$STAGED_APP_DIR/Contents/Resources/NOTICE"
-cp "$ROOT/native/MuesliNative/Sources/MuesliCore/Qwen3ASR/LICENSE-Apache-2.0" \
-  "$STAGED_APP_DIR/Contents/Resources/Qwen3ASR-LICENSE-Apache-2.0"
+cp "$ROOT/native/MuesliNative/ThirdPartyLicenses/FluidAudio-Apache-2.0.txt" \
+  "$STAGED_APP_DIR/Contents/Resources/FluidAudio-LICENSE-Apache-2.0.txt"
 if [[ -d "$ROOT/assets/fonts" ]]; then
   ditto "$ROOT/assets/fonts" "$STAGED_APP_DIR/Contents/Resources/fonts"
 fi

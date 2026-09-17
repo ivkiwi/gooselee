@@ -184,11 +184,8 @@ final class FloatingIndicatorController: NSObject {
     var isToggleDictation = false
     private var stopLayer: CALayer?
     private var transcribingTitle = "Transcribing"
-    private var computerUseTranscriptText: String?
     private var loadingSpinner: NSProgressIndicator?
     private var isShowingLoading = false
-    private var isComputerUseCursorMode = false
-    private var computerUseCursorReturnFrame: NSRect?
     private var isMeetingTranscriptManuallyDismissed = false
     private lazy var meetingTranscriptPanel = FloatingMeetingTranscriptPanelController(
         onHoverChanged: { [weak self] hovered in
@@ -372,29 +369,17 @@ final class FloatingIndicatorController: NSObject {
     }
 
     func setTranscribingTitle(_ title: String, config: AppConfig) {
-        computerUseTranscriptText = nil
         transcribingTitle = title
         guard state == .transcribing else { return }
-        setState(.transcribing, config: config)
-    }
-
-    func showComputerUseTranscript(_ transcript: String, config: AppConfig) {
-        let normalized = Self.normalizedComputerUseTranscript(transcript)
-        computerUseTranscriptText = normalized.isEmpty ? nil : normalized
-        transcribingTitle = normalized.isEmpty ? "Starting CUA" : normalized
         setState(.transcribing, config: config)
     }
 
     func setState(_ state: DictationState, config: AppConfig) {
         let previousState = self.state
         let previousHover = isHovered
-        if isComputerUseCursorMode {
-            exitComputerUseCursorMode(restoreFrame: false)
-        }
         self.state = state
         if state != .transcribing {
             transcribingTitle = "Transcribing"
-            computerUseTranscriptText = nil
         }
         if state != .recording {
             recordingWaveformMode = .level
@@ -470,22 +455,18 @@ final class FloatingIndicatorController: NSObject {
                 iconLabel.font = NSFont.systemFont(ofSize: 14, weight: .bold)
                 iconLabel.stringValue = style.icon
                 iconLabel.textColor = style.iconColor
-                configureTextLabelForTranscript(state == .transcribing && computerUseTranscriptText != nil)
+                Self.configureTextLabel(textLabel)
                 textLabel.stringValue = style.title
                 textLabel.textColor = style.textColor
                 textLabel.animator().alphaValue = style.title.isEmpty ? 0 : 1
                 textLabel.isHidden = style.title.isEmpty
-                if state == .transcribing, computerUseTranscriptText != nil {
-                    layoutComputerUseTranscript(in: targetFrame.size, animated: true)
-                } else {
-                    layoutLabels(
-                        iconLabel: iconLabel,
-                        textLabel: textLabel,
-                        in: targetFrame.size,
-                        hasTitle: !style.title.isEmpty,
-                        animated: true
-                    )
-                }
+                layoutLabels(
+                    iconLabel: iconLabel,
+                    textLabel: textLabel,
+                    in: targetFrame.size,
+                    hasTitle: !style.title.isEmpty,
+                    animated: true
+                )
             }
 
             // Apply glass state last so it can override iconLabel visibility set above.
@@ -518,78 +499,6 @@ final class FloatingIndicatorController: NSObject {
             contentView.displayIfNeeded()
             panel.displayIfNeeded()
         }
-    }
-
-    func showComputerUseCursor(at quartzPoint: CGPoint, label rawLabel: String?) {
-        let config = configStore.load()
-        if panel == nil {
-            createPanel(config: config)
-        }
-        guard let panel, let contentView, let iconLabel, let textLabel else { return }
-
-        if !isComputerUseCursorMode {
-            computerUseCursorReturnFrame = panel.frame
-        }
-        isComputerUseCursorMode = true
-        hoverExitWorkItem?.cancel()
-        isHovered = false
-        isShowingLoading = false
-        loadingSpinner?.stopAnimation(nil)
-        loadingSpinner?.isHidden = true
-        stopWaveformAnimation()
-
-        let label = Self.cursorLabel(rawLabel)
-        let targetSize = Self.computerUseCursorSize(label: label)
-        let targetFrame = Self.computerUseCursorFrame(
-            forQuartzPoint: quartzPoint,
-            size: targetSize,
-            offsetFromTarget: !label.isEmpty
-        )
-
-        panel.level = .statusBar
-        panel.ignoresMouseEvents = true
-        glassView?.isHidden = true
-        tintLayer?.isHidden = true
-        micIconView?.isHidden = true
-        wandIconView?.isHidden = true
-
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.16
-            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-            context.allowsImplicitAnimation = true
-
-            panel.animator().setFrame(targetFrame, display: true)
-            panel.animator().alphaValue = 1.0
-            contentView.animator().frame = NSRect(origin: .zero, size: targetSize)
-            contentView.layer?.cornerRadius = targetSize.height / 2
-            contentView.layer?.backgroundColor = NSColor.colorWith(hex: 0x1455D9, alpha: 0.88).cgColor
-            contentView.layer?.borderWidth = 1.0
-            contentView.layer?.borderColor = NSColor.colorWith(hex: 0xFFFFFF, alpha: 0.34).cgColor
-
-            iconLabel.isHidden = false
-            iconLabel.animator().alphaValue = 1
-            iconLabel.stringValue = "•"
-            iconLabel.font = NSFont.systemFont(ofSize: 18, weight: .heavy)
-            iconLabel.textColor = .white
-
-            textLabel.stringValue = label
-            textLabel.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
-            textLabel.textColor = .white.withAlphaComponent(0.92)
-            textLabel.isHidden = label.isEmpty
-            textLabel.animator().alphaValue = label.isEmpty ? 0 : 1
-            layoutLabels(
-                iconLabel: iconLabel,
-                textLabel: textLabel,
-                in: targetSize,
-                hasTitle: !label.isEmpty,
-                animated: true
-            )
-        }
-        panel.orderFrontRegardless()
-    }
-
-    func hideComputerUseCursor() {
-        exitComputerUseCursorMode(restoreFrame: true)
     }
 
     func ensureVisible(config: AppConfig) {
@@ -1072,10 +981,6 @@ final class FloatingIndicatorController: NSObject {
             micIconView?.isHidden = true
             iconLabel?.isHidden = true
             wandIconView?.isHidden = false
-            if computerUseTranscriptText != nil {
-                layoutComputerUseTranscript(in: frameSize, animated: false)
-                return
-            }
             if let wand = wandIconView {
                 let gap: CGFloat = 6
                 let horizontalPadding: CGFloat = 14
@@ -1108,65 +1013,14 @@ final class FloatingIndicatorController: NSObject {
         }
     }
 
-    private func configureTextLabelForTranscript(_ isTranscript: Bool) {
-        guard let textLabel else { return }
-        Self.configureTextLabel(textLabel, forTranscript: isTranscript)
-    }
-
-    private static func configureTextLabel(_ textLabel: NSTextField, forTranscript isTranscript: Bool) {
+    private static func configureTextLabel(_ textLabel: NSTextField) {
         textLabel.alignment = .left
-        if isTranscript {
-            textLabel.font = NSFont.systemFont(ofSize: 12, weight: .medium)
-            textLabel.lineBreakMode = .byWordWrapping
-            textLabel.maximumNumberOfLines = 0
-            textLabel.usesSingleLineMode = false
-            textLabel.cell?.wraps = true
-            textLabel.cell?.isScrollable = false
-        } else {
-            textLabel.font = NSFont.systemFont(ofSize: 11, weight: .regular)
-            textLabel.lineBreakMode = .byTruncatingTail
-            textLabel.maximumNumberOfLines = 1
-            textLabel.usesSingleLineMode = true
-            textLabel.cell?.wraps = false
-            textLabel.cell?.isScrollable = false
-        }
-    }
-
-    private func layoutComputerUseTranscript(in size: NSSize, animated: Bool) {
-        guard let wand = wandIconView, let textLabel else { return }
-        let iconSize = NSSize(width: 18, height: 18)
-        let gap: CGFloat = 8
-        let horizontalPadding: CGFloat = 16
-        let verticalPadding: CGFloat = 12
-        let textX = horizontalPadding + iconSize.width + gap
-        let textWidth = max(40, size.width - textX - horizontalPadding)
-        let textHeight = max(16, size.height - (verticalPadding * 2))
-        let textFrame = NSRect(
-            x: textX,
-            y: floor((size.height - textHeight) / 2),
-            width: textWidth,
-            height: textHeight
-        )
-        let iconFrame = NSRect(
-            x: horizontalPadding,
-            y: floor(size.height - verticalPadding - iconSize.height),
-            width: iconSize.width,
-            height: iconSize.height
-        )
-
-        wand.isHidden = false
-        textLabel.isHidden = false
-        if animated {
-            wand.animator().alphaValue = 1
-            wand.animator().frame = iconFrame
-            textLabel.animator().alphaValue = 1
-            textLabel.animator().frame = textFrame
-        } else {
-            wand.alphaValue = 1
-            wand.frame = iconFrame
-            textLabel.alphaValue = 1
-            textLabel.frame = textFrame
-        }
+        textLabel.font = NSFont.systemFont(ofSize: 11, weight: .regular)
+        textLabel.lineBreakMode = .byTruncatingTail
+        textLabel.maximumNumberOfLines = 1
+        textLabel.usesSingleLineMode = true
+        textLabel.cell?.wraps = false
+        textLabel.cell?.isScrollable = false
     }
 
     private func createPanel(config: AppConfig) {
@@ -1199,7 +1053,7 @@ final class FloatingIndicatorController: NSObject {
         let textLabel = NSTextField(labelWithString: "")
         textLabel.alignment = .left
         textLabel.font = NSFont.systemFont(ofSize: 11, weight: .regular)
-        Self.configureTextLabel(textLabel, forTranscript: false)
+        Self.configureTextLabel(textLabel)
         contentView.addSubview(textLabel)
 
         panel.contentView = contentView
@@ -1210,74 +1064,6 @@ final class FloatingIndicatorController: NSObject {
         self.textLabel = textLabel
 
         setupGlassLayer(in: contentView, iconLabel: iconLabel)
-    }
-
-    private func exitComputerUseCursorMode(restoreFrame: Bool) {
-        guard isComputerUseCursorMode else { return }
-        isComputerUseCursorMode = false
-        panel?.ignoresMouseEvents = false
-        panel?.level = .floating
-        if restoreFrame, let frame = computerUseCursorReturnFrame {
-            panel?.setFrame(frame, display: true)
-            contentView?.frame = NSRect(origin: .zero, size: frame.size)
-        }
-        computerUseCursorReturnFrame = nil
-    }
-
-    private static func cursorLabel(_ value: String?) -> String {
-        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !trimmed.isEmpty else { return "" }
-        if trimmed.count <= 24 { return trimmed }
-        return String(trimmed.prefix(21)) + "..."
-    }
-
-    private static func computerUseCursorSize(label: String) -> NSSize {
-        guard !label.isEmpty else {
-            return NSSize(width: 36, height: 36)
-        }
-        let font = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        let textWidth = ceil((label as NSString).size(withAttributes: [.font: font]).width)
-        return NSSize(width: min(max(84, textWidth + 48), 190), height: 34)
-    }
-
-    private static func computerUseCursorFrame(
-        forQuartzPoint point: CGPoint,
-        size: NSSize,
-        offsetFromTarget: Bool
-    ) -> NSRect {
-        let screen = NSScreen.screens.first { screen in
-            let convertedY = screen.frame.maxY - point.y
-            return point.x >= screen.frame.minX
-                && point.x <= screen.frame.maxX
-                && convertedY >= screen.frame.minY
-                && convertedY <= screen.frame.maxY
-        } ?? NSScreen.main
-
-        guard let screen else {
-            return NSRect(
-                x: point.x - size.width / 2,
-                y: point.y - size.height / 2,
-                width: size.width,
-                height: size.height
-            )
-        }
-
-        let appKitPoint = CGPoint(x: point.x, y: screen.frame.maxY - point.y)
-        let xOffset: CGFloat = offsetFromTarget ? 14 : 0
-        let yOffset: CGFloat = offsetFromTarget ? 14 : 0
-        let proposed = NSRect(
-            x: appKitPoint.x - size.width / 2 + xOffset,
-            y: appKitPoint.y - size.height / 2 - yOffset,
-            width: size.width,
-            height: size.height
-        )
-        let bounds = screen.visibleFrame.insetBy(dx: 4, dy: 4)
-        return NSRect(
-            x: min(max(proposed.minX, bounds.minX), bounds.maxX - size.width),
-            y: min(max(proposed.minY, bounds.minY), bounds.maxY - size.height),
-            width: size.width,
-            height: size.height
-        )
     }
 
     private func setupGlassLayer(in contentView: HoverIndicatorView, iconLabel: NSTextField) {
@@ -1522,11 +1308,7 @@ final class FloatingIndicatorController: NSObject {
         case .preparing: size = NSSize(width: 76, height: 22)
         case .recording: size = NSSize(width: 76, height: 22)
         case .transcribing:
-            if let transcript = computerUseTranscriptText {
-                size = Self.computerUseTranscriptPillSize(transcript: transcript, screen: screen)
-            } else {
-                size = Self.transcribingPillSize(title: transcribingTitle, screenWidth: screen.width)
-            }
+            size = Self.transcribingPillSize(title: transcribingTitle, screenWidth: screen.width)
         }
 
         // Use the pill's current on-screen center if it exists, so state
@@ -1702,17 +1484,6 @@ final class FloatingIndicatorController: NSObject {
         transcribingPillSize(title: title, screenWidth: screenWidth)
     }
 
-    static func computerUseTranscriptPillSizeForTesting(
-        transcript: String,
-        screenWidth: CGFloat,
-        screenHeight: CGFloat = 900
-    ) -> NSSize {
-        computerUseTranscriptPillSize(
-            transcript: transcript,
-            screen: NSRect(x: 0, y: 0, width: screenWidth, height: screenHeight)
-        )
-    }
-
     private static func transcribingPillSize(title: String, screenWidth: CGFloat) -> NSSize {
         let font = NSFont.systemFont(ofSize: 11, weight: .regular)
         let iconWidth: CGFloat = 18
@@ -1723,41 +1494,6 @@ final class FloatingIndicatorController: NSObject {
         let minWidth = min(CGFloat(190), max(120, screenWidth - 32))
         let maxWidth = max(minWidth, min(420, screenWidth - 32))
         return NSSize(width: min(max(preferredWidth, minWidth), maxWidth), height: 32)
-    }
-
-    private static func computerUseTranscriptPillSize(transcript: String, screen: NSRect) -> NSSize {
-        let normalized = normalizedComputerUseTranscript(transcript)
-        let font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        let iconWidth: CGFloat = 18
-        let gap: CGFloat = 8
-        let horizontalPadding: CGFloat = 16
-        let verticalPadding: CGFloat = 12
-        let chromeWidth = horizontalPadding + iconWidth + gap + horizontalPadding
-        let minWidth = min(CGFloat(280), max(160, screen.width - 48))
-        let maxWidth = max(minWidth, min(720, screen.width - 48))
-        let singleLineTextWidth = ceil((normalized as NSString).size(withAttributes: [.font: font]).width) + 2
-        let preferredWidth = min(maxWidth, max(minWidth, chromeWidth + singleLineTextWidth))
-        let textWidth = max(40, preferredWidth - chromeWidth)
-        let textHeight = transcriptTextHeight(normalized, font: font, width: textWidth)
-        let maxHeight = max(CGFloat(56), screen.height - 48)
-        let preferredHeight = max(CGFloat(44), ceil(textHeight) + (verticalPadding * 2))
-        return NSSize(width: preferredWidth, height: min(preferredHeight, maxHeight))
-    }
-
-    private static func transcriptTextHeight(_ text: String, font: NSFont, width: CGFloat) -> CGFloat {
-        let bounding = (text as NSString).boundingRect(
-            with: NSSize(width: width, height: .greatestFiniteMagnitude),
-            options: [.usesLineFragmentOrigin, .usesFontLeading],
-            attributes: [.font: font]
-        )
-        return max(16, ceil(bounding.height))
-    }
-
-    private static func normalizedComputerUseTranscript(_ transcript: String) -> String {
-        transcript
-            .components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
     }
 
     private func pointerIsInsidePanel() -> Bool {

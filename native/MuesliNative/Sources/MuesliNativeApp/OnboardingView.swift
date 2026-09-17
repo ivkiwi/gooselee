@@ -83,7 +83,6 @@ struct OnboardingView: View {
     @State private var userName: String
     @State private var selectedUseCase: OnboardingUseCase
     @State private var selectedBackend: BackendOption
-    @State private var selectedCohereLanguage: CohereTranscribeLanguage
     @State private var summaryBackend: MeetingSummaryBackendOption = .chatGPT
     @State private var apiKey = ""
     @State private var isSigningInChatGPT = false
@@ -158,7 +157,6 @@ struct OnboardingView: View {
         initialStep: Int = 0,
         initialUserName: String = "",
         initialBackend: BackendOption = .gigaAMV3Russian,
-        initialCohereLanguage: CohereTranscribeLanguage = CohereTranscribeLanguage.defaultLanguage,
         initialHotkey: HotkeyConfig = .default,
         initialSystemAudioRequested: Bool = false,
         initialUseCase: OnboardingUseCase = .dictation,
@@ -196,7 +194,6 @@ struct OnboardingView: View {
         _selectedUseCase = State(initialValue: initialUseCase)
         let sanitizedInitialBackend = BackendOption.onboarding.contains(initialBackend) ? initialBackend : .gigaAMV3Russian
         _selectedBackend = State(initialValue: sanitizedInitialBackend)
-        _selectedCohereLanguage = State(initialValue: initialCohereLanguage)
         _selectedHotkey = State(initialValue: initialHotkey)
         _summaryBackend = State(initialValue: initialSummaryBackend)
         _modelDownloadProgress = State(initialValue: initialModelDownloadProgress)
@@ -282,9 +279,6 @@ struct OnboardingView: View {
         }
         .onChange(of: selectedBackend) { _, _ in
             resetModelDownloadForBackendChange()
-            saveProgress(atStep: currentStep)
-        }
-        .onChange(of: selectedCohereLanguage) { _, _ in
             saveProgress(atStep: currentStep)
         }
         .onChange(of: modelReadyBackend) { _, _ in
@@ -539,14 +533,6 @@ struct OnboardingView: View {
     }
 
     private var modelPreparationHints: [String] {
-        if selectedBackend.backend == "whisper" {
-            return [
-                "Compiling CoreML files for the Neural Engine",
-                "Preparing the first dictation test",
-                "Future launches will skip most of this",
-                "We'll bring Guesli forward when ready",
-            ]
-        }
         return [
             "Preparing the first dictation test",
             "Future launches will skip most of this",
@@ -724,45 +710,12 @@ struct OnboardingView: View {
                             .padding(.top, MuesliTheme.spacing4)
                     }
 
-                    if selectedBackend.backend == BackendOption.cohereTranscribe.backend {
-                        cohereLanguageCard
-                    }
                 }
                 .padding(.horizontal, MuesliTheme.spacing32)
             }
 
         }
         .frame(maxWidth: .infinity)
-    }
-
-    private var cohereLanguageCard: some View {
-        VStack(alignment: .leading, spacing: MuesliTheme.spacing8) {
-            Text("Cohere language")
-                .font(MuesliTheme.headline())
-                .foregroundStyle(MuesliTheme.textPrimary)
-
-            Text("Cohere does not auto-detect language, so pick the language you want it to transcribe.")
-                .font(MuesliTheme.caption())
-                .foregroundStyle(MuesliTheme.textSecondary)
-
-            FixedWidthPopUp(
-                selection: selectedCohereLanguage.label,
-                options: CohereTranscribeLanguage.allCases.map(\.label)
-            ) { label in
-                guard let language = CohereTranscribeLanguage.allCases.first(where: { $0.label == label }) else { return }
-                selectedCohereLanguage = language
-            }
-            .frame(height: 24)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(MuesliTheme.spacing12)
-        .background(MuesliTheme.backgroundRaised)
-        .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium))
-        .overlay(
-            RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium)
-                .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
-        )
-        .padding(.top, MuesliTheme.spacing8)
     }
 
     private func modelCard(option: BackendOption) -> some View {
@@ -1196,7 +1149,6 @@ struct OnboardingView: View {
             userName: userName,
             selectedBackendKey: selectedBackend.backend,
             selectedModelKey: selectedBackend.model,
-            selectedCohereLanguageCode: selectedCohereLanguage.rawValue,
             hotkeyKeyCode: selectedHotkey.keyCode,
             hotkeyLabel: selectedHotkey.label,
             systemAudioRequested: systemAudioGranted,
@@ -1446,7 +1398,6 @@ struct OnboardingView: View {
         .onAppear {
             ensureModelDownloadStarted()
             controller.dictationTestBackend = selectedBackend
-            controller.dictationTestCohereLanguage = selectedCohereLanguage
             controller.dictationTestRecordingStarted = {
                 withAnimation { isDictationTesting = true }
                 dictationTestError = nil
@@ -1474,7 +1425,6 @@ struct OnboardingView: View {
             controller.dictationTestFailureCallback = nil
             controller.dictationTestRecordingStarted = nil
             controller.dictationTestBackend = nil
-            controller.dictationTestCohereLanguage = nil
             // Stop the test monitor while moving through onboarding, but leave the
             // production monitor running when finishing from the dictation test.
             if !hasFinishedOnboarding {
@@ -1673,7 +1623,6 @@ struct OnboardingView: View {
 
         dictationTestError = nil
         controller.dictationTestBackend = selectedBackend
-        controller.dictationTestCohereLanguage = selectedCohereLanguage
         controller.startHotkeyMonitor(keyCode: selectedHotkey.keyCode)
     }
 
@@ -2029,7 +1978,6 @@ struct OnboardingView: View {
         controller.completeOnboarding(
             userName: userName.trimmingCharacters(in: .whitespaces),
             backend: selectedBackend,
-            cohereLanguage: selectedCohereLanguage,
             hotkey: selectedHotkey,
             onboardingUseCase: selectedUseCase,
             summaryBackend: summaryBackend,

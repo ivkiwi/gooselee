@@ -1592,6 +1592,42 @@ struct DictationStoreTests {
         #expect(updated?.selectedTemplatePrompt == "## Yesterday")
     }
 
+    @Test("summary error preserves existing notes and successful retry clears it")
+    func summaryErrorPreservesNotesAndClearsAfterSuccess() throws {
+        let store = try makeStore()
+        let start = Date()
+        let meetingID = try store.insertMeeting(
+            title: "Customer Review",
+            calendarEventID: nil,
+            startTime: start,
+            endTime: start.addingTimeInterval(60),
+            rawTranscript: "Transcript",
+            formattedNotes: "## Summary\nExisting notes",
+            micAudioPath: nil,
+            systemAudioPath: nil
+        )
+
+        try store.updateMeetingSummaryError(id: meetingID, message: "Provider unavailable")
+
+        let failed = try #require(try store.meeting(id: meetingID))
+        #expect(failed.formattedNotes == "## Summary\nExisting notes")
+        #expect(failed.summaryError == "Provider unavailable")
+
+        try store.updateMeetingSummary(
+            id: meetingID,
+            title: "Customer Review",
+            formattedNotes: "## Summary\nFresh notes",
+            selectedTemplateID: "auto",
+            selectedTemplateName: "Auto",
+            selectedTemplateKind: .auto,
+            selectedTemplatePrompt: "Auto prompt"
+        )
+
+        let recovered = try #require(try store.meeting(id: meetingID))
+        #expect(recovered.formattedNotes == "## Summary\nFresh notes")
+        #expect(recovered.summaryError == nil)
+    }
+
     @Test("update meeting transcript and summary replaces empty transcription")
     func updateMeetingTranscriptAndSummary() throws {
         let store = try makeStore()
@@ -1613,8 +1649,10 @@ struct DictationStoreTests {
 
         try store.updateMeetingTranscriptAndSummary(
             id: meetingID,
-            rawTranscript: "Recovered transcript words",
+            rawTranscript: "Recovered cleaned transcript words",
+            rawOriginalTranscript: "Recovered raw transcript words",
             formattedNotes: "## Summary\nRecovered notes",
+            summaryError: "Summary provider unavailable",
             selectedTemplateID: "auto",
             selectedTemplateName: "Auto",
             selectedTemplateKind: .auto,
@@ -1622,10 +1660,12 @@ struct DictationStoreTests {
         )
 
         let updated = try #require(try store.meeting(id: meetingID))
-        #expect(updated.rawTranscript == "Recovered transcript words")
+        #expect(updated.rawTranscript == "Recovered cleaned transcript words")
+        #expect(updated.rawOriginalTranscript == "Recovered raw transcript words")
         #expect(updated.formattedNotes == "## Summary\nRecovered notes")
+        #expect(updated.summaryError == "Summary provider unavailable")
         #expect(updated.status == .completed)
-        #expect(updated.wordCount == 5)
+        #expect(updated.wordCount == 6)
         #expect(updated.savedRecordingPath == "/tmp/recovered.wav")
         #expect(updated.manualNotes == "Manual note")
     }

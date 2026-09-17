@@ -20,6 +20,5 @@ assert_output "browser-extension/muesli-meet-speaker/content.js" "browser_extens
 assert_output "scripts/build_onnx_gigaam_helper.sh" "release_update=true"
 assert_output "docs/appcast-guesli.xml" "release_update=true"
 assert_output "native/MuesliNative/Sources/MuesliNativeApp/AppDelegate.swift" "native_or_packaging=true"
-assert_output "NOTICE" "release_update=true"
 
 echo "Changed-file classifier tests passed."

@@ -167,7 +167,7 @@ struct MeetingStopOrderingTests {
         return MeetingSession(
             title: "Stop ordering",
             calendarEventID: nil,
-            backend: .whisperTinyEnglish,
+            backend: .parakeetMultilingual,
             runtime: RuntimePaths(
                 repoRoot: FileManager.default.temporaryDirectory,
                 menuIcon: nil,

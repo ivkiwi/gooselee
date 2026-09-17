@@ -9,7 +9,6 @@ struct ShortcutsView: View {
     @State private var eventMonitor: Any?
     @State private var pendingModifierKeyCode: UInt16?
     @State private var dictationShortcutMessage: String?
-    @State private var computerUseShortcutMessage: String?
     @State private var meetingRecordingShortcutMessage: String?
 
     var body: some View {
@@ -19,13 +18,11 @@ struct ShortcutsView: View {
                     .font(MuesliTheme.title1())
                     .foregroundStyle(MuesliTheme.textPrimary)
 
-                Text("Choose your preferred shortcuts for dictation and computer use commands.")
+                Text("Choose your preferred shortcuts for dictation and meeting recording.")
                     .font(MuesliTheme.body())
                     .foregroundStyle(MuesliTheme.textSecondary)
 
                 dictationShortcutSection
-
-                computerUseShortcutSection
 
                 meetingRecordingShortcutSection
 
@@ -43,7 +40,6 @@ struct ShortcutsView: View {
 
     private enum ShortcutTarget {
         case dictation
-        case computerUse
         case meetingRecording
     }
 
@@ -74,60 +70,6 @@ struct ShortcutsView: View {
 
             if let dictationShortcutMessage {
                 shortcutMessage(dictationShortcutMessage)
-            }
-        }
-        .padding(MuesliTheme.spacing16)
-        .background(MuesliTheme.backgroundRaised)
-        .clipShape(RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium))
-        .overlay(
-            RoundedRectangle(cornerRadius: MuesliTheme.cornerMedium)
-                .strokeBorder(MuesliTheme.surfaceBorder, lineWidth: 1)
-        )
-    }
-
-    private var computerUseShortcutSection: some View {
-        VStack(alignment: .leading, spacing: MuesliTheme.spacing16) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: MuesliTheme.spacing4) {
-                    Text("Computer Use Command")
-                        .font(MuesliTheme.headline())
-                        .foregroundStyle(MuesliTheme.textPrimary)
-                    Text("Hold to record a command, release to plan and run it")
-                        .font(MuesliTheme.caption())
-                        .foregroundStyle(MuesliTheme.textSecondary)
-                }
-                Spacer()
-                Toggle("", isOn: Binding(
-                    get: { appState.config.enableComputerUseHotkey },
-                    set: { newValue in
-                        let result = controller.updateComputerUseHotkeyEnabled(newValue)
-                        computerUseShortcutMessage = result.message
-                        if result.didUpdate {
-                            dictationShortcutMessage = nil
-                        }
-                    }
-                ))
-                .toggleStyle(.switch)
-                .tint(MuesliTheme.accent)
-                .labelsHidden()
-            }
-
-            Divider()
-                .background(MuesliTheme.surfaceBorder)
-
-            shortcutControls(
-                target: .computerUse,
-                threshold: appState.config.computerUseHotkeyTriggerThresholdMS,
-                isEnabled: appState.config.enableComputerUseHotkey
-            ) { value in
-                controller.updateConfig { $0.computerUseHotkeyTriggerThresholdMS = value }
-            }
-
-            if appState.config.enableComputerUseHotkey,
-               ShortcutHotkeyPolicy.hotkeysConflict(appState.config.computerUseHotkey, appState.config.dictationHotkey) {
-                shortcutMessage(ShortcutHotkeyPolicy.conflictMessage)
-            } else if let computerUseShortcutMessage {
-                shortcutMessage(computerUseShortcutMessage)
             }
         }
         .padding(MuesliTheme.spacing16)
@@ -230,8 +172,6 @@ struct ShortcutsView: View {
         switch target {
         case .dictation:
             return appState.config.dictationHotkey
-        case .computerUse:
-            return appState.config.computerUseHotkey
         case .meetingRecording:
             return appState.config.meetingRecordingHotkey
         }
@@ -305,7 +245,7 @@ struct ShortcutsView: View {
         switch target {
         case .meetingRecording:
             return "Press a key or modifier..."
-        case .dictation, .computerUse:
+        case .dictation:
             return "Press a modifier key..."
         }
     }
@@ -317,7 +257,7 @@ struct ShortcutsView: View {
                     Text("Hands-Free Mode")
                         .font(MuesliTheme.headline())
                         .foregroundStyle(MuesliTheme.textPrimary)
-                    Text("Double-tap dictation or CUA to start, tap again to stop")
+                    Text("Double-tap dictation to start, tap again to stop")
                         .font(MuesliTheme.caption())
                         .foregroundStyle(MuesliTheme.textSecondary)
                 }
@@ -346,7 +286,6 @@ struct ShortcutsView: View {
         Button {
             controller.resetShortcutDefaults()
             dictationShortcutMessage = nil
-            computerUseShortcutMessage = nil
             meetingRecordingShortcutMessage = nil
         } label: {
             Text("Reset to Defaults")
@@ -356,12 +295,9 @@ struct ShortcutsView: View {
         .buttonStyle(.plain)
         .disabled(
             appState.config.dictationHotkey == .default
-                && appState.config.computerUseHotkey == .computerUseDefault
-                && !appState.config.enableComputerUseHotkey
                 && appState.config.meetingRecordingHotkey == .meetingRecordingDefault
                 && !appState.config.enableMeetingRecordingHotkey
                 && appState.config.hotkeyTriggerThresholdMS == HotkeyTriggerTiming.defaultThresholdMilliseconds
-                && appState.config.computerUseHotkeyTriggerThresholdMS == HotkeyTriggerTiming.defaultThresholdMilliseconds
                 && appState.config.meetingRecordingHotkeyTriggerThresholdMS == HotkeyTriggerTiming.defaultMeetingThresholdMilliseconds
         )
     }
@@ -418,8 +354,6 @@ struct ShortcutsView: View {
         switch target {
         case .dictation:
             result = controller.updateDictationHotkey(config)
-        case .computerUse:
-            result = controller.updateComputerUseHotkey(config)
         case .meetingRecording:
             result = controller.updateMeetingRecordingHotkey(config)
         }
@@ -435,13 +369,10 @@ struct ShortcutsView: View {
         switch target {
         case .dictation:
             dictationShortcutMessage = message
-            if message == nil { computerUseShortcutMessage = nil; meetingRecordingShortcutMessage = nil }
-        case .computerUse:
-            computerUseShortcutMessage = message
-            if message == nil { dictationShortcutMessage = nil; meetingRecordingShortcutMessage = nil }
+            if message == nil { meetingRecordingShortcutMessage = nil }
         case .meetingRecording:
             meetingRecordingShortcutMessage = message
-            if message == nil { dictationShortcutMessage = nil; computerUseShortcutMessage = nil }
+            if message == nil { dictationShortcutMessage = nil }
         }
     }
 

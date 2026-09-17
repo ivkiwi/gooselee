@@ -78,7 +78,6 @@ struct RebuildRetryPolicy: Equatable {
 ///
 /// Replaces `SystemAudioRecorder` (ScreenCaptureKit) for meeting system audio capture.
 /// Key advantages:
-/// - No conflict with `CGWindowListCreateImage` (screenshot OCR works during meetings)
 /// - Doesn't require "Screen & System Audio Recording" permission for audio capture
 /// - Hardware-synchronized with mic input when used in an aggregate device
 final class CoreAudioSystemRecorder: SystemAudioCapturing, SystemAudioDiagnosticsProviding {

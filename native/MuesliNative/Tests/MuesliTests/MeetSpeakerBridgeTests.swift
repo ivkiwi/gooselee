@@ -117,6 +117,65 @@ struct MeetSpeakerBridgeTests {
         #expect(MeetSpeakerBridgeServer.completeHTTPRequestLength(data) == data.count)
     }
 
+    @Test("requires the configured bearer pairing token")
+    func requiresPairingToken() {
+        let authorized = "POST /v1/meet-speaker HTTP/1.1\r\nAuthorization: Bearer secret-token\r\n\r\n"
+        let wrong = "POST /v1/meet-speaker HTTP/1.1\r\nAuthorization: Bearer wrong-token\r\n\r\n"
+        let bodyInjection = "POST /v1/meet-speaker HTTP/1.1\r\nContent-Type: text/plain\r\n\r\nauthorization: Bearer secret-token"
+
+        #expect(MeetSpeakerBridgeServer.isAuthorizedRequest(authorized, pairingToken: "secret-token"))
+        #expect(!MeetSpeakerBridgeServer.isAuthorizedRequest(wrong, pairingToken: "secret-token"))
+        #expect(!MeetSpeakerBridgeServer.isAuthorizedRequest(bodyInjection, pairingToken: "secret-token"))
+        #expect(!MeetSpeakerBridgeServer.isAuthorizedRequest(authorized, pairingToken: ""))
+    }
+
+    @Test("bridge opt-in and pairing token survive config round-trip")
+    func bridgeConfigRoundTrip() throws {
+        var config = AppConfig()
+        config.enableMeetSpeakerBridge = true
+        config.meetSpeakerBridgePairingToken = "secret-token"
+
+        let decoded = try JSONDecoder().decode(AppConfig.self, from: JSONEncoder().encode(config))
+
+        #expect(decoded.enableMeetSpeakerBridge)
+        #expect(decoded.meetSpeakerBridgePairingToken == "secret-token")
+    }
+
+    @Test("bridge runs only for an enabled active Google Meet")
+    func bridgeActivationIsScopedToActiveGoogleMeet() throws {
+        let meetSource = try #require(MeetingAutoStopSource(
+            meetingURL: URL(string: "https://meet.google.com/abc-defg-hij")!
+        ))
+        let zoomSource = try #require(MeetingAutoStopSource(
+            meetingURL: URL(string: "https://zoom.us/j/123456")!
+        ))
+
+        #expect(MeetSpeakerBridgeActivation.shouldRun(
+            enabled: true,
+            pairingToken: "secret-token",
+            source: meetSource,
+            isMeetingActive: true
+        ))
+        #expect(!MeetSpeakerBridgeActivation.shouldRun(
+            enabled: false,
+            pairingToken: "secret-token",
+            source: meetSource,
+            isMeetingActive: true
+        ))
+        #expect(!MeetSpeakerBridgeActivation.shouldRun(
+            enabled: true,
+            pairingToken: "secret-token",
+            source: zoomSource,
+            isMeetingActive: true
+        ))
+        #expect(!MeetSpeakerBridgeActivation.shouldRun(
+            enabled: true,
+            pairingToken: "secret-token",
+            source: meetSource,
+            isMeetingActive: false
+        ))
+    }
+
     @Test("maps observed Meet speaker names to diarization clusters")
     func mapsSpeakerNamesToDiarizationClusters() {
         let start = Date(timeIntervalSince1970: 1000)
@@ -391,15 +450,13 @@ struct MeetSpeakerBridgeTests {
             participants: [
                 MeetingParticipant(name: "Alice Owner", email: "alice@example.com", isOrganizer: true, isSelf: false),
                 MeetingParticipant(name: "Me", email: "me@example.com", isOrganizer: false, isSelf: true),
-            ],
-            visualContext: "Slide title: Roadmap"
+            ]
         )
 
         #expect(context.contains("Meeting participant candidates:"))
         #expect(context.contains("- Alice Owner <alice@example.com>"))
         #expect(!context.contains("- Me <me@example.com>"))
         #expect(context.contains("Do not assign a Speaker N label"))
-        #expect(context.contains("Slide title: Roadmap"))
     }
 
     @Test("persists speaker observations as per-meeting JSONL")
@@ -610,7 +667,7 @@ struct MeetSpeakerBridgeTests {
         MeetingSession(
             title: "Bridge test",
             calendarEventID: nil,
-            backend: .whisper,
+            backend: .parakeetMultilingual,
             runtime: RuntimePaths(
                 repoRoot: FileManager.default.temporaryDirectory,
                 menuIcon: nil,

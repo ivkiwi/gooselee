@@ -201,6 +201,7 @@ struct MeetingSessionResult {
     let rawTranscript: String
     let rawOriginalTranscript: String?
     let formattedNotes: String
+    let summaryError: String?
     let retainedRecordingURL: URL?
     let retainedRecordingError: Error?
     let retainedRecordingSavedURL: URL?
@@ -220,6 +221,7 @@ struct MeetingSessionResult {
         rawTranscript: String,
         rawOriginalTranscript: String? = nil,
         formattedNotes: String,
+        summaryError: String? = nil,
         retainedRecordingURL: URL?,
         retainedRecordingError: Error?,
         retainedRecordingSavedURL: URL? = nil,
@@ -238,6 +240,7 @@ struct MeetingSessionResult {
         self.rawTranscript = rawTranscript
         self.rawOriginalTranscript = rawOriginalTranscript
         self.formattedNotes = formattedNotes
+        self.summaryError = summaryError
         self.retainedRecordingURL = retainedRecordingURL
         self.retainedRecordingError = retainedRecordingError
         self.retainedRecordingSavedURL = retainedRecordingSavedURL
@@ -265,6 +268,7 @@ struct MeetingSessionResult {
             rawTranscript: rawTranscript ?? self.rawTranscript,
             rawOriginalTranscript: rawOriginalTranscript ?? self.rawOriginalTranscript,
             formattedNotes: formattedNotes ?? self.formattedNotes,
+            summaryError: summaryError,
             retainedRecordingURL: retainedRecordingURL,
             retainedRecordingError: retainedRecordingError,
             retainedRecordingSavedURL: retainedRecordingSavedURL,
@@ -316,8 +320,6 @@ private enum MeetingStopPhaseTimeouts {
     static let systemSegmentRepair: TimeInterval = 180
     static let transcriptCleanup: TimeInterval = 120
     static let liveTitle: TimeInterval = 5
-    static let titleGeneration: TimeInterval = 60
-    static let screenContextDrain: TimeInterval = 15
     static let manualNotes: TimeInterval = 15
     static let summaryGeneration: TimeInterval = 180
 }
@@ -395,7 +397,7 @@ final class MeetingSession {
     private let calendarEventID: String?
     private let liveMeetingID: Int64?
     private let participantCandidates: [MeetingParticipant]
-    private let backendLock = OSAllocatedUnfairLock(initialState: BackendOption.whisper)
+    private let backendLock = OSAllocatedUnfairLock(initialState: BackendOption.parakeetMultilingual)
     private let runtime: RuntimePaths
     private let config: AppConfig
     private var liveChunkingConfiguration: LiveMeetingChunkingConfiguration
@@ -471,7 +473,6 @@ final class MeetingSession {
     }
     private let captureStartState = OSAllocatedUnfairLock(initialState: CaptureStartState())
     private let systemAudioStartTimeout: TimeInterval
-    private let screenContextCollector = MeetingScreenContextCollector()
     private var diagnostics: MeetingSessionDiagnostics?
 
     /// Current mic power level for waveform visualization.
@@ -972,10 +973,6 @@ final class MeetingSession {
         } else {
             fputs("[meeting] VAD not available, using max-duration fallback only\n", stderr)
         }
-        if config.enableScreenContext && CGPreflightScreenCaptureAccess() {
-            // OCR screenshots are safe when using CoreAudio tap (no SCStream conflict)
-            await screenContextCollector.startPeriodicCapture(useOCR: config.useCoreAudioTap)
-        }
     }
 
     private func startPostProcessingMode(startedAt now: Date) async throws {
@@ -1018,9 +1015,6 @@ final class MeetingSession {
             throw error
         }
         fputs("[meeting] started in post-processing mode; live ASR disabled\n", stderr)
-        if config.enableScreenContext && CGPreflightScreenCaptureAccess() {
-            await screenContextCollector.startPeriodicCapture(useOCR: config.useCoreAudioTap)
-        }
     }
 
     func pause() {
@@ -1043,7 +1037,6 @@ final class MeetingSession {
         let livePartials = livePartialSessions()
         livePartials.mic?.suspend()
         livePartials.system?.suspend()
-        Task { await screenContextCollector.setPaused(true) }
         fputs("[meeting] recording paused\n", stderr)
     }
 
@@ -1060,7 +1053,6 @@ final class MeetingSession {
         let livePartials = livePartialSessions()
         livePartials.mic?.resume()
         livePartials.system?.resume()
-        Task { await screenContextCollector.setPaused(false) }
         fputs("[meeting] recording resumed\n", stderr)
     }
 
@@ -1068,7 +1060,6 @@ final class MeetingSession {
     func discard() {
         cancelPendingCaptureStart()
         stopIntakeRequested.store(true, ordering: .releasing)
-        Task { await screenContextCollector.stopAndDrain() }
         let (rawRecorder, systemRecorder) = chunkRotationQueue.sync { () -> (PCMChunkRecorder?, PCMChunkRecorder?) in
             isRecording = false
             setPausedStateOnQueue(false)
@@ -1203,7 +1194,6 @@ final class MeetingSession {
                     try await self.transcriptionCoordinator.transcribeMeetingChunk(
                         at: lastSystemChunkURL,
                         backend: self.currentBackend(),
-                        cohereLanguage: self.config.resolvedCohereLanguageMeetings
                     )
                 }
                 let normalizedSegments = normalizeSystemTranscription(
@@ -1400,44 +1390,18 @@ final class MeetingSession {
         ) {
             generatedTitle = calendarTitle
         } else {
-            let autoTitle = await stopPhaseValue(
-                "title_generation",
-                timeout: MeetingStopPhaseTimeouts.titleGeneration,
-                fallback: Optional<String>.none
-            ) {
-                await MeetingSummaryClient.generateTitle(
-                    transcript: rawTranscript,
-                    manualNotes: manualNotes,
-                    config: self.config
-                )
-            }
-            if let autoTitle, !autoTitle.isEmpty {
-                generatedTitle = autoTitle
-                fputs("[meeting] auto-generated title: \(generatedTitle)\n", stderr)
-            } else {
-                generatedTitle = title
-            }
+            generatedTitle = Self.fallbackTitle(originalTitle: title)
         }
 
         let templateSnapshot = templateSnapshotOverride ?? MeetingTemplates.resolveSnapshot(
             id: config.defaultMeetingTemplateID,
             customTemplates: config.customMeetingTemplates
         )
-        let visualContext = await stopPhaseValue(
-            "screen_context_drain",
-            timeout: MeetingStopPhaseTimeouts.screenContextDrain,
-            fallback: ""
-        ) {
-            await self.screenContextCollector.stopAndDrain()
-        }
-        let summaryContext = Self.summaryContext(
-            participants: allParticipantCandidates,
-            visualContext: visualContext
-        )
-        Self.logger.info("visual context drained chars=\(visualContext.count) includedInPrompt=\(!summaryContext.isEmpty) useOCR=\(self.config.useCoreAudioTap)")
-        fputs("[meeting] visual context drained chars=\(visualContext.count) participants=\(allParticipantCandidates.count) observedParticipants=\(observedParticipants.count) includedInPrompt=\(!summaryContext.isEmpty) useOCR=\(config.useCoreAudioTap)\n", stderr)
+        let summaryContext = Self.summaryContext(participants: allParticipantCandidates)
+        fputs("[meeting] summary participant candidates=\(allParticipantCandidates.count) observedParticipants=\(observedParticipants.count) includedInPrompt=\(!summaryContext.isEmpty)\n", stderr)
         onProgress?(.summarizingNotes)
         let formattedNotes: String
+        let summaryError: String?
         do {
             formattedNotes = try await withStopPhaseTimeout(
                 "summary_generation",
@@ -1453,6 +1417,7 @@ final class MeetingSession {
                     visualContext: summaryContext.isEmpty ? nil : summaryContext
                 )
             }
+            summaryError = nil
         } catch {
             logStopPhaseFailure(
                 "summary_generation",
@@ -1466,6 +1431,7 @@ final class MeetingSession {
                 error: error,
                 manualNotes: manualNotes
             )
+            summaryError = error.localizedDescription
         }
 
         let cleanupResult = await pendingCleanup
@@ -1500,6 +1466,7 @@ final class MeetingSession {
                 previous: previousMeetingNotes,
                 current: formattedNotes
             ),
+            summaryError: summaryError,
             retainedRecordingURL: retainedRecordingURL,
             retainedRecordingError: retainedRecordingWriterError,
             retainedRecordingSavedURL: retainedRecordingSavedURL,
@@ -1669,44 +1636,18 @@ final class MeetingSession {
         ) {
             generatedTitle = calendarTitle
         } else {
-            let autoTitle = await stopPhaseValue(
-                "title_generation",
-                timeout: MeetingStopPhaseTimeouts.titleGeneration,
-                fallback: Optional<String>.none
-            ) {
-                await MeetingSummaryClient.generateTitle(
-                    transcript: rawTranscript,
-                    manualNotes: manualNotes,
-                    config: self.config
-                )
-            }
-            if let autoTitle, !autoTitle.isEmpty {
-                generatedTitle = autoTitle
-                fputs("[meeting] auto-generated title: \(generatedTitle)\n", stderr)
-            } else {
-                generatedTitle = title
-            }
+            generatedTitle = Self.fallbackTitle(originalTitle: title)
         }
 
         let templateSnapshot = templateSnapshotOverride ?? MeetingTemplates.resolveSnapshot(
             id: config.defaultMeetingTemplateID,
             customTemplates: config.customMeetingTemplates
         )
-        let visualContext = await stopPhaseValue(
-            "screen_context_drain",
-            timeout: MeetingStopPhaseTimeouts.screenContextDrain,
-            fallback: ""
-        ) {
-            await self.screenContextCollector.stopAndDrain()
-        }
-        let summaryContext = Self.summaryContext(
-            participants: allParticipantCandidates,
-            visualContext: visualContext
-        )
-        Self.logger.info("visual context drained chars=\(visualContext.count) includedInPrompt=\(!summaryContext.isEmpty) useOCR=\(self.config.useCoreAudioTap)")
-        fputs("[meeting] visual context drained chars=\(visualContext.count) participants=\(allParticipantCandidates.count) observedParticipants=\(observedParticipants.count) includedInPrompt=\(!summaryContext.isEmpty) useOCR=\(config.useCoreAudioTap)\n", stderr)
+        let summaryContext = Self.summaryContext(participants: allParticipantCandidates)
+        fputs("[meeting] summary participant candidates=\(allParticipantCandidates.count) observedParticipants=\(observedParticipants.count) includedInPrompt=\(!summaryContext.isEmpty)\n", stderr)
         onProgress?(.summarizingNotes)
         let formattedNotes: String
+        let summaryError: String?
         do {
             formattedNotes = try await withStopPhaseTimeout(
                 "summary_generation",
@@ -1722,6 +1663,7 @@ final class MeetingSession {
                     visualContext: summaryContext.isEmpty ? nil : summaryContext
                 )
             }
+            summaryError = nil
         } catch {
             logStopPhaseFailure(
                 "summary_generation",
@@ -1735,6 +1677,7 @@ final class MeetingSession {
                 error: error,
                 manualNotes: manualNotes
             )
+            summaryError = error.localizedDescription
         }
 
         let cleanupResult = await pendingCleanup
@@ -1769,6 +1712,7 @@ final class MeetingSession {
                 previous: previousMeetingNotes,
                 current: formattedNotes
             ),
+            summaryError: summaryError,
             retainedRecordingURL: retainedRecordingURL,
             retainedRecordingError: retainedRecordingWriterError,
             retainedRecordingSavedURL: retainedRecordingSavedURL,
@@ -1835,7 +1779,6 @@ final class MeetingSession {
                 at: url,
                 samples: wavData.samples,
                 backend: backend,
-                cohereLanguage: config.resolvedCohereLanguageMeetings
             )
             let segments = normalizePostModeTrack(
                 transcription,
@@ -1906,7 +1849,7 @@ final class MeetingSession {
                 trackRole: trackRole,
                 diagnosticsLabel: "[meeting] post-mode",
                 logger: { DiagnosticsLog.write($0) }
-            ) { [transcriptionCoordinator, config] _, samples in
+            ) { [transcriptionCoordinator] _, samples in
                 let segmentURL = try WavWriter.writeTemporaryWAV(
                     samples: samples,
                     directoryName: AppTemporaryDirectories.meetingRetranscription
@@ -1916,7 +1859,6 @@ final class MeetingSession {
                     at: segmentURL,
                     samples: samples,
                     backend: backend,
-                    cohereLanguage: config.resolvedCohereLanguageMeetings
                 )
             }
         }
@@ -1961,7 +1903,6 @@ final class MeetingSession {
             at: url,
             samples: wavData.samples,
             backend: backend,
-            cohereLanguage: config.resolvedCohereLanguageMeetings
         )
         let segments = normalizePostModeTrack(
             transcription,
@@ -2030,24 +1971,22 @@ final class MeetingSession {
         return originalTitle
     }
 
-    static func summaryContext(participants: [MeetingParticipant], visualContext: String) -> String {
-        var sections: [String] = []
+    static func fallbackTitle(originalTitle: String) -> String {
+        originalTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Meeting"
+            : originalTitle
+    }
+
+    static func summaryContext(participants: [MeetingParticipant]) -> String {
         let participantLabels = participants
             .filter { !$0.isSelf }
             .map(\.summaryLabel)
-        if !participantLabels.isEmpty {
-            sections.append("""
-            Meeting participant candidates:
-            \(participantLabels.map { "- \($0)" }.joined(separator: "\n"))
-            Use these names only as possible participant names. Do not assign a Speaker N label to a person unless the transcript or captured context supports it.
-            """)
-        }
-
-        let trimmedVisualContext = visualContext.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedVisualContext.isEmpty {
-            sections.append(trimmedVisualContext)
-        }
-        return sections.joined(separator: "\n\n---\n\n")
+        guard !participantLabels.isEmpty else { return "" }
+        return """
+        Meeting participant candidates:
+        \(participantLabels.map { "- \($0)" }.joined(separator: "\n"))
+        Use these names only as possible participant names. Do not assign a Speaker N label to a person unless the transcript supports it.
+        """
     }
 
     static func observedParticipants(from observations: [MeetSpeakerObservation]) -> [MeetingParticipant] {
@@ -2396,7 +2335,6 @@ final class MeetingSession {
                 let result = try await self.transcriptionCoordinator.transcribeMeetingChunk(
                     at: chunkURL,
                     backend: backend,
-                    cohereLanguage: config.resolvedCohereLanguageMeetings
                 )
                 if !result.text.isEmpty {
                     fputs("[meeting] system chunk transcribed: \"\(String(result.text.prefix(60)))...\"\n", stderr)
@@ -2810,7 +2748,6 @@ final class MeetingSession {
             let result = try await transcriptionCoordinator.transcribeMeetingChunk(
                 at: url,
                 backend: currentBackend(),
-                cohereLanguage: config.resolvedCohereLanguageMeetings
             )
             if !result.text.isEmpty {
                 fputs("[meeting] mic chunk transcribed (raw): \"\(String(result.text.prefix(60)))...\"\n", stderr)
@@ -2920,7 +2857,6 @@ final class MeetingSession {
                     let result = try await transcriptionCoordinator.transcribeMeeting(
                         at: segmentURL,
                         backend: currentBackend(),
-                        cohereLanguage: config.resolvedCohereLanguageMeetings
                     )
                     repairedSegments.append(contentsOf: normalizeSystemTranscription(
                         result: result,
@@ -2954,7 +2890,6 @@ final class MeetingSession {
                 at: systemAudioURL,
                 samples: samples,
                 backend: currentBackend(),
-                cohereLanguage: config.resolvedCohereLanguageMeetings
             )
             return normalizeSystemTranscription(
                 result: result,

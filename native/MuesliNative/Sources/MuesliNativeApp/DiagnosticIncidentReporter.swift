@@ -50,17 +50,6 @@ final class DiagnosticIncidentReporter {
         return incident
     }
 
-    func recordManualReport() {
-        let incident = DiagnosticIncident(
-            kind: .manualReport,
-            severity: .info,
-            stage: "manual_report",
-            backend: nil,
-            error: nil
-        )
-        appState.pendingDiagnosticIncident = incident
-    }
-
     func dismissCurrentPrompt() {
         appState.pendingDiagnosticIncident = nil
     }

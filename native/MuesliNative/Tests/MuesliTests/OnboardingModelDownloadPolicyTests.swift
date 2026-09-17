@@ -12,17 +12,7 @@ struct OnboardingModelDownloadPolicyTests {
 
         #expect(!alternatives.contains(.gigaAMV3Russian))
         #expect(!alternatives.contains(.parakeetMultilingual))
-        #expect(alternatives == [.whisperTinyEnglish, .whisperSmall, .cohereTranscribe, .nemotron35Multilingual])
-    }
-
-    @Test("alternative models keep selected secondary option visible first")
-    func alternativeModelsKeepSelectedSecondaryFirst() {
-        let alternatives = makeOnboardingAlternativeModels(
-            selectedBackend: .whisperSmall,
-            onboardingOptions: [.gigaAMV3Russian, .parakeetMultilingual, .cohereTranscribe]
-        )
-
-        #expect(alternatives == [.whisperSmall, .cohereTranscribe])
+        #expect(alternatives == [.nemotron35Multilingual])
     }
 
     @Test("GigaAM stale download progress resets when model is missing")
@@ -40,10 +30,10 @@ struct OnboardingModelDownloadPolicyTests {
         ))
     }
 
-    @Test("non-GigaAM download resumes stored progress and status")
-    func nonGigaAMDownloadResumesStoredProgressAndStatus() {
+    @Test("Parakeet download resumes stored progress and status")
+    func parakeetDownloadResumesStoredProgressAndStatus() {
         let choice = onboardingInitialDownloadProgressStatusChoice(
-            backend: .whisperSmall,
+            backend: .parakeetMultilingual,
             alreadyDownloaded: false,
             currentProgress: 0.72,
             currentStatus: "180 MB of 250 MB"

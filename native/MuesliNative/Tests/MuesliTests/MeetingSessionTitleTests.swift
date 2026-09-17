@@ -32,4 +32,14 @@ struct MeetingSessionTitleTests {
 
         #expect(title == nil)
     }
+
+    @Test("non-calendar title is preserved without LLM generation")
+    func fallbackPreservesUserTitle() {
+        #expect(MeetingSession.fallbackTitle(originalTitle: "Quick Note") == "Quick Note")
+    }
+
+    @Test("blank title uses deterministic local fallback")
+    func blankTitleUsesDeterministicFallback() {
+        #expect(MeetingSession.fallbackTitle(originalTitle: "  \n ") == "Meeting")
+    }
 }

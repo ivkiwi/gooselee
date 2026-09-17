@@ -63,8 +63,6 @@ enum DiagnosticErrorCatalog {
     private static let exactMeanings: [String: [String: DiagnosticErrorMeaning]] = [
         "MuesliTranscriptionRuntime": [
             "1": DiagnosticErrorMeaning(summary: "Nemotron 3.5 requires a newer macOS version", area: "transcription_runtime"),
-            "2": DiagnosticErrorMeaning(summary: "Qwen3 ASR requires a newer macOS version", area: "transcription_runtime"),
-            "4": DiagnosticErrorMeaning(summary: "Cohere Transcribe requires a newer macOS version", area: "transcription_runtime"),
             "5": DiagnosticErrorMeaning(summary: "Unknown transcription backend was requested", area: "transcription_runtime"),
             "6": DiagnosticErrorMeaning(summary: "Indic ASR requires a newer macOS version", area: "transcription_runtime"),
         ],
@@ -103,15 +101,6 @@ enum DiagnosticErrorCatalog {
             "1": DiagnosticErrorMeaning(summary: "Retained meeting recording file could not be opened", area: "meeting_recording_save"),
             "2": DiagnosticErrorMeaning(summary: "Meeting recording M4A export session could not be created", area: "meeting_recording_save"),
             "3": DiagnosticErrorMeaning(summary: "Meeting recording M4A export failed", area: "meeting_recording_save"),
-        ],
-        "CohereTranscribe": [
-            "14": DiagnosticErrorMeaning(summary: "Cohere encoder output was missing", area: "cohere_coreml_inference"),
-            "15": DiagnosticErrorMeaning(summary: "Cohere prefill decoder logits were missing", area: "cohere_coreml_inference"),
-            "16": DiagnosticErrorMeaning(summary: "Cohere decode decoder logits were missing", area: "cohere_coreml_inference"),
-            "20": DiagnosticErrorMeaning(summary: "Cohere SentencePiece vocabulary could not be parsed", area: "cohere_model_assets"),
-            "21": DiagnosticErrorMeaning(summary: "Cohere mel filterbank asset was too small", area: "cohere_model_assets"),
-            "22": DiagnosticErrorMeaning(summary: "Cohere mel window asset was too small", area: "cohere_model_assets"),
-            "23": DiagnosticErrorMeaning(summary: "Cohere FFT setup could not be created", area: "cohere_audio_frontend"),
         ],
         "IndicASR": [
             "1": DiagnosticErrorMeaning(summary: "Indic ASR CoreML artifacts were not installed correctly", area: "indic_model_assets"),

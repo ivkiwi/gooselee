@@ -6,172 +6,37 @@ import MuesliCore
 
 @Suite("BackendOption", .muesliHermeticSupport)
 struct BackendOptionTests {
-
-    @Test("all options have unique models")
-    func uniqueModels() {
-        let models = BackendOption.all.map(\.model)
-        #expect(Set(models).count == models.count, "Duplicate model in BackendOption.all")
+    @Test("catalog contains only the supported backends")
+    func focusedCatalog() {
+        let expected = [BackendOption.gigaAMV3Russian, .parakeetMultilingual, .nemotron35Multilingual]
+        #expect(BackendOption.all == expected)
+        #expect(BackendOption.primaryCatalog == expected)
+        #expect(BackendOption.onboarding == expected)
+        #expect(Set(BackendOption.all.map(\.model)).count == expected.count)
+        #expect(Set(BackendOption.all.map(\.backend)) == ["gigaam_v3", "fluidaudio", "nemotron35"])
     }
 
-    @Test("all options have non-empty labels and descriptions")
-    func labelsAndDescriptions() {
-        for option in BackendOption.all {
-            #expect(!option.label.isEmpty, "Empty label for \(option.model)")
-            #expect(!option.description.isEmpty, "Empty description for \(option.model)")
-            #expect(!option.sizeLabel.isEmpty, "Empty sizeLabel for \(option.model)")
-        }
-    }
-
-    @Test("backend field is one of the known backends")
-    func knownBackends() {
-        let known: Set<String> = ["fluidaudio", "parakeet-unified", "whisper", "qwen", "nemotron35", "gigaam_v3", "cohere", "sensevoice"]
-        for option in BackendOption.all {
-            #expect(known.contains(option.backend), "Unknown backend: \(option.backend)")
-        }
-    }
-
-    @Test("Parakeet models use fluidaudio backend")
-    func parakeetBackend() {
-        #expect(BackendOption.parakeetUnified.backend == "parakeet-unified")
-        #expect(BackendOption.parakeetMultilingual.backend == "fluidaudio")
-        #expect(BackendOption.parakeetEnglish.backend == "fluidaudio")
-    }
-
-    @Test("Whisper models use whisper backend")
-    func whisperBackend() {
-        #expect(BackendOption.whisperSmall.backend == "whisper")
-        #expect(BackendOption.whisperMedium.backend == "whisper")
-        #expect(BackendOption.whisperLargeTurbo.backend == "whisper")
-    }
-
-    @Test("Nemotron 3.5 uses nemotron35 backend")
-    func nemotron35Backend() {
-        #expect(BackendOption.nemotron35Multilingual.backend == "nemotron35")
-        #expect(BackendOption.nemotron35Multilingual.model.contains("Nemotron-3.5"))
-        #expect(!BackendOption.nemotron35Multilingual.label.contains("Experimental"))
-        #expect(!BackendOption.nemotron35Multilingual.recommended)
-        #expect(!BackendOption.experimental.contains(.nemotron35Multilingual))
-        #expect(BackendOption.all.contains(.nemotron35Multilingual))
-    }
-
-    @Test("GigaAM v3 uses ONNX E2E CTC INT8 backend")
-    func gigaAMV3Backend() {
-        #expect(BackendOption.gigaAMV3Russian.backend == "gigaam_v3")
-        #expect(BackendOption.gigaAMV3Russian.model == "istupakov/gigaam-v3-onnx:e2e-ctc-int8")
-        #expect(BackendOption.gigaAMV3Russian.label == "GigaAM v3 E2E CTC")
-        #expect(BackendOption.gigaAMV3Russian.description.contains("Russian"))
-        #expect(BackendOption.gigaAMV3Russian.description.contains("ONNX INT8"))
-        #expect(BackendOption.gigaAMV3Russian.description.contains("CoreML"))
-        #expect(BackendOption.gigaAMV3Russian.recommended)
-        #expect(BackendOption.all.contains(.gigaAMV3Russian))
-        #expect(BackendOption.all.first == .gigaAMV3Russian)
-        #expect(BackendOption.onboarding.first == .gigaAMV3Russian)
-    }
-
-    @Test("GigaAM v3 resolves removed CoreML, MLX, and Sherpa selections")
+    @Test("removed GigaAM selections still resolve to the supported backend")
     func gigaAMV3LegacyModelIDsResolve() {
         #expect(BackendOption.resolve(backend: "gigaam_v3", model: "huggingfinger0/gigaam-v3-coreml") == .gigaAMV3Russian)
         #expect(BackendOption.resolve(backend: "gigaam_v3", model: "kruatech/gigaam-v3-mlx") == .gigaAMV3Russian)
         #expect(BackendOption.resolve(backend: "sherpa_gigaam_rnnt", model: "legacy-sherpa-model") == .gigaAMV3Russian)
     }
 
-    @Test("whisper alias points to parakeetMultilingual")
-    func whisperAlias() {
-        #expect(BackendOption.whisper == BackendOption.parakeetMultilingual)
-    }
-
-    @Test("all contains all defined options")
-    func allContainsAll() {
-        #expect(BackendOption.all.contains(.parakeetUnified))
-        #expect(BackendOption.all.contains(.parakeetMultilingual))
-        #expect(BackendOption.all.contains(.parakeetEnglish))
-        #expect(BackendOption.all.contains(.whisperSmall))
-        #expect(BackendOption.all.contains(.whisperMedium))
-        #expect(BackendOption.all.contains(.whisperLargeTurbo))
-        #expect(BackendOption.all.contains(.qwen3Asr))
-        #expect(BackendOption.all.contains(.cohereTranscribe))
-        #expect(BackendOption.all.contains(.gigaAMV3Russian))
-        #expect(BackendOption.all.contains(.senseVoiceSmall))
-        #expect(BackendOption.all.contains(.nemotron35Multilingual))
-    }
-
-    @Test("Cohere uses cohere backend")
-    func cohereBackend() {
-        #expect(BackendOption.cohereTranscribe.backend == "cohere")
-        #expect(BackendOption.cohereTranscribe.model.contains("cohere"))
-    }
-
-    @Test("SenseVoice uses native FluidAudio CoreML model")
-    func senseVoiceBackend() {
-        #expect(BackendOption.senseVoiceSmall.backend == "sensevoice")
-        #expect(BackendOption.senseVoiceSmall.model == "FluidInference/sensevoice-small-coreml")
-        #expect(BackendOption.senseVoiceSmall.description.contains("FluidAudio"))
-    }
-
-    @Test("Cohere is not in experimental list")
-    func cohereNotExperimental() {
-        #expect(!BackendOption.experimental.contains(.cohereTranscribe))
-    }
-
-    @Test("onboarding offers Russian-first model plus conservative fallbacks")
-    func onboardingModelChoices() {
-        #expect(BackendOption.onboarding == [.gigaAMV3Russian, .parakeetMultilingual, .whisperTinyEnglish, .whisperSmall, .cohereTranscribe, .nemotron35Multilingual])
-        for option in BackendOption.experimental {
-            #expect(!BackendOption.onboarding.contains(option))
-        }
-        #expect(BackendOption.onboarding.contains(.gigaAMV3Russian))
-        #expect(BackendOption.onboarding.contains(.nemotron35Multilingual))
-    }
-
-    @Test("only Nemotron backends use streaming dictation")
+    @Test("only Nemotron uses streaming dictation")
     func streamingDictationBackends() {
-        let streaming = BackendOption.all.filter(\.isStreamingDictationBackend)
-        #expect(streaming == [.nemotron35Multilingual])
+        #expect(BackendOption.all.filter(\.isStreamingDictationBackend) == [.nemotron35Multilingual])
     }
 
-    @Test("Whisper models use WhisperKit CoreML identifiers")
-    func whisperKitModels() {
-        // WhisperKit models use short variant names, not ggml- prefixed binaries
-        #expect(BackendOption.whisperTinyEnglish.model == "tiny.en")
-        #expect(BackendOption.whisperSmall.model == "small.en")
-        #expect(BackendOption.whisperMedium.model == "medium.en")
-        #expect(BackendOption.whisperLargeTurbo.model.contains("large"))
-    }
-
-    @Test("resolveDownloaded keeps selected downloaded meeting model")
-    func resolveDownloadedKeepsSelectedDownloadedModel() {
-        let resolved = BackendOption.resolveDownloaded(
-            backend: BackendOption.whisperLargeTurbo.backend,
-            model: BackendOption.whisperLargeTurbo.model,
-            fallback: .parakeetMultilingual,
-            downloadedOptions: [.parakeetMultilingual, .whisperLargeTurbo]
-        )
-
-        #expect(resolved == .whisperLargeTurbo)
-    }
-
-    @Test("resolveDownloaded falls back when selected meeting model is unavailable")
+    @Test("resolveDownloaded falls back from a retired selection")
     func resolveDownloadedFallsBackWhenSelectedUnavailable() {
         let resolved = BackendOption.resolveDownloaded(
-            backend: BackendOption.whisperLargeTurbo.backend,
-            model: BackendOption.whisperLargeTurbo.model,
+            backend: "whisper",
+            model: "large-v3-v20240930_626MB",
             fallback: .parakeetMultilingual,
-            downloadedOptions: [.parakeetMultilingual, .whisperSmall]
+            downloadedOptions: [.gigaAMV3Russian, .parakeetMultilingual]
         )
-
         #expect(resolved == .parakeetMultilingual)
-    }
-
-    @Test("resolveDownloaded uses first downloaded model when fallback is unavailable")
-    func resolveDownloadedUsesFirstDownloadedWhenFallbackUnavailable() {
-        let resolved = BackendOption.resolveDownloaded(
-            backend: BackendOption.whisperLargeTurbo.backend,
-            model: BackendOption.whisperLargeTurbo.model,
-            fallback: .parakeetMultilingual,
-            downloadedOptions: [.whisperSmall]
-        )
-
-        #expect(resolved == .whisperSmall)
     }
 }
 
@@ -376,16 +241,6 @@ struct SummaryModelPresetTests {
         }
     }
 
-    @Test("Computer use planner presets include GPT-5.6 Sol default")
-    func computerUsePlannerModels() {
-        #expect(SummaryModelPreset.computerUsePlannerModels.first?.id == "gpt-5.6-sol")
-        #expect(SummaryModelPreset.computerUsePlannerModels.contains { $0.id == "gpt-5.4-mini" })
-        for preset in SummaryModelPreset.computerUsePlannerModels {
-            #expect(!preset.id.isEmpty)
-            #expect(!preset.label.isEmpty)
-        }
-    }
-
     @Test("GPT-5.5 config migrates to GPT-5.6 Sol")
     func migratesGPT55() {
         #expect(SummaryModelPreset.migratedFromGPT55("gpt-5.5") == "gpt-5.6-sol")
@@ -529,12 +384,10 @@ struct AppConfigTests {
         let config = AppConfig()
         #expect(config.sttBackend == BackendOption.gigaAMV3Russian.backend)
         #expect(config.sttModel == BackendOption.gigaAMV3Russian.model)
-        #expect(config.cohereLanguageDictation == CohereTranscribeLanguage.defaultLanguage.rawValue)
-        #expect(config.cohereLanguageMeetings == CohereTranscribeLanguage.defaultLanguage.rawValue)
         #expect(config.meetingTranscriptionBackend == BackendOption.gigaAMV3Russian.backend)
         #expect(config.meetingTranscriptionModel == BackendOption.gigaAMV3Russian.model)
         #expect(config.meetingSummaryBackend == "chatgpt")
-        #expect(config.defaultMeetingTemplateID == MeetingTemplates.autoID)
+        #expect(config.defaultMeetingTemplateID == MeetingTemplates.simpleID)
         #expect(config.meetingProcessingMode == MeetingProcessingMode.post.rawValue)
         #expect(config.resolvedMeetingProcessingMode == .post)
         #expect(config.meetingRecordingSavePolicy == .never)
@@ -542,7 +395,7 @@ struct AppConfigTests {
         #expect(config.resolvedMeetingRecordingFileFormat == .m4a)
         #expect(config.showScheduledMeetingNotifications == true)
         #expect(config.scheduledMeetingNotificationLeadTime == .atStart)
-        #expect(config.showMeetingDetectionNotification == true)
+        #expect(config.showMeetingDetectionNotification == false)
         #expect(config.mutedMeetingDetectionAppBundleIDs.isEmpty)
         #expect(config.preferredMeetingBrowserBundleID.isEmpty)
         #expect(config.openAIAPIKey.isEmpty)
@@ -559,14 +412,7 @@ struct AppConfigTests {
         #expect(config.transcriptCleanupProvider == TranscriptCleanupProviderOption.local.rawValue)
         #expect(config.enableLiveStreamingPartials == false)
         #expect(config.dictationHotkey == .default)
-        #expect(config.computerUseHotkey == .computerUseDefault)
-        #expect(config.enableComputerUseHotkey == false)
-        #expect(config.computerUseHotkeyDefaultDisabledMigrationApplied == true)
-        #expect(config.enableComputerUsePlanner == true)
-        #expect(config.computerUsePlannerModel.isEmpty)
-        #expect(config.computerUseTimeoutSeconds == 120)
         #expect(config.hotkeyTriggerThresholdMS == HotkeyTriggerTiming.defaultThresholdMilliseconds)
-        #expect(config.computerUseHotkeyTriggerThresholdMS == HotkeyTriggerTiming.defaultThresholdMilliseconds)
         #expect(config.meetingRecordingHotkeyTriggerThresholdMS == HotkeyTriggerTiming.defaultMeetingThresholdMilliseconds)
         #expect(config.pasteShortcut == .commandV)
         #expect(config.showFloatingIndicator == true)
@@ -585,10 +431,6 @@ struct AppConfigTests {
         #expect(config.resolvedAutoExportMarkdownContent == .notes)
         #expect(config.autoExportFileFormat == MeetingAutoExportFileFormat.markdown.rawValue)
         #expect(config.resolvedAutoExportFileFormat == .markdown)
-        #expect(config.contributionPromptNextWordCount == nil)
-        #expect(config.contributionPromptNextMeetingCount == nil)
-        #expect(config.contributionGitHubStarClicked == false)
-        #expect(config.contributionBuyMeCoffeeClicked == false)
         #expect(config.upcomingMeetingsDayCount == UpcomingMeetingsWindow.defaultDayCount)
         #expect(config.hiddenCalendarEventSourceHints.isEmpty)
     }
@@ -600,8 +442,6 @@ struct AppConfigTests {
         config.userName = "Test User"
         config.hasCompletedOnboarding = true
         config.onboardingUseCase = OnboardingUseCase.dictationAndMeetings.rawValue
-        config.cohereLanguageDictation = CohereTranscribeLanguage.german.rawValue
-        config.cohereLanguageMeetings = CohereTranscribeLanguage.french.rawValue
         config.defaultMeetingTemplateID = "weekly-team-meeting"
         config.meetingProcessingMode = MeetingProcessingMode.live.rawValue
         config.meetingRecordingSavePolicy = .always
@@ -626,14 +466,8 @@ struct AppConfigTests {
         config.showMeetingDetectionNotification = false
         config.mutedMeetingDetectionAppBundleIDs = ["com.google.Chrome", "com.tinyspeck.slackmacgap"]
         config.preferredMeetingBrowserBundleID = "com.brave.Browser"
-        config.computerUseHotkey = HotkeyConfig(keyCode: 62, label: "Right Ctrl")
-        config.enableComputerUseHotkey = false
-        config.enableComputerUsePlanner = false
-        config.computerUsePlannerModel = "gpt-5.4"
-        config.computerUseTimeoutSeconds = 180
         config.pasteShortcut = .commandShiftV
         config.hotkeyTriggerThresholdMS = 125
-        config.computerUseHotkeyTriggerThresholdMS = 350
         config.meetingRecordingHotkeyTriggerThresholdMS = 900
         config.lmStudioURL = "http://localhost:1234"
         config.lmStudioModel = "local-model"
@@ -644,10 +478,6 @@ struct AppConfigTests {
         config.meetingSummaryRetryCount = 5
         config.transcriptCleanupProvider = TranscriptCleanupProviderOption.chatGPT.rawValue
         config.enableLiveStreamingPartials = true
-        config.contributionPromptNextWordCount = 31_000
-        config.contributionPromptNextMeetingCount = 75
-        config.contributionGitHubStarClicked = true
-        config.contributionBuyMeCoffeeClicked = false
         config.upcomingMeetingsDayCount = UpcomingMeetingsWindow.today.dayCount
         config.hiddenCalendarEventSourceHints = [
             "ek-event-1": UnifiedCalendarEvent.CalendarSource.eventKit.rawValue,
@@ -661,8 +491,6 @@ struct AppConfigTests {
         #expect(decoded.userName == "Test User")
         #expect(decoded.hasCompletedOnboarding == true)
         #expect(decoded.resolvedOnboardingUseCase == .dictationAndMeetings)
-        #expect(decoded.cohereLanguageDictation == CohereTranscribeLanguage.german.rawValue)
-        #expect(decoded.cohereLanguageMeetings == CohereTranscribeLanguage.french.rawValue)
         #expect(decoded.defaultMeetingTemplateID == "weekly-team-meeting")
         #expect(decoded.meetingProcessingMode == MeetingProcessingMode.live.rawValue)
         #expect(decoded.resolvedMeetingProcessingMode == .live)
@@ -689,14 +517,8 @@ struct AppConfigTests {
         #expect(decoded.meetingTranscriptionBackend == config.meetingTranscriptionBackend)
         #expect(decoded.indicatorAnchor == config.indicatorAnchor)
         #expect(decoded.indicatorDockGap == config.indicatorDockGap)
-        #expect(decoded.computerUseHotkey == HotkeyConfig(keyCode: 62, label: "Right Ctrl"))
-        #expect(decoded.enableComputerUseHotkey == false)
-        #expect(decoded.enableComputerUsePlanner == false)
-        #expect(decoded.computerUsePlannerModel == "gpt-5.4")
-        #expect(decoded.computerUseTimeoutSeconds == 180)
         #expect(decoded.pasteShortcut == .commandShiftV)
         #expect(decoded.hotkeyTriggerThresholdMS == 125)
-        #expect(decoded.computerUseHotkeyTriggerThresholdMS == 350)
         #expect(decoded.meetingRecordingHotkeyTriggerThresholdMS == 900)
         #expect(decoded.lmStudioURL == "http://localhost:1234")
         #expect(decoded.lmStudioModel == "local-model")
@@ -707,10 +529,6 @@ struct AppConfigTests {
         #expect(decoded.meetingSummaryRetryCount == 5)
         #expect(decoded.transcriptCleanupProvider == TranscriptCleanupProviderOption.chatGPT.rawValue)
         #expect(decoded.enableLiveStreamingPartials == true)
-        #expect(decoded.contributionPromptNextWordCount == 31_000)
-        #expect(decoded.contributionPromptNextMeetingCount == 75)
-        #expect(decoded.contributionGitHubStarClicked == true)
-        #expect(decoded.contributionBuyMeCoffeeClicked == false)
         #expect(decoded.upcomingMeetingsDayCount == UpcomingMeetingsWindow.today.dayCount)
         #expect(decoded.hiddenCalendarEventSourceHints == config.hiddenCalendarEventSourceHints)
     }
@@ -724,26 +542,17 @@ struct AppConfigTests {
 
     @Test("JSON coding keys use snake_case")
     func snakeCaseKeys() throws {
-        var config = AppConfig()
-        config.contributionPromptNextWordCount = 1_000
-        config.contributionPromptNextMeetingCount = 25
+        let config = AppConfig()
         let data = try JSONEncoder().encode(config)
         let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
 
         #expect(json["stt_backend"] != nil)
         #expect(json["stt_model"] != nil)
-        #expect(json["computer_use_hotkey"] != nil)
-        #expect(json["enable_computer_use_hotkey"] != nil)
-        #expect(json["computer_use_hotkey_default_disabled_migration_applied"] != nil)
-        #expect(json["enable_computer_use_planner"] != nil)
-        #expect(json["computer_use_planner_model"] != nil)
-        #expect(json["computer_use_timeout_seconds"] != nil)
         #expect(json["hotkey_trigger_threshold_ms"] != nil)
-        #expect(json["computer_use_hotkey_trigger_threshold_ms"] != nil)
         #expect(json["meeting_recording_hotkey_trigger_threshold_ms"] != nil)
         #expect(json["cohere_language"] == nil)
-        #expect(json["cohere_language_dictation"] != nil)
-        #expect(json["cohere_language_meetings"] != nil)
+        #expect(json["cohere_language_dictation"] == nil)
+        #expect(json["cohere_language_meetings"] == nil)
         #expect(json["paste_shortcut"] != nil)
         #expect(json["meeting_transcription_backend"] != nil)
         #expect(json["meeting_transcription_model"] != nil)
@@ -769,10 +578,6 @@ struct AppConfigTests {
         #expect(json["auto_export_markdown_folder_path"] != nil)
         #expect(json["auto_export_markdown_content"] != nil)
         #expect(json["auto_export_file_format"] != nil)
-        #expect(json["contribution_prompt_next_word_count"] != nil)
-        #expect(json["contribution_prompt_next_meeting_count"] != nil)
-        #expect(json["contribution_github_star_clicked"] != nil)
-        #expect(json["contribution_buy_me_coffee_clicked"] != nil)
         #expect(json["lmstudio_url"] != nil)
         #expect(json["lmstudio_model"] != nil)
         #expect(json["custom_llm_url"] != nil)
@@ -793,8 +598,6 @@ struct AppConfigTests {
 
         #expect(config.openAIAPIKey.isEmpty)
         #expect(config.showFloatingIndicator == true)
-        #expect(config.resolvedCohereLanguageDictation == .english)
-        #expect(config.resolvedCohereLanguageMeetings == .english)
         #expect(config.pasteShortcut == .commandV)
         #expect(config.hasCompletedOnboarding == false)
         #expect(config.resolvedOnboardingUseCase == .dictation)
@@ -807,18 +610,11 @@ struct AppConfigTests {
         #expect(config.meetingRecordingFileFormat == MeetingRecordingFileFormat.m4a.rawValue)
         #expect(config.resolvedMeetingRecordingFileFormat == .m4a)
         #expect(config.showScheduledMeetingNotifications == true)
-        #expect(config.showMeetingDetectionNotification == true)
+        #expect(config.showMeetingDetectionNotification == false)
         #expect(config.mutedMeetingDetectionAppBundleIDs.isEmpty)
         #expect(config.preferredMeetingBrowserBundleID.isEmpty)
         #expect(config.customMeetingTemplates.isEmpty)
-        #expect(config.computerUseHotkey == .computerUseDefault)
-        #expect(config.enableComputerUseHotkey == false)
-        #expect(config.computerUseHotkeyDefaultDisabledMigrationApplied == true)
-        #expect(config.enableComputerUsePlanner == true)
-        #expect(config.computerUsePlannerModel.isEmpty)
-        #expect(config.computerUseTimeoutSeconds == 120)
         #expect(config.hotkeyTriggerThresholdMS == HotkeyTriggerTiming.defaultThresholdMilliseconds)
-        #expect(config.computerUseHotkeyTriggerThresholdMS == HotkeyTriggerTiming.defaultThresholdMilliseconds)
         #expect(config.meetingRecordingHotkeyTriggerThresholdMS == HotkeyTriggerTiming.defaultMeetingThresholdMilliseconds)
         #expect(config.meetingHookEnabled == false)
         #expect(config.meetingHookPath.isEmpty)
@@ -972,55 +768,6 @@ struct AppConfigTests {
         #expect(!config.resolvedOnboardingUseCase.includesMeetings)
     }
 
-    @Test("computer use default avoids existing right command dictation hotkey")
-    func computerUseDefaultAvoidsExistingRightCommandDictationHotkey() throws {
-        let json = """
-        {
-          "dictation_hotkey": {
-            "keyCode": 54,
-            "label": "Right Cmd"
-          }
-        }
-        """
-
-        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
-
-        #expect(config.dictationHotkey == HotkeyConfig(keyCode: 54, label: "Right Cmd"))
-        #expect(config.computerUseHotkey == .default)
-        #expect(config.enableComputerUseHotkey == false)
-    }
-
-    @Test("legacy computer use hotkey enabled config is disabled once")
-    func legacyComputerUseHotkeyEnabledConfigIsDisabledOnce() throws {
-        let json = """
-        {
-          "enable_computer_use_hotkey": true,
-          "enable_computer_use_planner": true
-        }
-        """
-
-        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
-
-        #expect(config.enableComputerUseHotkey == false)
-        #expect(config.computerUseHotkeyDefaultDisabledMigrationApplied == true)
-        #expect(config.enableComputerUsePlanner == true)
-    }
-
-    @Test("computer use hotkey remains enabled after migration is applied")
-    func computerUseHotkeyRemainsEnabledAfterMigrationIsApplied() throws {
-        let json = """
-        {
-          "enable_computer_use_hotkey": true,
-          "computer_use_hotkey_default_disabled_migration_applied": true
-        }
-        """
-
-        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
-
-        #expect(config.enableComputerUseHotkey == true)
-        #expect(config.computerUseHotkeyDefaultDisabledMigrationApplied == true)
-    }
-
     @Test("unsupported onboarding use case falls back to dictation")
     func unsupportedOnboardingUseCaseFallsBackToDictation() throws {
         let json = """
@@ -1075,53 +822,6 @@ struct AppConfigTests {
 
         #expect(config.showScheduledMeetingNotifications == true)
         #expect(config.showMeetingDetectionNotification == false)
-    }
-
-    @Test("unsupported cohere language falls back to english")
-    func unsupportedCohereLanguageFallsBackToEnglish() throws {
-        let json = """
-        {
-          "cohere_language_dictation": "xx",
-          "cohere_language_meetings": "yy"
-        }
-        """
-        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
-
-        #expect(config.cohereLanguageDictation == CohereTranscribeLanguage.english.rawValue)
-        #expect(config.cohereLanguageMeetings == CohereTranscribeLanguage.english.rawValue)
-        #expect(config.resolvedCohereLanguageDictation == .english)
-        #expect(config.resolvedCohereLanguageMeetings == .english)
-    }
-
-    @Test("cohere language codes are normalized case-insensitively")
-    func cohereLanguageCodesNormalizeCaseInsensitively() throws {
-        let json = """
-        {
-          "cohere_language_dictation": " Fr ",
-          "cohere_language_meetings": " DE "
-        }
-        """
-        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
-
-        #expect(config.cohereLanguageDictation == CohereTranscribeLanguage.french.rawValue)
-        #expect(config.cohereLanguageMeetings == CohereTranscribeLanguage.german.rawValue)
-        #expect(config.resolvedCohereLanguageDictation == .french)
-        #expect(config.resolvedCohereLanguageMeetings == .german)
-    }
-
-    @Test("legacy cohere language seeds dictation and meetings")
-    func legacyCohereLanguageSeedsDictationAndMeetings() throws {
-        let json = """
-        {
-          "cohere_language": "de"
-        }
-        """
-        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
-
-        #expect(config.cohereLanguageDictation == CohereTranscribeLanguage.german.rawValue)
-        #expect(config.cohereLanguageMeetings == CohereTranscribeLanguage.german.rawValue)
-        #expect(config.resolvedCohereLanguageDictation == .german)
-        #expect(config.resolvedCohereLanguageMeetings == .german)
     }
 
     @Test("meeting transcription falls back to dictation model when missing")
@@ -1800,84 +1500,6 @@ struct HotkeyConfigTests {
         #expect(config.label == "Right Option")
     }
 
-    @Test("computer use default is Right Cmd")
-    func computerUseDefaultConfig() {
-        let config = HotkeyConfig.computerUseDefault
-        #expect(config.keyCode == 54)
-        #expect(config.label == "Right Cmd")
-    }
-
-    @Test("computer use fallback avoids dictation hotkey")
-    func computerUseFallbackAvoidsDictationHotkey() {
-        #expect(HotkeyConfig.computerUseDefault(avoiding: .default) == .computerUseDefault)
-        #expect(HotkeyConfig.computerUseDefault(avoiding: .computerUseDefault) == .default)
-    }
-
-    @Test("hotkey policy blocks active duplicate shortcuts")
-    func hotkeyPolicyBlocksActiveDuplicateShortcuts() {
-        #expect(ShortcutHotkeyPolicy.validateDictationHotkey(
-            .computerUseDefault,
-            computerUseHotkey: .computerUseDefault,
-            isComputerUseEnabled: true
-        ) == .conflict(message: ShortcutHotkeyPolicy.conflictMessage))
-
-        #expect(ShortcutHotkeyPolicy.validateDictationHotkey(
-            .computerUseDefault,
-            computerUseHotkey: .computerUseDefault,
-            isComputerUseEnabled: false
-        ) == .updated)
-
-        #expect(ShortcutHotkeyPolicy.validateComputerUseHotkey(
-            .default,
-            dictationHotkey: .default,
-            isComputerUseEnabled: true
-        ) == .conflict(message: ShortcutHotkeyPolicy.conflictMessage))
-
-        #expect(ShortcutHotkeyPolicy.validateComputerUseHotkey(
-            .default,
-            dictationHotkey: .default,
-            isComputerUseEnabled: false
-        ) == .updated)
-    }
-
-    @Test("hotkey policy moves computer use key when enabling with a stale conflict")
-    func hotkeyPolicyMovesComputerUseKeyWhenEnablingWithStaleConflict() {
-        let resolution = ShortcutHotkeyPolicy.resolvedComputerUseHotkeyWhenEnabling(
-            currentHotkey: .default,
-            dictationHotkey: .default
-        )
-
-        #expect(resolution.hotkey == .computerUseDefault)
-        #expect(resolution.result.didUpdate)
-        #expect(resolution.result.message == "Computer Use Command moved to Right Cmd to avoid matching Push to Talk.")
-    }
-
-    @Test("hotkey policy rejects computer use enable when fallback conflicts with meeting recording")
-    func hotkeyPolicyRejectsComputerUseEnableWhenFallbackConflictsWithMeetingRecording() {
-        let resolution = ShortcutHotkeyPolicy.resolvedComputerUseHotkeyWhenEnabling(
-            currentHotkey: .default,
-            dictationHotkey: .default,
-            meetingRecordingHotkey: .computerUseDefault,
-            isMeetingRecordingEnabled: true
-        )
-
-        #expect(resolution.hotkey == .default)
-        #expect(resolution.result == .conflict(message: ShortcutHotkeyPolicy.conflictMessage))
-    }
-
-    @Test("hotkey policy rejects computer use enable when current shortcut conflicts with meeting recording")
-    func hotkeyPolicyRejectsComputerUseEnableWhenCurrentShortcutConflictsWithMeetingRecording() {
-        let resolution = ShortcutHotkeyPolicy.resolvedComputerUseHotkeyWhenEnabling(
-            currentHotkey: .computerUseDefault,
-            dictationHotkey: .default,
-            meetingRecordingHotkey: .computerUseDefault,
-            isMeetingRecordingEnabled: true
-        )
-
-        #expect(resolution.hotkey == .computerUseDefault)
-        #expect(resolution.result == .conflict(message: ShortcutHotkeyPolicy.conflictMessage))
-    }
-
     @Test("combination conflicts ignore unsupported modifier flags")
     func combinationConflictsIgnoreUnsupportedModifierFlags() {
         let visible = HotkeyConfig.combination(modifiers: [.command, .shift], keyCode: 15)
@@ -1893,9 +1515,7 @@ struct HotkeyConfigTests {
     func meetingRecordingWarnsForCommonGlobalAppShortcuts() {
         let result = ShortcutHotkeyPolicy.validateMeetingRecordingHotkey(
             .meetingRecordingDefault,
-            dictationHotkey: .default,
-            computerUseHotkey: .computerUseDefault,
-            isComputerUseEnabled: false
+            dictationHotkey: .default
         )
 
         #expect(result.didUpdate)
@@ -1907,9 +1527,7 @@ struct HotkeyConfigTests {
         let uncommon = HotkeyConfig.combination(modifiers: [.command, .option, .control], keyCode: 46)
         let result = ShortcutHotkeyPolicy.validateMeetingRecordingHotkey(
             uncommon,
-            dictationHotkey: .default,
-            computerUseHotkey: .computerUseDefault,
-            isComputerUseEnabled: false
+            dictationHotkey: .default
         )
 
         #expect(result == .updated)
@@ -1931,7 +1549,6 @@ struct HotkeyConfigTests {
     @Test("display label uses keyboard symbols")
     func displayLabelUsesKeyboardSymbols() {
         #expect(HotkeyConfig.default.displayLabel == "Right ⌥")
-        #expect(HotkeyConfig.computerUseDefault.displayLabel == "Right ⌘")
         #expect(HotkeyConfig.meetingRecordingDefault.displayLabel == "⌘⇧R")
         #expect(HotkeyConfig(keyCode: 62, label: "Right Ctrl").displayLabel == "Right ⌃")
         #expect(HotkeyConfig(keyCode: 63, label: "Fn").displayLabel == "fn")

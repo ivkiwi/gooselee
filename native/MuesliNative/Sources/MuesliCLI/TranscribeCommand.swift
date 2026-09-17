@@ -14,17 +14,8 @@ enum TranscribeOutputFormat: String, CaseIterable, ExpressibleByArgument {
 enum TranscribeModel: String, CaseIterable, ExpressibleByArgument, Encodable {
     case gigaAMONNX = "gigaam-onnx"
     case parakeetV3 = "parakeet-v3"
-    case parakeetV2 = "parakeet-v2"
-    case parakeetUnified = "parakeet-unified"
     case parakeetEou320ms = "parakeet-eou-320ms"
-    case senseVoice = "sensevoice"
-    case qwen3Asr = "qwen3-asr"
     case nemotron35 = "nemotron35"
-    case cohere = "cohere"
-    case whisperTinyEnglish = "whisper-tiny-english"
-    case whisperSmallEnglish = "whisper-small-english"
-    case whisperMediumEnglish = "whisper-medium-english"
-    case whisperLargeTurbo = "whisper-large-turbo"
 
     var isStreaming: Bool { self == .parakeetEou320ms }
 
@@ -86,7 +77,7 @@ struct TranscribeCommand: AsyncParsableCommand {
     var file: String
     @Option(name: .long, help: "Output format: text, json, or markdown.")
     var format: TranscribeOutputFormat = .text
-    @Option(name: .long, help: "Transcription model: gigaam-onnx, parakeet-v3, parakeet-v2, parakeet-unified, parakeet-eou-320ms, sensevoice, qwen3-asr, nemotron35, cohere, whisper-tiny-english, whisper-small-english, whisper-medium-english, or whisper-large-turbo.")
+    @Option(name: .long, help: "Transcription model: gigaam-onnx, parakeet-v3, nemotron35, or parakeet-eou-320ms (English only).")
     var model: TranscribeModel = .gigaAMONNX
     @Flag(name: .long, help: "Generate meeting notes using the configured Guesli summary backend when available.")
     var summarize = false

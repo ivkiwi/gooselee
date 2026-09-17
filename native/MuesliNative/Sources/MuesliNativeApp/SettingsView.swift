@@ -74,7 +74,6 @@ struct SettingsView: View {
         case general
         case sync
         case dictation
-        case computerUse
         case meetings
         case appearance
 
@@ -85,7 +84,6 @@ struct SettingsView: View {
             case .general: return "General"
             case .sync: return "Sync"
             case .dictation: return "Dictation"
-            case .computerUse: return "Computer Use"
             case .meetings: return "Meetings"
             case .appearance: return "Appearance"
             }
@@ -101,7 +99,6 @@ struct SettingsView: View {
     @State private var isSigningInGoogleCal = false
     @State private var pendingDataDestruction: PendingDataDestruction?
     @State private var isShowingDictionaryAccessibilityPrompt = false
-    @State private var isPreviewingClip = false
     @State private var selectedPane: SettingsPane = .general
     @State private var downloadedBackendOptions: [BackendOption] = []
     @State private var downloadedPostProcOptions: [PostProcessorOption] = []
@@ -124,7 +121,6 @@ struct SettingsView: View {
     // Uniform width for all right-side controls
     private let controlWidth: CGFloat = 220
     private let meetingControlWidth: CGFloat = 275
-    private let iOSCompanionURL = IPhoneBridgeLinks.installURL
     private let screenContextGrantIntentTimeout: TimeInterval = 15 * 60
     private var selectedTranscriptCleanupProvider: TranscriptCleanupProviderOption {
         TranscriptCleanupProviderOption.resolved(appState.config.transcriptCleanupProvider)
@@ -199,14 +195,6 @@ struct SettingsView: View {
         return meetingBrowserOpenOptions.first { $0.bundleID == bundleID }?.name ?? "System Default"
     }
 
-    private var selectedDictationCohereLanguage: CohereTranscribeLanguage {
-        appState.config.resolvedCohereLanguageDictation
-    }
-
-    private var selectedMeetingCohereLanguage: CohereTranscribeLanguage {
-        appState.config.resolvedCohereLanguageMeetings
-    }
-
     private var selectedUpcomingMeetingsWindow: UpcomingMeetingsWindow {
         UpcomingMeetingsWindow.resolve(dayCount: appState.config.upcomingMeetingsDayCount)
     }
@@ -250,8 +238,6 @@ struct SettingsView: View {
             }
         }
         .onDisappear {
-            SoundController.stopMaraudersMapClip()
-            isPreviewingClip = false
             audioInputDeviceRefreshTask?.cancel()
             audioInputDeviceRefreshTask = nil
             stopPermissionPolling()
@@ -326,7 +312,7 @@ struct SettingsView: View {
 
     private func refreshDownloadedModelOptions() {
         controller.refreshMeetingTranscriptionSelectionForAvailability()
-        downloadedBackendOptions = BackendOption.downloaded
+        downloadedBackendOptions = BackendOption.downloadedPrimaryCatalog
         downloadedPostProcOptions = PostProcessorOption.downloaded
     }
 
@@ -362,10 +348,7 @@ struct SettingsView: View {
         if !accessibilityGranted {
             return "Grant Accessibility, then toggle again if needed."
         }
-        if !screenRecordingGranted {
-            return "Adds nearby app text for post-processing. Screen Recording enables OCR context."
-        }
-        return "Adds nearby app text and OCR context. Processed on-device."
+        return "Adds nearby focused-app text to dictation cleanup through Accessibility. No screenshots."
     }
 
     @ViewBuilder
@@ -396,11 +379,17 @@ struct SettingsView: View {
 
     private let customIndicatorPositionLabel = "Custom (drag to reposition)"
 
+    private var availableSettingsPanes: [SettingsPane] {
+        SettingsPane.allCases.filter { pane in
+            pane != .sync || appState.canUseICloudSync
+        }
+    }
+
     private var settingsPanePicker: some View {
         HStack {
             Spacer()
             Picker("", selection: $selectedPane) {
-                ForEach(SettingsPane.allCases) { pane in
+                ForEach(availableSettingsPanes) { pane in
                     Text(pane.title).tag(pane)
                 }
             }
@@ -420,8 +409,6 @@ struct SettingsView: View {
             syncSettingsPane
         case .dictation:
             dictationSettingsPane
-        case .computerUse:
-            computerUseSettingsPane
         case .meetings:
             meetingsSettingsPane
         case .appearance:
@@ -507,7 +494,7 @@ struct SettingsView: View {
                         controller.setICloudSyncEnabledFromSettings(newValue)
                     }
                 }
-                settingsDescription("Sync dictation text, meeting transcripts, notes, summaries, and manual notes with Guesli for iPhone through your private iCloud account. Audio recordings are never synced.")
+                settingsDescription("Sync dictation text, meeting transcripts, notes, summaries, and manual notes through your private iCloud account. Audio recordings are never synced.")
 
                 Divider().background(MuesliTheme.surfaceBorder)
 
@@ -538,39 +525,12 @@ struct SettingsView: View {
                 }
             }
 
-            settingsSection("iPhone Bridge") {
-                settingsRow("Show iOS companion prompt") {
-                    settingsSwitch(isOn: appState.config.showIOSCompanionPrompt) { newValue in
-                        controller.updateConfig { $0.showIOSCompanionPrompt = newValue }
-                    }
-                }
-                settingsDescription("Keep the timeline bridge card available while users connect Guesli on iPhone.")
-
-                Divider().background(MuesliTheme.surfaceBorder)
-
-                HStack(spacing: MuesliTheme.spacing12) {
-                    VStack(alignment: .leading, spacing: MuesliTheme.spacing4) {
-                        Text("Guesli for iPhone")
-                            .font(MuesliTheme.body())
-                            .foregroundStyle(MuesliTheme.textPrimary)
-                        Text("Use iPhone for offline meetings, keyboard dictation, and private iCloud text sync with this Mac.")
-                            .font(MuesliTheme.caption())
-                            .foregroundStyle(MuesliTheme.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: MuesliTheme.spacing16)
-                    actionButton("Open iOS app page") {
-                        NSWorkspace.shared.open(iOSCompanionURL)
-                    }
-                    .frame(width: controlWidth)
-                }
-            }
         }
     }
 
     private var syncStatusText: String {
         if !appState.config.iCloudSyncEnabled {
-            return "Sync is off. Turn it on to bridge this Mac with Guesli for iPhone."
+            return "Sync is off. Turn it on to keep text records in your private iCloud account."
         }
         return appState.iCloudSyncStatus ?? "Private iCloud text sync is ready."
     }
@@ -588,7 +548,7 @@ struct SettingsView: View {
             }
             return "Linked device: \(remoteDeviceName)"
         }
-        return "No linked iPhone yet."
+        return "No linked device yet."
     }
 
     private func syncDeviceLabel(for platform: String) -> String {
@@ -612,18 +572,6 @@ struct SettingsView: View {
                     ) { label in
                         if let option = dictationBackendOptions.first(where: { $0.label == label }) {
                             controller.selectBackend(option)
-                        }
-                    }
-                }
-                if appState.selectedBackend.backend == BackendOption.cohereTranscribe.backend {
-                    Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow("Cohere language") {
-                        settingsMenu(
-                            selection: selectedDictationCohereLanguage.label,
-                            options: CohereTranscribeLanguage.allCases.map(\.label)
-                        ) { label in
-                            guard let language = CohereTranscribeLanguage.allCases.first(where: { $0.label == label }) else { return }
-                            controller.selectDictationCohereLanguage(language)
                         }
                     }
                 }
@@ -802,46 +750,6 @@ struct SettingsView: View {
         }
     }
 
-    private var computerUseSettingsPane: some View {
-        VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
-            settingsSection("Computer Use") {
-                settingsRow("Enable planner", controlWidth: meetingControlWidth) {
-                    settingsSwitch(isOn: appState.config.enableComputerUsePlanner) { newValue in
-                        controller.updateConfig { $0.enableComputerUsePlanner = newValue }
-                    }
-                }
-                Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Account", controlWidth: meetingControlWidth) {
-                    chatGPTAccountControl
-                }
-                Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Planner model", controlWidth: meetingControlWidth) {
-                    settingsModelMenu(
-                        currentModel: appState.config.computerUsePlannerModel,
-                        presets: SummaryModelPreset.computerUsePlannerModels
-                    ) { val in controller.updateConfig { $0.computerUsePlannerModel = val } }
-                }
-                Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Timeout", controlWidth: meetingControlWidth) {
-                    Stepper(
-                        value: Binding(
-                            get: { max(appState.config.computerUseTimeoutSeconds, 1) },
-                            set: { newValue in
-                                controller.updateConfig { $0.computerUseTimeoutSeconds = max(newValue, 1) }
-                            }
-                        ),
-                        in: 1...600,
-                        step: 15
-                    ) {
-                        Text("\(max(appState.config.computerUseTimeoutSeconds, 1)) seconds")
-                            .font(MuesliTheme.body())
-                            .foregroundStyle(MuesliTheme.textPrimary)
-                    }
-                }
-            }
-        }
-    }
-
     private var meetingsSettingsPane: some View {
         VStack(alignment: .leading, spacing: MuesliTheme.spacing24) {
             settingsSection("Meeting Transcription") {
@@ -862,30 +770,6 @@ struct SettingsView: View {
                         }
                     }
                 }
-                Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Processing", controlWidth: meetingControlWidth) {
-                    settingsMenu(
-                        selection: appState.config.resolvedMeetingProcessingMode.label,
-                        options: MeetingProcessingMode.allCases.map(\.label)
-                    ) { label in
-                        guard let mode = MeetingProcessingMode.allCases.first(where: { $0.label == label }) else { return }
-                        controller.updateConfig { $0.meetingProcessingMode = mode.rawValue }
-                    }
-                }
-                if appState.selectedMeetingTranscriptionBackend.backend == BackendOption.cohereTranscribe.backend {
-                    Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow("Cohere language") {
-                        settingsMenu(
-                            selection: selectedMeetingCohereLanguage.label,
-                            options: CohereTranscribeLanguage.allCases.map(\.label)
-                        ) { label in
-                            guard let language = CohereTranscribeLanguage.allCases.first(where: { $0.label == label }) else { return }
-                            controller.selectMeetingCohereLanguage(language)
-                        }
-                    }
-                }
-                Divider().background(MuesliTheme.surfaceBorder)
-                screenContextRow("Meeting context")
             }
 
             settingsSection("Meeting Summaries") {
@@ -1087,12 +971,6 @@ struct SettingsView: View {
             }
 
             settingsSection("Recording") {
-                settingsRow("Auto-record calendar meetings") {
-                    settingsSwitch(isOn: appState.config.autoRecordMeetings) { newValue in
-                        controller.updateConfig { $0.autoRecordMeetings = newValue }
-                    }
-                }
-                Divider().background(MuesliTheme.surfaceBorder)
                 settingsRow("Save meeting recording") {
                     settingsMenu(
                         selection: recordingSaveLabel(for: appState.config.meetingRecordingSavePolicy),
@@ -1120,41 +998,6 @@ struct SettingsView: View {
                     meetingRecordingFolderPicker
                 }
                 settingsDescription("Retranscription uses a temporary WAV copy and removes it afterward.")
-            }
-
-            settingsSection("Auto Export") {
-                settingsRow("Auto-export meetings") {
-                    settingsSwitch(isOn: appState.config.autoExportMarkdownEnabled) { newValue in
-                        controller.updateConfig { $0.autoExportMarkdownEnabled = newValue }
-                    }
-                }
-                if appState.config.autoExportMarkdownEnabled {
-                    Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow("Destination folder") {
-                        autoExportFolderPicker
-                    }
-                    Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow("Content") {
-                        settingsMenu(
-                            selection: appState.config.resolvedAutoExportMarkdownContent.displayName,
-                            options: MeetingExportContent.allCases.map(\.displayName)
-                        ) { label in
-                            guard let content = MeetingExportContent.allCases.first(where: { $0.displayName == label }) else { return }
-                            controller.updateConfig { $0.autoExportMarkdownContent = content.rawValue }
-                        }
-                    }
-                    Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow("File format") {
-                        settingsMenu(
-                            selection: appState.config.resolvedAutoExportFileFormat.displayName,
-                            options: MeetingAutoExportFileFormat.allCases.map(\.displayName)
-                        ) { label in
-                            guard let format = MeetingAutoExportFileFormat.allCases.first(where: { $0.displayName == label }) else { return }
-                            controller.updateConfig { $0.autoExportFileFormat = format.rawValue }
-                        }
-                    }
-                }
-                settingsDescription("Automatically saves each completed meeting to the chosen folder.")
             }
 
             settingsSection("Meeting Notifications") {
@@ -1205,19 +1048,6 @@ struct SettingsView: View {
                 }
                 settingsDescription("Primary button for notifications and Coming Up.")
 
-                Divider().background(MuesliTheme.surfaceBorder)
-
-                settingsRow("Auto-detected meetings") {
-                    settingsSwitch(isOn: appState.config.showMeetingDetectionNotification) { newValue in
-                        controller.updateConfig { $0.showMeetingDetectionNotification = newValue }
-                    }
-                }
-                settingsDescription("Show notifications when a call is detected from browser, camera, microphone, or app audio activity.")
-
-                if appState.config.showMeetingDetectionNotification {
-                    Divider().background(MuesliTheme.surfaceBorder)
-                    mutedMeetingDetectionAppsControl
-                }
             }
 
             settingsSection("Calendars") {
@@ -1245,6 +1075,100 @@ struct SettingsView: View {
             }
 
             settingsSection("Advanced") {
+                settingsRow("Live meeting transcription", controlWidth: meetingControlWidth) {
+                    settingsSwitch(isOn: appState.config.resolvedMeetingProcessingMode == .live) { enabled in
+                        controller.updateConfig {
+                            $0.meetingProcessingMode = enabled
+                                ? MeetingProcessingMode.live.rawValue
+                                : MeetingProcessingMode.post.rawValue
+                        }
+                    }
+                }
+                settingsDescription("Experimental. The default records first and transcribes after the meeting for lower overhead and more reliable final notes.")
+                Divider().background(MuesliTheme.surfaceBorder)
+                settingsRow("Auto-record calendar meetings") {
+                    settingsSwitch(isOn: appState.config.autoRecordMeetings) { newValue in
+                        controller.updateConfig { $0.autoRecordMeetings = newValue }
+                    }
+                }
+                Divider().background(MuesliTheme.surfaceBorder)
+                settingsRow("Auto-detected meeting prompts") {
+                    settingsSwitch(isOn: appState.config.showMeetingDetectionNotification) { newValue in
+                        controller.updateConfig { $0.showMeetingDetectionNotification = newValue }
+                    }
+                }
+                settingsDescription("Detect calls from browser, camera, microphone, or app audio activity. Calendar reminders work independently.")
+                if appState.config.showMeetingDetectionNotification {
+                    Divider().background(MuesliTheme.surfaceBorder)
+                    mutedMeetingDetectionAppsControl
+                }
+                Divider().background(MuesliTheme.surfaceBorder)
+                settingsRow("Auto-export meetings") {
+                    settingsSwitch(isOn: appState.config.autoExportMarkdownEnabled) { newValue in
+                        controller.updateConfig { $0.autoExportMarkdownEnabled = newValue }
+                    }
+                }
+                if appState.config.autoExportMarkdownEnabled {
+                    Divider().background(MuesliTheme.surfaceBorder)
+                    settingsRow("Export folder") {
+                        autoExportFolderPicker
+                    }
+                    Divider().background(MuesliTheme.surfaceBorder)
+                    settingsRow("Export content") {
+                        settingsMenu(
+                            selection: appState.config.resolvedAutoExportMarkdownContent.displayName,
+                            options: MeetingExportContent.allCases.map(\.displayName)
+                        ) { label in
+                            guard let content = MeetingExportContent.allCases.first(where: { $0.displayName == label }) else { return }
+                            controller.updateConfig { $0.autoExportMarkdownContent = content.rawValue }
+                        }
+                    }
+                    Divider().background(MuesliTheme.surfaceBorder)
+                    settingsRow("Export format") {
+                        settingsMenu(
+                            selection: appState.config.resolvedAutoExportFileFormat.displayName,
+                            options: MeetingAutoExportFileFormat.allCases.map(\.displayName)
+                        ) { label in
+                            guard let format = MeetingAutoExportFileFormat.allCases.first(where: { $0.displayName == label }) else { return }
+                            controller.updateConfig { $0.autoExportFileFormat = format.rawValue }
+                        }
+                    }
+                }
+                Divider().background(MuesliTheme.surfaceBorder)
+                settingsRow("Google Meet speaker bridge", controlWidth: meetingControlWidth) {
+                    settingsSwitch(isOn: appState.config.enableMeetSpeakerBridge) { newValue in
+                        controller.setMeetSpeakerBridgeEnabled(newValue)
+                    }
+                }
+                settingsDescription("Optional Chrome extension integration for speaker names. The local bridge listens only while Guesli records an active Google Meet.")
+                if appState.config.enableMeetSpeakerBridge {
+                    Divider().background(MuesliTheme.surfaceBorder)
+                    settingsRow("Pairing token", controlWidth: meetingControlWidth) {
+                        HStack(spacing: MuesliTheme.spacing8) {
+                            Text(String(appState.config.meetSpeakerBridgePairingToken.prefix(8)) + "…")
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(MuesliTheme.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Button("Copy") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(
+                                    appState.config.meetSpeakerBridgePairingToken,
+                                    forType: .string
+                                )
+                            }
+                            .buttonStyle(.bordered)
+                            Button {
+                                controller.regenerateMeetSpeakerBridgePairingToken()
+                            } label: {
+                                Image(systemName: "arrow.clockwise")
+                            }
+                            .buttonStyle(.bordered)
+                            .help("Generate a new pairing token")
+                        }
+                    }
+                    settingsDescription("Paste this token into the extension options. Regenerating it disconnects the old extension configuration.")
+                }
+                Divider().background(MuesliTheme.surfaceBorder)
                 settingsRow("Enable post-meeting hook", controlWidth: meetingControlWidth) {
                     settingsSwitch(isOn: appState.config.meetingHookEnabled) { newValue in
                         controller.updateConfig { $0.meetingHookEnabled = newValue }
@@ -1342,27 +1266,6 @@ struct SettingsView: View {
                 settingsRow("Show next meeting in menu bar") {
                     settingsSwitch(isOn: appState.config.showNextMeetingInMenuBar) { newValue in
                         controller.updateConfig { $0.showNextMeetingInMenuBar = newValue }
-                    }
-                }
-            }
-
-            if appState.config.maraudersMapUnlocked {
-                settingsSection("Marauder\u{2019}s Map") {
-                    settingsRow("Meeting countdown audio") {
-                        maraudersMapControl
-                    }
-                    Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow("") {
-                        Button {
-                            SoundController.stopMaraudersMapClip()
-                            isPreviewingClip = false
-                            controller.resetMaraudersMap()
-                        } label: {
-                            Text("Mischief Managed")
-                                .font(.system(size: 11))
-                                .foregroundColor(MuesliTheme.textSecondary)
-                        }
-                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -1584,75 +1487,6 @@ struct SettingsView: View {
                         .lineLimit(2)
                 }
             }
-        }
-    }
-
-    private var maraudersMapControl: some View {
-        HStack(spacing: MuesliTheme.spacing8) {
-            settingsMenu(
-                selection: SoundController.labelForClip(
-                    id: appState.config.maraudersMapAudioClip,
-                    customPath: appState.config.maraudersMapCustomAudioPath
-                ),
-                options: SoundController.maraudersMapClipLabels
-            ) { label in
-                if label == "Custom\u{2026}" {
-                    pickCustomAudioFile()
-                } else if let preset = SoundController.maraudersMapPresets
-                    .first(where: { $0.label == label }) {
-                    SoundController.stopMaraudersMapClip()
-                    isPreviewingClip = false
-                    controller.updateConfig {
-                        $0.maraudersMapAudioClip = preset.id
-                        $0.maraudersMapCustomAudioPath = nil
-                    }
-                    controller.updateMaraudersMapAudioClip()
-                }
-            }
-            Button {
-                if isPreviewingClip {
-                    SoundController.stopMaraudersMapClip()
-                    isPreviewingClip = false
-                } else {
-                    SoundController.playMaraudersMapClip(
-                        id: appState.config.maraudersMapAudioClip,
-                        customPath: appState.config.maraudersMapCustomAudioPath
-                    ) {
-                        isPreviewingClip = false
-                    }
-                    isPreviewingClip = true
-                }
-            } label: {
-                Image(systemName: isPreviewingClip ? "stop.fill" : "play.fill")
-                    .font(.system(size: 11))
-                    .foregroundColor(MuesliTheme.textSecondary)
-                    .frame(width: 24, height: 24)
-            }
-            .buttonStyle(.plain)
-            .contentShape(Rectangle())
-        }
-    }
-
-    // MARK: - Marauder's Map
-
-    private func pickCustomAudioFile() {
-        let panel = NSOpenPanel()
-        panel.title = "Choose an audio clip"
-        panel.allowedContentTypes = [.mp3, .mpeg4Audio, .wav, .aiff]
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-
-        do {
-            let destPath = try SoundController.importCustomClip(from: url, supportDir: AppIdentity.supportDirectoryURL)
-            controller.updateConfig {
-                $0.maraudersMapAudioClip = SoundController.customClipID
-                $0.maraudersMapCustomAudioPath = destPath
-            }
-            controller.updateMaraudersMapAudioClip()
-        } catch {
-            fputs("[muesli-native] Failed to import custom audio: \(error)\n", stderr)
         }
     }
 

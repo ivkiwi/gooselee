@@ -10,15 +10,6 @@ struct BackendOption: Equatable {
     let description: String
     let recommended: Bool
 
-    static let parakeetUnified = BackendOption(
-        backend: "parakeet-unified",
-        model: "FluidInference/parakeet-unified-en-0.6b-coreml",
-        label: "Parakeet Unified",
-        sizeLabel: "~565 MB",
-        description: "Newest English-focused Parakeet generation with lower error rates and fast offline CoreML inference.",
-        recommended: false
-    )
-
     static let parakeetMultilingual = BackendOption(
         backend: "fluidaudio",
         model: "FluidInference/parakeet-tdt-0.6b-v3-coreml",
@@ -26,51 +17,6 @@ struct BackendOption: Equatable {
         sizeLabel: "~450 MB",
         description: "Multilingual, 25 languages. Runs on Apple Neural Engine.",
         recommended: true
-    )
-
-    static let parakeetEnglish = BackendOption(
-        backend: "fluidaudio",
-        model: "FluidInference/parakeet-tdt-0.6b-v2-coreml",
-        label: "Parakeet v2",
-        sizeLabel: "~450 MB",
-        description: "English-only, highest recall. Runs on Apple Neural Engine.",
-        recommended: false
-    )
-
-    static let whisperSmall = BackendOption(
-        backend: "whisper",
-        model: "small.en",
-        label: "Whisper Small",
-        sizeLabel: "~250 MB",
-        description: "Fast, English-optimized. Runs on Apple Neural Engine via CoreML.",
-        recommended: false
-    )
-
-    static let whisperTinyEnglish = BackendOption(
-        backend: "whisper",
-        model: "tiny.en",
-        label: "Whisper Tiny English",
-        sizeLabel: "~153 MB",
-        description: "Smallest English WhisperKit CoreML model. Quickest local setup.",
-        recommended: false
-    )
-
-    static let whisperMedium = BackendOption(
-        backend: "whisper",
-        model: "medium.en",
-        label: "Whisper Medium",
-        sizeLabel: "~1.5 GB",
-        description: "Better accuracy, English-only. Runs on Apple Neural Engine via CoreML.",
-        recommended: false
-    )
-
-    static let whisperLargeTurbo = BackendOption(
-        backend: "whisper",
-        model: "large-v3-v20240930_626MB",
-        label: "Whisper Large Turbo",
-        sizeLabel: "~626 MB",
-        description: "Highest accuracy, multilingual. Quantized CoreML for faster inference.",
-        recommended: false
     )
 
     static let nemotron35Multilingual = BackendOption(
@@ -91,55 +37,19 @@ struct BackendOption: Equatable {
         recommended: true
     )
 
-    static let cohereTranscribe = BackendOption(
-        backend: "cohere",
-        model: "phequals/cohere-transcribe-coreml-mixed-precision",
-        label: "Cohere Transcribe",
-        sizeLabel: "~3.8 GB",
-        description: "Mixed precision (FP16 encoder + INT8 decoder). 14 languages. High accuracy (#1 Open ASR Leaderboard). Final transcript after stop. May decode hallucinated text during silence — use in quiet environments or with VAD.",
-        recommended: false
-    )
-
-    static let senseVoiceSmall = BackendOption(
-        backend: "sensevoice",
-        model: "FluidInference/sensevoice-small-coreml",
-        label: "SenseVoice Small",
-        sizeLabel: SenseVoiceTranscriber.downloadedModelSizeLabel,
-        description: "FunASR SenseVoiceSmall via FluidAudio. INT8 CoreML/ANE on macOS 14+, 50+ languages. Non-autoregressive with built-in punctuation.",
-        recommended: false
-    )
-
-    // Default alias
-    static let whisper = parakeetMultilingual
-
-    static let parakeetFamily: [BackendOption] = [
-        .parakeetMultilingual, .parakeetUnified, .parakeetEnglish,
+    /// The supported product catalog. Retired selections are migrated by ConfigStore.
+    static let primaryCatalog: [BackendOption] = [
+        .gigaAMV3Russian,
+        .parakeetMultilingual,
+        .nemotron35Multilingual,
     ]
 
-    static let whisperFamily: [BackendOption] = [
-        .whisperTinyEnglish, .whisperSmall, .whisperMedium, .whisperLargeTurbo,
-    ]
-
-    static let qwen3Asr = BackendOption(
-        backend: "qwen",
-        model: "FluidInference/qwen3-asr-0.6b-coreml",
-        label: "Qwen3 ASR",
-        sizeLabel: "~1.3 GB",
-        description: "Multilingual, 52 languages. Slower than Parakeet (~2-3s). First use takes ~30s to warm up.",
-        recommended: false
-    )
-
-    static let experimental: [BackendOption] = [
-        .senseVoiceSmall, .qwen3Asr,
-    ]
-
-    /// Models available for download and use.
-    static let all: [BackendOption] = [.gigaAMV3Russian] + parakeetFamily + whisperFamily + [.cohereTranscribe, .nemotron35Multilingual] + experimental
+    static let all: [BackendOption] = primaryCatalog
 
     /// Curated first-run choices shown in onboarding's "Other models" section.
     /// This is a deliberate hand-picked list, not a derived rule. Experimental models
     /// are excluded by default.
-    static let onboarding: [BackendOption] = [.gigaAMV3Russian, .parakeetMultilingual, .whisperTinyEnglish, .whisperSmall, .cohereTranscribe, .nemotron35Multilingual]
+    static let onboarding: [BackendOption] = primaryCatalog
 
     /// Models coming soon — shown greyed out in the Models tab.
     static let comingSoon: [BackendOption] = []
@@ -147,6 +57,10 @@ struct BackendOption: Equatable {
     /// Only models that have been downloaded and are ready for inference.
     static var downloaded: [BackendOption] {
         all.filter { $0.isDownloaded }
+    }
+
+    static var downloadedPrimaryCatalog: [BackendOption] {
+        primaryCatalog.filter { $0.isDownloaded }
     }
 
     static var downloadedMeetingTranscription: [BackendOption] {
@@ -193,27 +107,14 @@ struct BackendOption: Equatable {
     var isDownloaded: Bool {
         let fm = FileManager.default
         switch backend {
-        case "parakeet-unified":
-            return ManagedASRModelPlans.parakeetUnified().isAvailableLocally(fileManager: fm)
-        case "whisper":
-            return WhisperKitTranscriber.isModelDownloaded(model)
         case "fluidaudio":
-            let plan = model.contains("v2")
-                ? ManagedASRModelPlans.parakeetV2()
-                : ManagedASRModelPlans.parakeetV3()
-            return plan.isAvailableLocally(fileManager: fm)
-        case "qwen":
-            return Qwen3AsrModelStore.isModelDownloaded(fileManager: fm)
+            return ManagedASRModelPlans.parakeetV3().isAvailableLocally(fileManager: fm)
         case "nemotron35":
             let path = fm.homeDirectoryForCurrentUser
                 .appendingPathComponent(".cache/muesli/models/nemotron35-multilingual-2240ms/encoder.mlmodelc/coremldata.bin")
             return fm.fileExists(atPath: path.path)
         case "gigaam_v3":
             return ONNXGigaAMModelStore.isAvailableLocally()
-        case "cohere":
-            return CohereTranscribeModelStore.isAvailableLocally()
-        case "sensevoice":
-            return SenseVoiceTranscriber.isModelDownloaded(fileManager: fm)
         default:
             return false
         }
@@ -290,54 +191,6 @@ enum Nemotron35Language: String, CaseIterable, Codable, Sendable {
     }
 }
 
-/// Qwen3 uses nil for automatic language detection and an ISO code when pinned.
-enum Qwen3AsrLanguage: Hashable, Sendable {
-    case auto
-    case pinned(MuesliQwen3AsrConfig.Language)
-
-    static let defaultLanguage: Self = .auto
-    static var allCases: [Self] {
-        [.auto] + MuesliQwen3AsrConfig.Language.allCases.map(Self.pinned)
-    }
-
-    var label: String {
-        switch self {
-        case .auto: return "Auto-detect"
-        case .pinned(let language): return language.englishName
-        }
-    }
-
-    var rawValue: String {
-        switch self {
-        case .auto: return "auto"
-        case .pinned(let language): return language.rawValue
-        }
-    }
-
-    var pinnedCode: String? {
-        switch self {
-        case .auto: return nil
-        case .pinned(let language): return language.rawValue
-        }
-    }
-
-    static func resolved(_ rawValue: String?) -> Self {
-        let normalized = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard let normalized, !normalized.isEmpty, normalized != "auto" else { return .auto }
-        if let language = MuesliQwen3AsrConfig.Language(rawValue: normalized) {
-            return .pinned(language)
-        }
-        if let language = MuesliQwen3AsrConfig.Language(from: normalized) {
-            return .pinned(language)
-        }
-        return .auto
-    }
-
-    static func resolvedCode(_ rawValue: String?) -> String {
-        resolved(rawValue).rawValue
-    }
-}
-
 /// Optional script filter for multilingual Parakeet v3 decoding.
 enum ParakeetLanguage: String, CaseIterable, Codable, Sendable {
     case auto, english = "en", spanish = "es", french = "fr", german = "de"
@@ -398,15 +251,6 @@ struct SummaryModelPreset {
         SummaryModelPreset(id: "gpt-5.4-mini", label: "GPT-5.4 Mini"),
         SummaryModelPreset(id: "gpt-5.6-sol", label: "GPT-5.6 Sol"),
         SummaryModelPreset(id: "gpt-5.6-luna", label: "GPT-5.6 Luna"),
-    ]
-
-    static let computerUsePlannerModels: [SummaryModelPreset] = [
-        SummaryModelPreset(id: "gpt-5.6-sol", label: "GPT-5.6 Sol (default)"),
-        SummaryModelPreset(id: "gpt-5.6-terra", label: "GPT-5.6 Terra"),
-        SummaryModelPreset(id: "gpt-5.6-luna", label: "GPT-5.6 Luna"),
-        SummaryModelPreset(id: "gpt-5.4", label: "GPT-5.4"),
-        SummaryModelPreset(id: "gpt-5.4-mini", label: "GPT-5.4 Mini"),
-        SummaryModelPreset(id: "gpt-5.2", label: "GPT-5.2"),
     ]
 
     static let openRouterModels: [SummaryModelPreset] = [
@@ -1015,7 +859,6 @@ struct HotkeyConfig: Codable, Equatable {
     }
 
     static let `default` = HotkeyConfig()
-    static let computerUseDefault = HotkeyConfig(keyCode: 54, label: "Right Cmd")
     static let meetingRecordingDefault = HotkeyConfig(
         keyCode: UInt16.max,
         label: "⌘⇧R",
@@ -1023,9 +866,6 @@ struct HotkeyConfig: Codable, Equatable {
         combinationKeyCode: 15
     )
 
-    static func computerUseDefault(avoiding dictationHotkey: HotkeyConfig) -> HotkeyConfig {
-        dictationHotkey.keyCode == computerUseDefault.keyCode ? .default : .computerUseDefault
-    }
 }
 
 enum OnboardingUseCase: String, Codable, CaseIterable {
@@ -1106,37 +946,26 @@ struct AppConfig: Codable {
     static let defaultChatGPTMeetingCleanupModel = "gpt-5.6-terra"
 
     var dictationHotkey: HotkeyConfig = .default
-    var computerUseHotkey: HotkeyConfig = .computerUseDefault
-    var enableComputerUseHotkey: Bool = false
     var meetingRecordingHotkey: HotkeyConfig = .meetingRecordingDefault
     var enableMeetingRecordingHotkey: Bool = false
-    var computerUseHotkeyDefaultDisabledMigrationApplied: Bool = true
-    var enableComputerUsePlanner: Bool = true
-    var computerUsePlannerModel: String = ""
-    var computerUseTimeoutSeconds: Int = 120
     var sttBackend: String = BackendOption.gigaAMV3Russian.backend
     var sttModel: String = BackendOption.gigaAMV3Russian.model
     var dictationInputDeviceUID: String? = nil
-    var cohereLanguageDictation: String = CohereTranscribeLanguage.defaultLanguage.rawValue
-    var cohereLanguageMeetings: String = CohereTranscribeLanguage.defaultLanguage.rawValue
-    private var legacyCohereLanguage: String? = nil
     var nemotron35Language: String = Nemotron35Language.defaultLanguage.rawValue
-    var qwen3AsrLanguage: String = Qwen3AsrLanguage.defaultLanguage.rawValue
     var parakeetLanguage: String = ParakeetLanguage.defaultLanguage.rawValue
     var meetingTranscriptionBackend: String = BackendOption.gigaAMV3Russian.backend
     var meetingTranscriptionModel: String = BackendOption.gigaAMV3Russian.model
     var preferredMeetingBrowserBundleID: String = ""
     var meetingSummaryBackend: String = MeetingSummaryBackendOption.chatGPT.backend
-    var defaultMeetingTemplateID: String = MeetingTemplates.autoID
+    var defaultMeetingTemplateID: String = MeetingTemplates.simpleID
     var meetingProcessingMode: String = MeetingProcessingMode.post.rawValue
-    var whisperModel: String = BackendOption.whisper.model
     var idleTimeout: Double = 120
     var autoRecordMeetings: Bool = false
     var upcomingMeetingsDayCount: Int = UpcomingMeetingsWindow.defaultDayCount
     var showScheduledMeetingNotifications: Bool = true
     var scheduledMeetingNotificationLeadTime: ScheduledMeetingNotificationLeadTime = .atStart
     var meetingJoinDefaultAction: MeetingJoinDefaultAction = .fallback
-    var showMeetingDetectionNotification: Bool = true
+    var showMeetingDetectionNotification: Bool = false
     var mutedMeetingDetectionAppBundleIDs: [String] = []
     var meetingRecordingSavePolicy: MeetingRecordingSavePolicy = .never
     var meetingRecordingFolderPath: String = ""
@@ -1145,7 +974,6 @@ struct AppConfig: Codable {
     var enableDoubleTapDictation: Bool = true
     var pasteShortcut: PasteShortcut = .commandV
     var hotkeyTriggerThresholdMS: Int = HotkeyTriggerTiming.defaultThresholdMilliseconds
-    var computerUseHotkeyTriggerThresholdMS: Int = HotkeyTriggerTiming.defaultThresholdMilliseconds
     var meetingRecordingHotkeyTriggerThresholdMS: Int = HotkeyTriggerTiming.defaultMeetingThresholdMilliseconds
     var launchAtLogin: Bool = false
     var openDashboardOnLaunch: Bool = true
@@ -1189,9 +1017,6 @@ struct AppConfig: Codable {
     var recordingColorHex: String = "1e1e2e"   // Catppuccin Mocha base, without #
     var menuBarIcon: String = "muesli"
     var showNextMeetingInMenuBar: Bool = true
-    var maraudersMapUnlocked: Bool = false
-    var maraudersMapAudioClip: String = "bbc_world_news"
-    var maraudersMapCustomAudioPath: String?
     var hiddenCalendarEventIDs: [String] = []
     var hiddenCalendarEventSourceHints: [String: String] = [:]
     var disabledCalendarIDs: [String] = []
@@ -1209,35 +1034,22 @@ struct AppConfig: Codable {
     var meetingHookEnabled: Bool = false
     var meetingHookPath: String = ""
     var meetingHookTimeoutSeconds: Int = 30
+    var enableMeetSpeakerBridge: Bool = false
+    var meetSpeakerBridgePairingToken: String = ""
     var autoExportMarkdownEnabled: Bool = false
     var autoExportMarkdownFolderPath: String = ""
     var autoExportMarkdownContent: String = MeetingExportContent.notes.rawValue
     var autoExportFileFormat: String = MeetingAutoExportFileFormat.markdown.rawValue
     var iCloudSyncEnabled: Bool = false
-    var showIOSCompanionPrompt: Bool = true
-    var contributionPromptNextWordCount: Int?
-    var contributionPromptNextMeetingCount: Int?
-    var contributionGitHubStarClicked: Bool = false
-    var contributionBuyMeCoffeeClicked: Bool = false
 
     enum CodingKeys: String, CodingKey {
         case dictationHotkey = "dictation_hotkey"
-        case computerUseHotkey = "computer_use_hotkey"
-        case enableComputerUseHotkey = "enable_computer_use_hotkey"
         case meetingRecordingHotkey = "meeting_recording_hotkey"
         case enableMeetingRecordingHotkey = "enable_meeting_recording_hotkey"
-        case computerUseHotkeyDefaultDisabledMigrationApplied = "computer_use_hotkey_default_disabled_migration_applied"
-        case enableComputerUsePlanner = "enable_computer_use_planner"
-        case computerUsePlannerModel = "computer_use_planner_model"
-        case computerUseTimeoutSeconds = "computer_use_timeout_seconds"
         case sttBackend = "stt_backend"
         case sttModel = "stt_model"
         case dictationInputDeviceUID = "dictation_input_device_uid"
-        case legacyCohereLanguage = "cohere_language"
-        case cohereLanguageDictation = "cohere_language_dictation"
-        case cohereLanguageMeetings = "cohere_language_meetings"
         case nemotron35Language = "nemotron35_language"
-        case qwen3AsrLanguage = "qwen3_asr_language"
         case parakeetLanguage = "parakeet_language"
         case meetingTranscriptionBackend = "meeting_transcription_backend"
         case meetingTranscriptionModel = "meeting_transcription_model"
@@ -1245,7 +1057,6 @@ struct AppConfig: Codable {
         case meetingSummaryBackend = "meeting_summary_backend"
         case defaultMeetingTemplateID = "default_meeting_template_id"
         case meetingProcessingMode = "meeting_processing_mode"
-        case whisperModel = "whisper_model"
         case idleTimeout = "idle_timeout"
         case autoRecordMeetings = "auto_record_meetings"
         case upcomingMeetingsDayCount = "upcoming_meetings_day_count"
@@ -1261,7 +1072,6 @@ struct AppConfig: Codable {
         case enableDoubleTapDictation = "enable_double_tap_dictation"
         case pasteShortcut = "paste_shortcut"
         case hotkeyTriggerThresholdMS = "hotkey_trigger_threshold_ms"
-        case computerUseHotkeyTriggerThresholdMS = "computer_use_hotkey_trigger_threshold_ms"
         case meetingRecordingHotkeyTriggerThresholdMS = "meeting_recording_hotkey_trigger_threshold_ms"
         case launchAtLogin = "launch_at_login"
         case openDashboardOnLaunch = "open_dashboard_on_launch"
@@ -1303,9 +1113,6 @@ struct AppConfig: Codable {
         case recordingColorHex = "recording_color_hex"
         case menuBarIcon = "menu_bar_icon"
         case showNextMeetingInMenuBar = "show_next_meeting_in_menu_bar"
-        case maraudersMapUnlocked = "marauders_map_unlocked"
-        case maraudersMapAudioClip = "marauders_map_audio_clip"
-        case maraudersMapCustomAudioPath = "marauders_map_custom_audio_path"
         case hiddenCalendarEventIDs = "hidden_calendar_event_ids"
         case hiddenCalendarEventSourceHints = "hidden_calendar_event_source_hints"
         case disabledCalendarIDs = "disabled_calendar_ids"
@@ -1323,16 +1130,13 @@ struct AppConfig: Codable {
         case meetingHookEnabled = "meeting_hook_enabled"
         case meetingHookPath = "meeting_hook_path"
         case meetingHookTimeoutSeconds = "meeting_hook_timeout_seconds"
+        case enableMeetSpeakerBridge = "enable_meet_speaker_bridge"
+        case meetSpeakerBridgePairingToken = "meet_speaker_bridge_pairing_token"
         case autoExportMarkdownEnabled = "auto_export_markdown_enabled"
         case autoExportMarkdownFolderPath = "auto_export_markdown_folder_path"
         case autoExportMarkdownContent = "auto_export_markdown_content"
         case autoExportFileFormat = "auto_export_file_format"
         case iCloudSyncEnabled = "icloud_sync_enabled"
-        case showIOSCompanionPrompt = "show_ios_companion_prompt"
-        case contributionPromptNextWordCount = "contribution_prompt_next_word_count"
-        case contributionPromptNextMeetingCount = "contribution_prompt_next_meeting_count"
-        case contributionGitHubStarClicked = "contribution_github_star_clicked"
-        case contributionBuyMeCoffeeClicked = "contribution_buy_me_coffee_clicked"
     }
 
     init() {}
@@ -1341,44 +1145,21 @@ struct AppConfig: Codable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let defaults = AppConfig()
         dictationHotkey = (try? c.decode(HotkeyConfig.self, forKey: .dictationHotkey)) ?? defaults.dictationHotkey
-        computerUseHotkey = (try? c.decode(HotkeyConfig.self, forKey: .computerUseHotkey))
-            ?? HotkeyConfig.computerUseDefault(avoiding: dictationHotkey)
-        let hasAppliedComputerUseHotkeyDefaultMigration = c.contains(.computerUseHotkeyDefaultDisabledMigrationApplied)
-        enableComputerUseHotkey = hasAppliedComputerUseHotkeyDefaultMigration
-            ? ((try? c.decode(Bool.self, forKey: .enableComputerUseHotkey)) ?? defaults.enableComputerUseHotkey)
-            : false
-        computerUseHotkeyDefaultDisabledMigrationApplied = true
         meetingRecordingHotkey = (try? c.decode(HotkeyConfig.self, forKey: .meetingRecordingHotkey)) ?? defaults.meetingRecordingHotkey
         enableMeetingRecordingHotkey = (try? c.decode(Bool.self, forKey: .enableMeetingRecordingHotkey)) ?? defaults.enableMeetingRecordingHotkey
-        enableComputerUsePlanner = (try? c.decode(Bool.self, forKey: .enableComputerUsePlanner)) ?? defaults.enableComputerUsePlanner
-        computerUsePlannerModel = SummaryModelPreset.migratedFromGPT55(
-            (try? c.decode(String.self, forKey: .computerUsePlannerModel)) ?? defaults.computerUsePlannerModel
-        )
-        computerUseTimeoutSeconds = (try? c.decode(Int.self, forKey: .computerUseTimeoutSeconds)) ?? defaults.computerUseTimeoutSeconds
         sttBackend = (try? c.decode(String.self, forKey: .sttBackend)) ?? defaults.sttBackend
         sttModel = (try? c.decode(String.self, forKey: .sttModel)) ?? defaults.sttModel
         dictationInputDeviceUID = try? c.decode(String.self, forKey: .dictationInputDeviceUID)
-        let legacyCohereLanguage = try? c.decode(String.self, forKey: .legacyCohereLanguage)
-        let cohereLanguageDictationRaw = c.contains(.cohereLanguageDictation)
-            ? (try? c.decode(String.self, forKey: .cohereLanguageDictation))
-            : legacyCohereLanguage
-        let cohereLanguageMeetingsRaw = c.contains(.cohereLanguageMeetings)
-            ? (try? c.decode(String.self, forKey: .cohereLanguageMeetings))
-            : legacyCohereLanguage
-        cohereLanguageDictation = CohereTranscribeLanguage.resolvedCode(cohereLanguageDictationRaw)
-        cohereLanguageMeetings = CohereTranscribeLanguage.resolvedCode(cohereLanguageMeetingsRaw)
         nemotron35Language = Nemotron35Language.resolvedCode(try? c.decode(String.self, forKey: .nemotron35Language))
-        qwen3AsrLanguage = Qwen3AsrLanguage.resolvedCode(try? c.decode(String.self, forKey: .qwen3AsrLanguage))
         parakeetLanguage = ParakeetLanguage.resolvedCode(try? c.decode(String.self, forKey: .parakeetLanguage))
         meetingTranscriptionBackend = (try? c.decode(String.self, forKey: .meetingTranscriptionBackend)) ?? sttBackend
         meetingTranscriptionModel = (try? c.decode(String.self, forKey: .meetingTranscriptionModel)) ?? sttModel
         preferredMeetingBrowserBundleID = (try? c.decode(String.self, forKey: .preferredMeetingBrowserBundleID)) ?? defaults.preferredMeetingBrowserBundleID
         meetingSummaryBackend = (try? c.decode(String.self, forKey: .meetingSummaryBackend)) ?? defaults.meetingSummaryBackend
-        defaultMeetingTemplateID = (try? c.decode(String.self, forKey: .defaultMeetingTemplateID)) ?? defaults.defaultMeetingTemplateID
+        defaultMeetingTemplateID = (try? c.decode(String.self, forKey: .defaultMeetingTemplateID)) ?? MeetingTemplates.autoID
         meetingProcessingMode = MeetingProcessingMode
             .resolved(try? c.decode(String.self, forKey: .meetingProcessingMode))
             .rawValue
-        whisperModel = (try? c.decode(String.self, forKey: .whisperModel)) ?? defaults.whisperModel
         idleTimeout = (try? c.decode(Double.self, forKey: .idleTimeout)) ?? defaults.idleTimeout
         autoRecordMeetings = (try? c.decode(Bool.self, forKey: .autoRecordMeetings)) ?? defaults.autoRecordMeetings
         if c.contains(.upcomingMeetingsDayCount) {
@@ -1408,14 +1189,10 @@ struct AppConfig: Codable {
             .rawValue
         darkMode = (try? c.decode(Bool.self, forKey: .darkMode)) ?? defaults.darkMode
         iCloudSyncEnabled = (try? c.decode(Bool.self, forKey: .iCloudSyncEnabled)) ?? defaults.iCloudSyncEnabled
-        showIOSCompanionPrompt = (try? c.decode(Bool.self, forKey: .showIOSCompanionPrompt)) ?? defaults.showIOSCompanionPrompt
         enableDoubleTapDictation = (try? c.decode(Bool.self, forKey: .enableDoubleTapDictation)) ?? defaults.enableDoubleTapDictation
         pasteShortcut = (try? c.decode(PasteShortcut.self, forKey: .pasteShortcut)) ?? defaults.pasteShortcut
         hotkeyTriggerThresholdMS = HotkeyTriggerTiming.clampedMilliseconds(
             (try? c.decode(Int.self, forKey: .hotkeyTriggerThresholdMS)) ?? defaults.hotkeyTriggerThresholdMS
-        )
-        computerUseHotkeyTriggerThresholdMS = HotkeyTriggerTiming.clampedMilliseconds(
-            (try? c.decode(Int.self, forKey: .computerUseHotkeyTriggerThresholdMS)) ?? hotkeyTriggerThresholdMS
         )
         meetingRecordingHotkeyTriggerThresholdMS = HotkeyTriggerTiming.clampedMilliseconds(
             (try? c.decode(Int.self, forKey: .meetingRecordingHotkeyTriggerThresholdMS))
@@ -1481,9 +1258,6 @@ struct AppConfig: Codable {
         recordingColorHex = (try? c.decode(String.self, forKey: .recordingColorHex)) ?? defaults.recordingColorHex
         menuBarIcon = (try? c.decode(String.self, forKey: .menuBarIcon)) ?? defaults.menuBarIcon
         showNextMeetingInMenuBar = (try? c.decode(Bool.self, forKey: .showNextMeetingInMenuBar)) ?? defaults.showNextMeetingInMenuBar
-        maraudersMapUnlocked = (try? c.decode(Bool.self, forKey: .maraudersMapUnlocked)) ?? defaults.maraudersMapUnlocked
-        maraudersMapAudioClip = (try? c.decode(String.self, forKey: .maraudersMapAudioClip)) ?? defaults.maraudersMapAudioClip
-        maraudersMapCustomAudioPath = try? c.decode(String.self, forKey: .maraudersMapCustomAudioPath)
         hiddenCalendarEventIDs = (try? c.decode([String].self, forKey: .hiddenCalendarEventIDs)) ?? defaults.hiddenCalendarEventIDs
         hiddenCalendarEventSourceHints = (try? c.decode(
             [String: String].self,
@@ -1521,32 +1295,18 @@ struct AppConfig: Codable {
         meetingHookEnabled = (try? c.decode(Bool.self, forKey: .meetingHookEnabled)) ?? defaults.meetingHookEnabled
         meetingHookPath = (try? c.decode(String.self, forKey: .meetingHookPath)) ?? defaults.meetingHookPath
         meetingHookTimeoutSeconds = (try? c.decode(Int.self, forKey: .meetingHookTimeoutSeconds)) ?? defaults.meetingHookTimeoutSeconds
+        enableMeetSpeakerBridge = (try? c.decode(Bool.self, forKey: .enableMeetSpeakerBridge)) ?? defaults.enableMeetSpeakerBridge
+        meetSpeakerBridgePairingToken = (try? c.decode(String.self, forKey: .meetSpeakerBridgePairingToken)) ?? defaults.meetSpeakerBridgePairingToken
         autoExportMarkdownEnabled = (try? c.decode(Bool.self, forKey: .autoExportMarkdownEnabled)) ?? defaults.autoExportMarkdownEnabled
         autoExportMarkdownFolderPath = (try? c.decode(String.self, forKey: .autoExportMarkdownFolderPath)) ?? defaults.autoExportMarkdownFolderPath
         let decodedAutoExportMarkdownContent = (try? c.decode(String.self, forKey: .autoExportMarkdownContent)) ?? defaults.autoExportMarkdownContent
         autoExportMarkdownContent = MeetingExportContent(rawValue: decodedAutoExportMarkdownContent)?.rawValue ?? defaults.autoExportMarkdownContent
         let decodedAutoExportFileFormat = (try? c.decode(String.self, forKey: .autoExportFileFormat)) ?? defaults.autoExportFileFormat
         autoExportFileFormat = MeetingAutoExportFileFormat(rawValue: decodedAutoExportFileFormat)?.rawValue ?? defaults.autoExportFileFormat
-        contributionPromptNextWordCount = try? c.decode(Int.self, forKey: .contributionPromptNextWordCount)
-        contributionPromptNextMeetingCount = try? c.decode(Int.self, forKey: .contributionPromptNextMeetingCount)
-        contributionGitHubStarClicked = (try? c.decode(Bool.self, forKey: .contributionGitHubStarClicked)) ?? defaults.contributionGitHubStarClicked
-        contributionBuyMeCoffeeClicked = (try? c.decode(Bool.self, forKey: .contributionBuyMeCoffeeClicked)) ?? defaults.contributionBuyMeCoffeeClicked
-    }
-
-    var resolvedCohereLanguageDictation: CohereTranscribeLanguage {
-        CohereTranscribeLanguage.resolved(cohereLanguageDictation)
-    }
-
-    var resolvedCohereLanguageMeetings: CohereTranscribeLanguage {
-        CohereTranscribeLanguage.resolved(cohereLanguageMeetings)
     }
 
     var resolvedNemotron35Language: Nemotron35Language {
         Nemotron35Language.resolved(nemotron35Language)
-    }
-
-    var resolvedQwen3AsrLanguage: Qwen3AsrLanguage {
-        Qwen3AsrLanguage.resolved(qwen3AsrLanguage)
     }
 
     var resolvedParakeetLanguage: ParakeetLanguage {

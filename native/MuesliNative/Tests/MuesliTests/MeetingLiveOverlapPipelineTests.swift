@@ -9,15 +9,15 @@ struct MeetingLiveOverlapPipelineTests {
     @Test("meeting backend selection drives GigaAM chunking even when dictation backend differs")
     func meetingBackendSelectionDrivesChunking() throws {
         var config = AppConfig()
-        config.sttBackend = BackendOption.whisperTinyEnglish.backend
-        config.sttModel = BackendOption.whisperTinyEnglish.model
+        config.sttBackend = BackendOption.parakeetMultilingual.backend
+        config.sttModel = BackendOption.parakeetMultilingual.model
         config.meetingTranscriptionBackend = BackendOption.gigaAMV3Russian.backend
         config.meetingTranscriptionModel = BackendOption.gigaAMV3Russian.model
 
         let resolved = try #require(MuesliController.availableMeetingTranscriptionBackend(
             config: config,
-            dictationBackend: .whisperTinyEnglish,
-            downloadedOptions: [.whisperTinyEnglish, .gigaAMV3Russian]
+            dictationBackend: .parakeetMultilingual,
+            downloadedOptions: [.parakeetMultilingual, .gigaAMV3Russian]
         ))
         let chunking = MeetingSession.liveChunkingConfiguration(for: resolved)
 
@@ -396,7 +396,7 @@ struct MeetingLiveOverlapPipelineTests {
         let session = MeetingSession(
             title: "Test",
             calendarEventID: nil,
-            backend: .whisper,
+            backend: .parakeetMultilingual,
             runtime: RuntimePaths(
                 repoRoot: FileManager.default.temporaryDirectory,
                 menuIcon: nil,
@@ -413,7 +413,7 @@ struct MeetingLiveOverlapPipelineTests {
 
         session.setRecordingForTesting(true)
 
-        #expect(!session.updateBackend(.whisper))
+        #expect(!session.updateBackend(.parakeetMultilingual))
         #expect(session.currentBackendForTesting() == .gigaAMV3Russian)
     }
 #endif

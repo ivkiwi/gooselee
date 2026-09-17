@@ -34,17 +34,12 @@ actor TranscriptionCoordinator {
     private static let defaultDiarizerLoadOperationTimeout: Duration = .seconds(300)
 
     static let explicitlyRoutedBackendIdentifiers: Set<String> = [
-        "whisper", "nemotron35", "gigaam_v3", "parakeet-unified", "qwen", "cohere", "sensevoice",
+        "fluidaudio", "nemotron35", "gigaam_v3",
     ]
 
     private let fluidTranscriber = FluidAudioTranscriber()
-    private let parakeetUnifiedTranscriber = ParakeetUnifiedTranscriber()
-    private let whisperTranscriber = WhisperKitTranscriber()
-    private var _qwen3Transcriber: Any?
     private var _qwen3PostProcessor: Any?
-    private var _cohereTranscriber: Any?
     private let onnxGigaAMTranscriber = ONNXGigaAMTranscriber()
-    private let senseVoiceTranscriber = SenseVoiceTranscriber()
     private var vadManager: VadManager?
     private var diarizerManager: DiarizerManager?
     private var vadLoadTask: Task<Void, Never>?
@@ -58,7 +53,6 @@ actor TranscriptionCoordinator {
     private let requiredBackendLoader: RequiredBackendLoader?
     private let diarizerLoadOperationTimeout: Duration
     private var activeBackend: String?
-    private var qwen3AsrLanguage: Qwen3AsrLanguage = .auto
     private var parakeetLanguage: ParakeetLanguage = .auto
 
     private var _nemotron35Transcriber: Any?
@@ -102,42 +96,12 @@ actor TranscriptionCoordinator {
         }
     }
 
-    func unloadParakeetUnifiedTranscriber() async {
-        await parakeetUnifiedTranscriber.shutdown()
-    }
-
-    func unloadFluidAudioTranscriber(version: AsrModelVersion) async {
-        await fluidTranscriber.shutdown(ifLoadedVersion: version)
-    }
-
-    func unloadWhisperTranscriber() async {
-        await whisperTranscriber.shutdown()
-    }
-
-    func unloadSenseVoiceTranscriber() async {
-        await senseVoiceTranscriber.shutdown()
-    }
-
-    func unloadQwen3Transcriber() async {
-        if #available(macOS 15, *), let transcriber = _qwen3Transcriber as? Qwen3AsrTranscriber {
-            await transcriber.shutdown()
-        }
-    }
-
-    func setQwen3AsrLanguage(_ language: Qwen3AsrLanguage) {
-        qwen3AsrLanguage = language
+    func unloadFluidAudioTranscriber() async {
+        await fluidTranscriber.shutdown()
     }
 
     func setParakeetLanguage(_ language: ParakeetLanguage) {
         parakeetLanguage = language
-    }
-
-    @available(macOS 15, *)
-    private var qwen3Transcriber: Qwen3AsrTranscriber {
-        if _qwen3Transcriber == nil {
-            _qwen3Transcriber = Qwen3AsrTranscriber()
-        }
-        return _qwen3Transcriber as! Qwen3AsrTranscriber
     }
 
     private var postProcessorModelURL: URL = PostProcessorOption.defaultOption.modelURL
@@ -234,14 +198,6 @@ actor TranscriptionCoordinator {
         }
     }
 
-    @available(macOS 15, *)
-    private var cohereTranscriber: CohereTranscribeTranscriber {
-        if _cohereTranscriber == nil {
-            _cohereTranscriber = CohereTranscribeTranscriber()
-        }
-        return _cohereTranscriber as! CohereTranscribeTranscriber
-    }
-
     func preload(
         backend: BackendOption,
         enablePostProcessor: Bool = false,
@@ -280,18 +236,7 @@ actor TranscriptionCoordinator {
         } else {
             switch backend.backend {
         case "fluidaudio":
-            let version: AsrModelVersion = backend.model.contains("v2") ? .v2 : .v3
-            try await fluidTranscriber.loadModels(version: version, progress: progress, progressSnapshot: progressSnapshot)
-        case "parakeet-unified":
-            try await parakeetUnifiedTranscriber.loadModels(progress: progress, progressSnapshot: progressSnapshot)
-        case "whisper":
-            try await whisperTranscriber.loadModel(modelName: backend.model, progress: progress, progressSnapshot: progressSnapshot)
-            // Warmup ANE/GPU so first dictation doesn't pay CoreML compilation cost
-            fputs("[muesli-native] WhisperKit warmup: running silent audio for CoreML compilation...\n", stderr)
-            progress?(0.9, "Warming up model...")
-            try await whisperTranscriber.warmup()
-            fputs("[muesli-native] WhisperKit warmup complete\n", stderr)
-            progress?(1.0, nil)
+            try await fluidTranscriber.loadModels(progress: progress, progressSnapshot: progressSnapshot)
         case "nemotron35":
             if #available(macOS 15, *) {
                 let transcriber = try await getLoadedNemotron35Transcriber(progress: progress)
@@ -308,24 +253,6 @@ actor TranscriptionCoordinator {
             }
         case "gigaam_v3":
             try await onnxGigaAMTranscriber.loadModels(progress: progress)
-        case "qwen":
-            if #available(macOS 15, *) {
-                try await qwen3Transcriber.loadModels(progress: progress, progressSnapshot: progressSnapshot)
-            } else {
-                throw NSError(domain: "MuesliTranscriptionRuntime", code: 2, userInfo: [
-                    NSLocalizedDescriptionKey: "Qwen3 ASR requires macOS 15 or later.",
-                ])
-            }
-        case "cohere":
-            if #available(macOS 15, *) {
-                try await cohereTranscriber.prepare(progress: progress)
-            } else {
-                throw NSError(domain: "MuesliTranscriptionRuntime", code: 4, userInfo: [
-                    NSLocalizedDescriptionKey: "Cohere Transcribe requires macOS 15 or later.",
-                ])
-            }
-        case "sensevoice":
-            try await senseVoiceTranscriber.loadModels(progress: progress, progressSnapshot: progressSnapshot)
         default:
             throw NSError(domain: "MuesliTranscriptionRuntime", code: 5, userInfo: [
                 NSLocalizedDescriptionKey: "Unknown transcription backend: \(backend.backend)",
@@ -548,26 +475,12 @@ actor TranscriptionCoordinator {
     func transcribeDictation(
         at url: URL,
         backend: BackendOption,
-        cohereLanguage: CohereTranscribeLanguage = CohereTranscribeLanguage.defaultLanguage,
         enablePostProcessor: Bool = false,
         customWords: [[String: Any]] = [],
         appContext: String? = nil
     ) async throws -> SpeechTranscriptionResult {
         // Qwen3 post-processing is intentionally dictation-only. Meeting transcription should keep raw backend/Parakeet output.
-        // Cohere decodes hallucinated text from silence — skip if VAD detects no speech
-        if backend.backend == "cohere", let vadManager {
-            do {
-                let vadResults = try await vadManager.process(url)
-                let hasSpeech = vadResults.contains { $0.probability > 0.5 }
-                if !hasSpeech {
-                    fputs("[muesli-native] VAD: dictation is silent, skipping Cohere transcription\n", stderr)
-                    return SpeechTranscriptionResult(text: "", segments: [])
-                }
-            } catch {
-                fputs("[muesli-native] VAD check failed, transcribing anyway: \(error)\n", stderr)
-            }
-        }
-        var result = try await route(url: url, backend: backend, cohereLanguage: cohereLanguage)
+        var result = try await route(url: url, backend: backend)
         result = removeArtifacts(result)
         if !result.text.isEmpty {
             Qwen3PostProcessorLogging.logVerbose("Dictation raw transcript after artifact cleanup: \(result.text)")
@@ -593,11 +506,10 @@ actor TranscriptionCoordinator {
     func transcribeMeeting(
         at url: URL,
         samples: [Float]? = nil,
-        backend: BackendOption,
-        cohereLanguage: CohereTranscribeLanguage = CohereTranscribeLanguage.defaultLanguage
+        backend: BackendOption
     ) async throws -> SpeechTranscriptionResult {
         // Meetings intentionally skip Qwen/custom-word post-processing. Keep deterministic artifact/filler cleanup only.
-        cleanMeetingTranscript(try await route(url: url, samples: samples, backend: backend, cohereLanguage: cohereLanguage))
+        cleanMeetingTranscript(try await route(url: url, samples: samples, backend: backend))
     }
 
     func transcribeMeetingBatchWithONNXGigaAM(samplesBatch: [[Float]]) async throws -> [SpeechTranscriptionResult] {
@@ -607,8 +519,7 @@ actor TranscriptionCoordinator {
 
     func transcribeMeetingChunk(
         at url: URL,
-        backend: BackendOption,
-        cohereLanguage: CohereTranscribeLanguage = CohereTranscribeLanguage.defaultLanguage
+        backend: BackendOption
     ) async throws -> SpeechTranscriptionResult {
         // Meeting chunks intentionally skip Qwen/custom-word post-processing for reconciliation.
         // Run VAD to skip silent chunks (prevents hallucinations)
@@ -624,7 +535,7 @@ actor TranscriptionCoordinator {
                 fputs("[muesli-native] VAD check failed, transcribing anyway: \(error)\n", stderr)
             }
         }
-        return cleanMeetingTranscript(try await route(url: url, backend: backend, cohereLanguage: cohereLanguage))
+        return cleanMeetingTranscript(try await route(url: url, backend: backend))
     }
 
     func diarizeSystemAudio(at url: URL) async throws -> DiarizationResult? {
@@ -668,19 +579,14 @@ actor TranscriptionCoordinator {
         didDiarizerLoadTimeOut = false
         resumeAllDiarizerLoadWaiters(with: .cancelled)
         await fluidTranscriber.shutdown()
-        await parakeetUnifiedTranscriber.shutdown()
-        await whisperTranscriber.shutdown()
         await onnxGigaAMTranscriber.shutdown()
-        await senseVoiceTranscriber.shutdown()
         if #available(macOS 15, *) {
             if let nemotron35 = _nemotron35Transcriber as? Nemotron35StreamingTranscriber {
                 await nemotron35.shutdown()
             }
-            await qwen3Transcriber.shutdown()
             if let postProcessor = _qwen3PostProcessor as? Qwen3PostProcessor {
                 await postProcessor.shutdown()
             }
-            await cohereTranscriber.shutdown()
         }
     }
 
@@ -812,26 +718,19 @@ actor TranscriptionCoordinator {
     private func route(
         url: URL,
         samples: [Float]? = nil,
-        backend: BackendOption,
-        cohereLanguage: CohereTranscribeLanguage
+        backend: BackendOption
     ) async throws -> SpeechTranscriptionResult {
         switch backend.backend {
-        case "whisper":
-            return try await transcribeWithWhisperKit(url: url)
         case "nemotron35":
             return try await transcribeWithNemotron35(url: url, samples: samples)
         case "gigaam_v3":
             return try await transcribeWithONNXGigaAM(url: url, samples: samples)
-        case "parakeet-unified":
-            return try await transcribeWithParakeetUnified(url: url, samples: samples)
-        case "qwen":
-            return try await transcribeWithQwen3(url: url, samples: samples)
-        case "cohere":
-            return try await transcribeWithCohere(url: url, samples: samples, language: cohereLanguage)
-        case "sensevoice":
-            return try await transcribeWithSenseVoice(url: url, samples: samples)
-        default:
+        case "fluidaudio":
             return try await transcribeWithFluidAudio(url: url, language: parakeetLanguage)
+        default:
+            throw NSError(domain: "MuesliTranscriptionRuntime", code: 5, userInfo: [
+                NSLocalizedDescriptionKey: "Unknown transcription backend: \(backend.backend)",
+            ])
         }
     }
 
@@ -851,39 +750,6 @@ actor TranscriptionCoordinator {
         return SpeechTranscriptionResult(
             text: text,
             segments: segments.isEmpty && !text.isEmpty ? [SpeechSegment(start: 0, end: result.duration, text: text)] : segments
-        )
-    }
-
-    // MARK: - Parakeet Unified (FastConformer-RNNT offline batch)
-
-    private func transcribeWithParakeetUnified(
-        url: URL,
-        samples: [Float]? = nil
-    ) async throws -> SpeechTranscriptionResult {
-        fputs("[muesli-native] transcribing with Parakeet Unified: \(url.lastPathComponent)\n", stderr)
-        let result = if let samples {
-            try await parakeetUnifiedTranscriber.transcribe(samples: samples)
-        } else {
-            try await parakeetUnifiedTranscriber.transcribe(wavURL: url)
-        }
-        fputs("[muesli-native] Parakeet Unified result: \(result.text.prefix(80)) (took \(String(format: "%.3f", result.processingTime))s)\n", stderr)
-        let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return SpeechTranscriptionResult(
-            text: text,
-            segments: text.isEmpty ? [] : [SpeechSegment(start: 0, end: 0, text: text)]
-        )
-    }
-
-    // MARK: - WhisperKit (Whisper on ANE/GPU via CoreML)
-
-    private func transcribeWithWhisperKit(url: URL) async throws -> SpeechTranscriptionResult {
-        fputs("[muesli-native] transcribing with WhisperKit: \(url.lastPathComponent)\n", stderr)
-        let result = try await whisperTranscriber.transcribe(wavURL: url)
-        fputs("[muesli-native] WhisperKit result: \(result.text.prefix(80)) (took \(String(format: "%.3f", result.processingTime))s)\n", stderr)
-        let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return SpeechTranscriptionResult(
-            text: text,
-            segments: text.isEmpty ? [] : [SpeechSegment(start: 0, end: 0, text: text)]
         )
     }
 
@@ -918,77 +784,6 @@ actor TranscriptionCoordinator {
                 text: text,
                 segments: text.isEmpty ? [] : [SpeechSegment(start: 0, end: result.duration, text: text)]
             )
-        }
-    }
-
-    // MARK: - Qwen3 ASR (Autoregressive CoreML on ANE)
-
-    private func transcribeWithQwen3(url: URL, samples: [Float]? = nil) async throws -> SpeechTranscriptionResult {
-        if #available(macOS 15, *) {
-            fputs("[muesli-native] transcribing with Qwen3 ASR: \(url.lastPathComponent)\n", stderr)
-            let result: (text: String, processingTime: Double)
-            if let samples {
-                result = try await qwen3Transcriber.transcribe(audioSamples: samples, language: qwen3AsrLanguage.pinnedCode)
-            } else {
-                result = try await qwen3Transcriber.transcribe(wavURL: url, language: qwen3AsrLanguage.pinnedCode)
-            }
-            fputs("[muesli-native] Qwen3 ASR result: \(result.text.prefix(80)) (took \(String(format: "%.3f", result.processingTime))s)\n", stderr)
-            let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return SpeechTranscriptionResult(
-                text: text,
-                segments: text.isEmpty ? [] : [SpeechSegment(start: 0, end: 0, text: text)]
-            )
-        } else {
-            throw NSError(domain: "Muesli", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Qwen3 ASR requires macOS 15 or later.",
-            ])
-        }
-    }
-
-    // MARK: - SenseVoiceSmall (FunASR via FluidAudio/CoreML)
-
-    private func transcribeWithSenseVoice(url: URL, samples: [Float]? = nil) async throws -> SpeechTranscriptionResult {
-        fputs("[muesli-native] transcribing with SenseVoice: \(url.lastPathComponent)\n", stderr)
-        let result: (text: String, processingTime: Double)
-        if let samples, SenseVoiceFileChunking.shouldChunk(sampleCount: samples.count) {
-            result = try await senseVoiceTranscriber.transcribe(samples: samples)
-        } else {
-            result = try await senseVoiceTranscriber.transcribe(wavURL: url)
-        }
-        fputs("[muesli-native] SenseVoice result: \(result.text.prefix(80)) (took \(String(format: "%.3f", result.processingTime))s)\n", stderr)
-        let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return SpeechTranscriptionResult(
-            text: text,
-            // FluidAudio's SenseVoice API returns plain text only, so timestamped segments are not available here.
-            segments: text.isEmpty ? [] : [SpeechSegment(start: 0, end: 0, text: text)]
-        )
-    }
-
-    // MARK: - Cohere Transcribe (CoreML)
-
-    private func transcribeWithCohere(
-        url: URL,
-        samples: [Float]? = nil,
-        language: CohereTranscribeLanguage
-    ) async throws -> SpeechTranscriptionResult {
-        if #available(macOS 15, *) {
-            fputs("[muesli-native] transcribing with Cohere Transcribe: \(url.lastPathComponent)\n", stderr)
-            let result: (text: String, processingTime: Double, profile: CohereProfilingSummary)
-            if let samples {
-                result = try await cohereTranscriber.transcribe(audioSamples: samples, language: language)
-            } else {
-                result = try await cohereTranscriber.transcribe(wavURL: url, language: language)
-            }
-            fputs("[muesli-native] Cohere Transcribe result: \(result.text.prefix(80)) (took \(String(format: "%.3f", result.processingTime))s)\n", stderr)
-            let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return SpeechTranscriptionResult(
-                text: text,
-                segments: text.isEmpty ? [] : [SpeechSegment(start: 0, end: 0, text: text)]
-            )
-        } else {
-            throw NSError(domain: "Muesli", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "Cohere Transcribe requires macOS 15 or later.",
-            ])
         }
     }
 

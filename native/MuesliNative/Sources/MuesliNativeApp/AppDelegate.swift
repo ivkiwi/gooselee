@@ -32,7 +32,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             self.controller = controller
             controller.start()
-            NSApplication.shared.registerForRemoteNotifications()
+            if controller.canReceiveRemoteNotifications {
+                NSApplication.shared.registerForRemoteNotifications()
+            }
         } catch {
             let alert = NSAlert()
             alert.messageText = "\(AppIdentity.displayName) failed to start"

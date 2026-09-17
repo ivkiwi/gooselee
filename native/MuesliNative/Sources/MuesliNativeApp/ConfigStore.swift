@@ -338,7 +338,6 @@ final class ConfigStore {
         importValue("post_processor_system_prompt", \.postProcessorSystemPrompt)
         importValue("enable_screen_context", \.enableScreenContext)
         importValue("use_core_audio_tap", \.useCoreAudioTap)
-        importValue("show_ios_companion_prompt", \.showIOSCompanionPrompt)
 
         return importedFields
     }

@@ -121,7 +121,6 @@ struct SettingsView: View {
     // Uniform width for all right-side controls
     private let controlWidth: CGFloat = 220
     private let meetingControlWidth: CGFloat = 275
-    private let iOSCompanionURL = IPhoneBridgeLinks.installURL
     private let screenContextGrantIntentTimeout: TimeInterval = 15 * 60
     private var selectedTranscriptCleanupProvider: TranscriptCleanupProviderOption {
         TranscriptCleanupProviderOption.resolved(appState.config.transcriptCleanupProvider)
@@ -388,11 +387,17 @@ struct SettingsView: View {
 
     private let customIndicatorPositionLabel = "Custom (drag to reposition)"
 
+    private var availableSettingsPanes: [SettingsPane] {
+        SettingsPane.allCases.filter { pane in
+            pane != .sync || appState.canUseICloudSync
+        }
+    }
+
     private var settingsPanePicker: some View {
         HStack {
             Spacer()
             Picker("", selection: $selectedPane) {
-                ForEach(SettingsPane.allCases) { pane in
+                ForEach(availableSettingsPanes) { pane in
                     Text(pane.title).tag(pane)
                 }
             }
@@ -497,7 +502,7 @@ struct SettingsView: View {
                         controller.setICloudSyncEnabledFromSettings(newValue)
                     }
                 }
-                settingsDescription("Sync dictation text, meeting transcripts, notes, summaries, and manual notes with Guesli for iPhone through your private iCloud account. Audio recordings are never synced.")
+                settingsDescription("Sync dictation text, meeting transcripts, notes, summaries, and manual notes through your private iCloud account. Audio recordings are never synced.")
 
                 Divider().background(MuesliTheme.surfaceBorder)
 
@@ -528,39 +533,12 @@ struct SettingsView: View {
                 }
             }
 
-            settingsSection("iPhone Bridge") {
-                settingsRow("Show iOS companion prompt") {
-                    settingsSwitch(isOn: appState.config.showIOSCompanionPrompt) { newValue in
-                        controller.updateConfig { $0.showIOSCompanionPrompt = newValue }
-                    }
-                }
-                settingsDescription("Keep the timeline bridge card available while users connect Guesli on iPhone.")
-
-                Divider().background(MuesliTheme.surfaceBorder)
-
-                HStack(spacing: MuesliTheme.spacing12) {
-                    VStack(alignment: .leading, spacing: MuesliTheme.spacing4) {
-                        Text("Guesli for iPhone")
-                            .font(MuesliTheme.body())
-                            .foregroundStyle(MuesliTheme.textPrimary)
-                        Text("Use iPhone for offline meetings, keyboard dictation, and private iCloud text sync with this Mac.")
-                            .font(MuesliTheme.caption())
-                            .foregroundStyle(MuesliTheme.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: MuesliTheme.spacing16)
-                    actionButton("Open iOS app page") {
-                        NSWorkspace.shared.open(iOSCompanionURL)
-                    }
-                    .frame(width: controlWidth)
-                }
-            }
         }
     }
 
     private var syncStatusText: String {
         if !appState.config.iCloudSyncEnabled {
-            return "Sync is off. Turn it on to bridge this Mac with Guesli for iPhone."
+            return "Sync is off. Turn it on to keep text records in your private iCloud account."
         }
         return appState.iCloudSyncStatus ?? "Private iCloud text sync is ready."
     }
@@ -578,7 +556,7 @@ struct SettingsView: View {
             }
             return "Linked device: \(remoteDeviceName)"
         }
-        return "No linked iPhone yet."
+        return "No linked device yet."
     }
 
     private func syncDeviceLabel(for platform: String) -> String {

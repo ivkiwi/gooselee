@@ -570,6 +570,11 @@ public final class MuesliController: NSObject {
     private var bridgeDiscoveryPending = false
     private var bridgeDiscoveryFollowUpPending = false
     private var hasStarted = false
+    private let appleCloudCapabilities: AppleCloudCapabilities
+
+    var canReceiveRemoteNotifications: Bool {
+        appleCloudCapabilities.canReceiveRemoteNotifications
+    }
 
     init(
         runtime: RuntimePaths,
@@ -580,7 +585,8 @@ public final class MuesliController: NSObject {
         meetingTranscriptCleaner: any MeetingTranscriptCleaning = ChatGPTMeetingTranscriptCleaner(),
         launchAtLoginManager: LaunchAtLoginManaging = SystemLaunchAtLoginManager(),
         audioDuckingController: AudioDuckingManaging = AudioDuckingController(),
-        dictationAudioRoutingController: DictationAudioRouting = DictationAudioRouteController()
+        dictationAudioRoutingController: DictationAudioRouting = DictationAudioRouteController(),
+        appleCloudCapabilities: AppleCloudCapabilities = .current
     ) {
         self.configStore = configStore
         let loadedConfig = configStore.load()
@@ -595,6 +601,7 @@ public final class MuesliController: NSObject {
         self.launchAtLoginCoordinator = LaunchAtLoginCoordinator(manager: launchAtLoginManager)
         self.audioDuckingController = audioDuckingController
         self.dictationAudioRoutingController = dictationAudioRoutingController
+        self.appleCloudCapabilities = appleCloudCapabilities
         self.dictationAudioRoutingController.selectedInputDeviceUID = loadedConfig.dictationInputDeviceUID
         self.config = loadedConfig
         if loadedConfig.recordingColorHex != "1e1e2e" {
@@ -621,6 +628,7 @@ public final class MuesliController: NSObject {
         }) ?? .chatGPT
         self.indicator = FloatingIndicatorController(configStore: configStore)
         super.init()
+        appState.canUseICloudSync = appleCloudCapabilities.canUseCloudKit
         Task { [weak self] in
             guard let self else { return }
             await self.transcriptionCoordinator.setTranscriptCleanupWarningHandler { [weak self] warning in
@@ -759,7 +767,9 @@ public final class MuesliController: NSObject {
                 self.syncAppState()
             }
         }
-        installICloudPersistentSyncObservers()
+        if appleCloudCapabilities.canUseCloudKit {
+            installICloudPersistentSyncObservers()
+        }
 
         statusBarController = StatusBarController(controller: self, runtime: runtime)
         preferencesWindowController = PreferencesWindowController(controller: self)
@@ -771,7 +781,7 @@ public final class MuesliController: NSObject {
         }
         meetSpeakerBridge.start()
         refreshUI()
-        if config.iCloudSyncEnabled {
+        if appleCloudCapabilities.canUseCloudKit && config.iCloudSyncEnabled {
             enableICloudPersistentSync()
             scheduleICloudSync(delay: 0.5, userInitiated: false)
         }
@@ -1477,7 +1487,7 @@ public final class MuesliController: NSObject {
         syncAutoRecordWakes()
         updateMeetingNotificationVisibility()
         syncDictationRecorderWarmup(intent: .idlePrewarm(.configChange))
-        if !wasICloudSyncEnabled && config.iCloudSyncEnabled {
+        if appleCloudCapabilities.canUseCloudKit && !wasICloudSyncEnabled && config.iCloudSyncEnabled {
             enableICloudPersistentSync()
             scheduleICloudSync(delay: 0.2, userInitiated: false)
         } else if wasICloudSyncEnabled && !config.iCloudSyncEnabled {
@@ -1569,12 +1579,14 @@ public final class MuesliController: NSObject {
     }
 
     func performICloudSync() {
+        guard appleCloudCapabilities.canUseCloudKit else { return }
         startICloudSync(userInitiated: true)
     }
 
     func setICloudSyncEnabledFromSettings(_ enabled: Bool) {
+        guard appleCloudCapabilities.canUseCloudKit else { return }
         if enabled {
-            enableIPhoneBridgeSync()
+            enableICloudSync()
         } else if config.iCloudSyncEnabled {
             updateConfig { $0.iCloudSyncEnabled = false }
         } else {
@@ -1582,7 +1594,8 @@ public final class MuesliController: NSObject {
         }
     }
 
-    func enableIPhoneBridgeSync() {
+    func enableICloudSync() {
+        guard appleCloudCapabilities.canUseCloudKit else { return }
         if config.iCloudSyncEnabled {
             performICloudSync()
             return
@@ -1637,7 +1650,8 @@ public final class MuesliController: NSObject {
     }
 
     func handleICloudRemoteNotification(userInfo: [AnyHashable: Any]) {
-        guard config.iCloudSyncEnabled,
+        guard appleCloudCapabilities.canUseCloudKit,
+              config.iCloudSyncEnabled,
               MuesliICloudSyncEngine.isTextRecordSubscriptionNotification(userInfo) else {
             return
         }
@@ -1645,7 +1659,8 @@ public final class MuesliController: NSObject {
     }
 
     private func installICloudPersistentSyncObservers() {
-        guard iCloudAppActiveObserver == nil else { return }
+        guard appleCloudCapabilities.canUseCloudKit,
+              iCloudAppActiveObserver == nil else { return }
         iCloudAppActiveObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification,
             object: nil,
@@ -1675,12 +1690,14 @@ public final class MuesliController: NSObject {
     }
 
     private func enableICloudPersistentSync() {
-        guard config.iCloudSyncEnabled else { return }
+        guard appleCloudCapabilities.canUseCloudKit,
+              config.iCloudSyncEnabled else { return }
         ensureICloudSubscription()
     }
 
     private func ensureICloudSubscription() {
-        guard !hasEnsuredICloudSubscription,
+        guard appleCloudCapabilities.canUseCloudKit,
+              !hasEnsuredICloudSubscription,
               iCloudSubscriptionTask == nil else {
             return
         }
@@ -1715,7 +1732,8 @@ public final class MuesliController: NSObject {
         userInitiated: Bool,
         bridgeDiscoveryTriggered: Bool = false
     ) {
-        guard config.iCloudSyncEnabled else { return }
+        guard appleCloudCapabilities.canUseCloudKit,
+              config.iCloudSyncEnabled else { return }
         enableICloudPersistentSync()
         if bridgeDiscoveryTriggered {
             bridgeDiscoveryPending = true
@@ -1735,6 +1753,7 @@ public final class MuesliController: NSObject {
     }
 
     private func startICloudSync(userInitiated: Bool) {
+        guard appleCloudCapabilities.canUseCloudKit else { return }
         guard config.iCloudSyncEnabled else {
             if userInitiated {
                 appState.iCloudSyncStatus = "Turn on iCloud sync first."

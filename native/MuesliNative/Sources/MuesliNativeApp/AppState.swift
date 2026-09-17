@@ -104,6 +104,7 @@ final class AppState {
     var googleCalendarListLoadState: GoogleCalendarListLoadState = .idle
     var sparkleUpdateStatus: SparkleUpdateStatus = .idle
     var sparkleLastCheckedAt: Date?
+    var canUseICloudSync: Bool = false
     var iCloudSyncStatus: String?
     var isICloudSyncInProgress: Bool = false
     var isICloudBridgeActivationPending: Bool = false

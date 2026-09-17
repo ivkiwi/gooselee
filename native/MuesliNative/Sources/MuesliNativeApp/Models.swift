@@ -1191,7 +1191,6 @@ struct AppConfig: Codable {
     var autoExportMarkdownContent: String = MeetingExportContent.notes.rawValue
     var autoExportFileFormat: String = MeetingAutoExportFileFormat.markdown.rawValue
     var iCloudSyncEnabled: Bool = false
-    var showIOSCompanionPrompt: Bool = true
     var contributionPromptNextWordCount: Int?
     var contributionPromptNextMeetingCount: Int?
     var contributionGitHubStarClicked: Bool = false
@@ -1295,7 +1294,6 @@ struct AppConfig: Codable {
         case autoExportMarkdownContent = "auto_export_markdown_content"
         case autoExportFileFormat = "auto_export_file_format"
         case iCloudSyncEnabled = "icloud_sync_enabled"
-        case showIOSCompanionPrompt = "show_ios_companion_prompt"
         case contributionPromptNextWordCount = "contribution_prompt_next_word_count"
         case contributionPromptNextMeetingCount = "contribution_prompt_next_meeting_count"
         case contributionGitHubStarClicked = "contribution_github_star_clicked"
@@ -1363,7 +1361,6 @@ struct AppConfig: Codable {
             .rawValue
         darkMode = (try? c.decode(Bool.self, forKey: .darkMode)) ?? defaults.darkMode
         iCloudSyncEnabled = (try? c.decode(Bool.self, forKey: .iCloudSyncEnabled)) ?? defaults.iCloudSyncEnabled
-        showIOSCompanionPrompt = (try? c.decode(Bool.self, forKey: .showIOSCompanionPrompt)) ?? defaults.showIOSCompanionPrompt
         enableDoubleTapDictation = (try? c.decode(Bool.self, forKey: .enableDoubleTapDictation)) ?? defaults.enableDoubleTapDictation
         pasteShortcut = (try? c.decode(PasteShortcut.self, forKey: .pasteShortcut)) ?? defaults.pasteShortcut
         hotkeyTriggerThresholdMS = HotkeyTriggerTiming.clampedMilliseconds(

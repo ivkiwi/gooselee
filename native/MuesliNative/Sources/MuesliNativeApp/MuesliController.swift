@@ -428,9 +428,7 @@ public final class MuesliController: NSObject {
     private let launchAtLoginCoordinator: LaunchAtLoginCoordinator
     let transcriptionCoordinator = TranscriptionCoordinator()
     private let hotkeyMonitor = HotkeyMonitor()
-    private let computerUseHotkeyMonitor = HotkeyMonitor()
     private let meetingRecordingHotkeyMonitor = HotkeyMonitor()
-    private let computerUseRecorder = MicrophoneRecorder()
     private let dictationRecorder = RouteAwareDictationRecorder()
     private let dictationCorrectionMonitor = DictationCorrectionMonitor()
     private let dictionarySuggestionPrompt = DictionarySuggestionPromptController()
@@ -521,13 +519,6 @@ public final class MuesliController: NSObject {
     private var pendingDictationStopSessionID: UUID?
     private var pendingReleaseSoundSessionID: UUID?
     private var pendingPreparingIndicatorWorkItem: DispatchWorkItem?
-    private var computerUseCommandStartedAt: Date?
-    private var computerUseCommandTask: Task<Void, Never>?
-    private var computerUseFloatingStatusWorkItem: DispatchWorkItem?
-    private var computerUseLastFloatingStatusAt = Date.distantPast
-    private var computerUseLastFloatingStatus = ""
-    private var computerUseTranscriptVisible = false
-    private let computerUseFloatingStatusMinimumDwell: TimeInterval = 0.85
     private var _streamingDictationController: Any?  // StreamingDictationController (macOS 15+)
     private var isNemotron35Streaming = false
     private var nemotron35StreamingSessionID: UUID?
@@ -712,7 +703,6 @@ public final class MuesliController: NSObject {
         if canRunMainApp && config.resolvedOnboardingUseCase.includesPushToTalk {
             hotkeyMonitor.configure(config.dictationHotkey)
             hotkeyMonitor.start()
-            startComputerUseHotkeyMonitorIfNeeded()
         }
         if canRunMainApp {
             startMeetingRecordingHotkeyMonitorIfNeeded()
@@ -729,23 +719,14 @@ public final class MuesliController: NSObject {
             guard let self else { return }
             if self.hotkeyMonitor.isToggleRecording {
                 self.hotkeyMonitor.stopToggleMode()
-            } else if self.computerUseHotkeyMonitor.isToggleRecording {
-                self.computerUseHotkeyMonitor.stopToggleMode()
-            } else if self.computerUseCommandStartedAt != nil {
-                self.handleComputerUseStop()
             } else {
                 self.handleStop()
             }
         }
         indicator.onCancelToggleDictation = { [weak self] in
             guard let self else { return }
-            if self.computerUseHotkeyMonitor.isToggleRecording || self.computerUseCommandStartedAt != nil {
-                self.handleComputerUseCancel()
-                self.computerUseHotkeyMonitor.cancelToggleMode()
-            } else {
-                self.handleCancel()
-                self.hotkeyMonitor.cancelToggleMode()
-            }
+            self.handleCancel()
+            self.hotkeyMonitor.cancelToggleMode()
             self.indicator.isToggleDictation = false
         }
         indicator.onPositionSaved = { [weak self] center in
@@ -962,10 +943,7 @@ public final class MuesliController: NSObject {
         iCloudSubscriptionTask?.cancel()
         iCloudSubscriptionTask = nil
         hotkeyMonitor.stop()
-        computerUseHotkeyMonitor.stop()
         meetingRecordingHotkeyMonitor.stop()
-        computerUseCommandTask?.cancel()
-        computerUseCommandTask = nil
         calendarMonitor.stop()
         calendarCheckTimer?.invalidate()
         calendarCheckTimer = nil
@@ -992,7 +970,6 @@ public final class MuesliController: NSObject {
         activeMeetingAudioWarning = nil
         endMeetingActivity()
         dictationAudioSessionManager.cancel(reason: "shutdown")
-        computerUseRecorder.cancel()
         Task {
             await transcriptionCoordinator.shutdown()
         }
@@ -1421,7 +1398,6 @@ public final class MuesliController: NSObject {
     func updateConfig(_ mutate: (inout AppConfig) -> Void) {
         let wasICloudSyncEnabled = config.iCloudSyncEnabled
         let previousHotkeyTriggerThresholdMS = config.hotkeyTriggerThresholdMS
-        let previousComputerUseHotkeyTriggerThresholdMS = config.computerUseHotkeyTriggerThresholdMS
         let previousMeetingRecordingHotkeyTriggerThresholdMS = config.meetingRecordingHotkeyTriggerThresholdMS
         let previousEnableDictionaryCorrectionPrompts = config.enableDictionaryCorrectionPrompts
         let previousEnablePostProcessor = config.enablePostProcessor
@@ -1448,10 +1424,8 @@ public final class MuesliController: NSObject {
             dictionarySuggestionPrompt.dismissWithoutNotification()
         }
         config.hotkeyTriggerThresholdMS = HotkeyTriggerTiming.clampedMilliseconds(config.hotkeyTriggerThresholdMS)
-        config.computerUseHotkeyTriggerThresholdMS = HotkeyTriggerTiming.clampedMilliseconds(config.computerUseHotkeyTriggerThresholdMS)
         config.meetingRecordingHotkeyTriggerThresholdMS = HotkeyTriggerTiming.clampedMilliseconds(config.meetingRecordingHotkeyTriggerThresholdMS)
         let hotkeyTriggerThresholdChanged = config.hotkeyTriggerThresholdMS != previousHotkeyTriggerThresholdMS
-            || config.computerUseHotkeyTriggerThresholdMS != previousComputerUseHotkeyTriggerThresholdMS
             || config.meetingRecordingHotkeyTriggerThresholdMS != previousMeetingRecordingHotkeyTriggerThresholdMS
         configStore.save(config)
         MuesliTheme.accentOverrideHex = config.recordingColorHex == "1e1e2e" ? nil : config.recordingColorHex
@@ -1468,7 +1442,6 @@ public final class MuesliController: NSObject {
         statusBarController?.refreshIcon()
         indicator.refreshIcon()
         hotkeyMonitor.doubleTapEnabled = config.enableDoubleTapDictation
-        computerUseHotkeyMonitor.doubleTapEnabled = config.enableDoubleTapDictation
         if hotkeyTriggerThresholdChanged {
             configureHotkeyMonitorTiming()
         }
@@ -3525,52 +3498,7 @@ public final class MuesliController: NSObject {
         }
         updateConfig { $0.dictationHotkey = hotkey }
         hotkeyMonitor.configure(hotkey)
-        configureComputerUseHotkeyMonitor()
         return result
-    }
-
-    @discardableResult
-    func updateComputerUseHotkey(_ hotkey: HotkeyConfig) -> ShortcutHotkeyUpdateResult {
-        let result = ShortcutHotkeyPolicy.validateComputerUseHotkey(
-            hotkey,
-            dictationHotkey: config.dictationHotkey,
-            isComputerUseEnabled: config.enableComputerUseHotkey,
-            meetingRecordingHotkey: config.meetingRecordingHotkey,
-            isMeetingRecordingEnabled: config.enableMeetingRecordingHotkey
-        )
-        guard result.didUpdate else {
-            fputs("[hotkeys] rejected computer use hotkey because it matches dictation hotkey\n", stderr)
-            return result
-        }
-        updateConfig { $0.computerUseHotkey = hotkey }
-        configureComputerUseHotkeyMonitor()
-        return result
-    }
-
-    @discardableResult
-    func updateComputerUseHotkeyEnabled(_ enabled: Bool) -> ShortcutHotkeyUpdateResult {
-        if enabled {
-            let resolution = ShortcutHotkeyPolicy.resolvedComputerUseHotkeyWhenEnabling(
-                currentHotkey: config.computerUseHotkey,
-                dictationHotkey: config.dictationHotkey,
-                meetingRecordingHotkey: config.meetingRecordingHotkey,
-                isMeetingRecordingEnabled: config.enableMeetingRecordingHotkey
-            )
-            guard resolution.result.didUpdate else {
-                fputs("[hotkeys] rejected computer use enable because fallback conflicts with another shortcut\n", stderr)
-                configureComputerUseHotkeyMonitor()
-                return resolution.result
-            }
-            updateConfig { config in
-                config.computerUseHotkey = resolution.hotkey
-                config.enableComputerUseHotkey = true
-            }
-            configureComputerUseHotkeyMonitor()
-            return resolution.result
-        }
-        updateConfig { $0.enableComputerUseHotkey = enabled }
-        configureComputerUseHotkeyMonitor()
-        return .updated
     }
 
     @discardableResult
@@ -3613,16 +3541,12 @@ public final class MuesliController: NSObject {
     func resetShortcutDefaults() {
         updateConfig { config in
             config.dictationHotkey = .default
-            config.computerUseHotkey = .computerUseDefault
-            config.enableComputerUseHotkey = false
             config.meetingRecordingHotkey = .meetingRecordingDefault
             config.enableMeetingRecordingHotkey = false
             config.hotkeyTriggerThresholdMS = HotkeyTriggerTiming.defaultThresholdMilliseconds
-            config.computerUseHotkeyTriggerThresholdMS = HotkeyTriggerTiming.defaultThresholdMilliseconds
             config.meetingRecordingHotkeyTriggerThresholdMS = HotkeyTriggerTiming.defaultMeetingThresholdMilliseconds
         }
         hotkeyMonitor.configure(.default)
-        configureComputerUseHotkeyMonitor()
         meetingRecordingHotkeyMonitor.stop()
     }
 
@@ -3770,12 +3694,10 @@ public final class MuesliController: NSObject {
             hotkeyMonitor.configure(keyCode: keyCode)
         }
         hotkeyMonitor.start()
-        startComputerUseHotkeyMonitorIfNeeded()
     }
 
     func stopHotkeyMonitor() {
         hotkeyMonitor.stop()
-        computerUseHotkeyMonitor.stop()
         meetingRecordingHotkeyMonitor.stop()
     }
 
@@ -3906,9 +3828,6 @@ public final class MuesliController: NSObject {
             config.meetingTranscriptionBackend = backend.backend
             config.meetingTranscriptionModel = backend.model
             config.dictationHotkey = hotkey
-            config.computerUseHotkey = HotkeyConfig.computerUseDefault(avoiding: hotkey)
-            config.enableComputerUseHotkey = false
-            config.enableComputerUsePlanner = true
             config.onboardingUseCase = onboardingUseCase.rawValue
             if let summaryBackend {
                 config.meetingSummaryBackend = summaryBackend.backend
@@ -3924,7 +3843,6 @@ public final class MuesliController: NSObject {
         }
         selectBackend(backend)
         hotkeyMonitor.configure(keyCode: hotkey.keyCode)
-        configureComputerUseHotkeyMonitor()
         dictationTestCallback = nil
         dictationTestFailureCallback = nil
         dictationTestRecordingStarted = nil
@@ -3937,7 +3855,6 @@ public final class MuesliController: NSObject {
             meetingFeatureMonitorsAllowed = true
             if onboardingUseCase.includesPushToTalk {
                 hotkeyMonitor.start()
-                startComputerUseHotkeyMonitorIfNeeded()
             }
             syncCalendarMonitor()
             // Start monitors that were deferred during onboarding
@@ -4008,7 +3925,6 @@ public final class MuesliController: NSObject {
         updateConfig { $0.onboardingUseCase = OnboardingUseCase.dictation.rawValue }
         hotkeyMonitor.configure(keyCode: config.dictationHotkey.keyCode)
         hotkeyMonitor.start()
-        startComputerUseHotkeyMonitorIfNeeded()
         syncDictationRecorderWarmup(intent: .idlePrewarm(.permissionsReady))
     }
 
@@ -7811,21 +7727,12 @@ public final class MuesliController: NSObject {
     }
 
     private var isDictationActivityInProgress: Bool {
-        dictationState != .idle || dictationStartedAt != nil || computerUseCommandStartedAt != nil || isNemotron35Streaming
-    }
-
-    private func configureComputerUseHotkeyMonitor() {
-        computerUseHotkeyMonitor.stop()
+        dictationState != .idle || dictationStartedAt != nil || isNemotron35Streaming
     }
 
     private func configureHotkeyMonitorTiming() {
         hotkeyMonitor.configureTriggerThreshold(milliseconds: config.hotkeyTriggerThresholdMS)
-        computerUseHotkeyMonitor.configureTriggerThreshold(milliseconds: config.computerUseHotkeyTriggerThresholdMS)
         meetingRecordingHotkeyMonitor.configureTriggerThreshold(milliseconds: config.meetingRecordingHotkeyTriggerThresholdMS)
-    }
-
-    private func startComputerUseHotkeyMonitorIfNeeded() {
-        computerUseHotkeyMonitor.stop()
     }
 
     private func startMeetingRecordingHotkeyMonitorIfNeeded() {
@@ -8190,388 +8097,6 @@ public final class MuesliController: NSObject {
         indicator.setTranscribingTitle(status, config: config)
     }
 
-    private func handleComputerUsePrepare() {
-        guard canPrepareComputerUseCommand else { return }
-        fputs("[cua] prepare\n", stderr)
-        meetingMonitor.suppressWhileActive()
-        meetingMonitor.refreshState()
-        computerUseRecorder.preferredInputDeviceID = nil
-        setState(.preparing)
-        do {
-            try computerUseRecorder.prepare()
-        } catch {
-            fputs("[cua] recorder prepare failed: \(error)\n", stderr)
-            computerUseRecorder.cancel()
-            setState(.idle)
-            meetingMonitor.resumeAfterCooldown()
-            meetingMonitor.refreshState()
-        }
-    }
-
-    private func handleComputerUseStart() {
-        guard canStartComputerUseCommand else { return }
-        fputs("[cua] recording start\n", stderr)
-        meetingMonitor.suppressWhileActive()
-        computerUseRecorder.preferredInputDeviceID = nil
-        do {
-            try computerUseRecorder.start()
-            computerUseCommandStartedAt = Date()
-            indicator.powerProvider = { [weak self] in
-                self?.computerUseRecorder.currentPower() ?? -160
-            }
-            setState(.recording)
-            SoundController.playDictationStart(enabled: shouldPlayDictationLifecycleSounds && !isDictationTestMode)
-        } catch {
-            fputs("[cua] recorder start failed: \(error)\n", stderr)
-            computerUseRecorder.cancel()
-            computerUseCommandStartedAt = nil
-            setState(.idle)
-            meetingMonitor.resumeAfterCooldown()
-            meetingMonitor.refreshState()
-        }
-    }
-
-    private func handleComputerUseToggleStart() {
-        guard canStartComputerUseCommand else {
-            computerUseHotkeyMonitor.cancelToggleMode()
-            return
-        }
-        fputs("[cua] toggle command start\n", stderr)
-        indicator.isToggleDictation = true
-        handleComputerUseStart()
-    }
-
-    private func handleComputerUseToggleStop() {
-        fputs("[cua] toggle command stop\n", stderr)
-        indicator.isToggleDictation = false
-        handleComputerUseStop()
-    }
-
-    private func handleComputerUseCancel() {
-        fputs("[cua] cancel\n", stderr)
-        computerUseCommandTask?.cancel()
-        computerUseCommandTask = nil
-        computerUseRecorder.cancel()
-        computerUseCommandStartedAt = nil
-        indicator.isToggleDictation = false
-        setState(.idle)
-        meetingMonitor.resumeAfterCooldown()
-    }
-
-    private func handleComputerUseStop() {
-        fputs("[cua] stop\n", stderr)
-        indicator.isToggleDictation = false
-        let startedAt = computerUseCommandStartedAt ?? Date()
-        computerUseCommandStartedAt = nil
-
-        guard let wavURL = computerUseRecorder.stop() else {
-            fputs("[cua] stop without wav\n", stderr)
-            setState(.idle)
-            meetingMonitor.resumeAfterCooldown()
-            return
-        }
-        let duration = max(Date().timeIntervalSince(startedAt), 0)
-        if duration < 0.3 {
-            fputs("[cua] discarded short recording\n", stderr)
-            try? FileManager.default.removeItem(at: wavURL)
-            setState(.idle)
-            meetingMonitor.resumeAfterCooldown()
-            return
-        }
-
-        indicator.setTranscribingTitle("Parsing command", config: config)
-        setState(.transcribing)
-        let task = Task { [weak self] in
-            guard let self else { return }
-            defer {
-                try? FileManager.default.removeItem(at: wavURL)
-            }
-
-            do {
-                let result = try await self.transcriptionCoordinator.transcribeDictation(
-                    at: wavURL,
-                    backend: self.selectedBackend,
-                    cohereLanguage: self.config.resolvedCohereLanguageDictation,
-                    enablePostProcessor: false,
-                    customWords: self.serializedCustomWords(),
-                    appContext: nil
-                )
-                try Task.checkCancellation()
-                let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !text.isEmpty else {
-                    fputs("[cua] empty transcript, skipping planner\n", stderr)
-                    await MainActor.run {
-                        self.computerUseCommandTask = nil
-                        self.setState(.idle)
-                        self.meetingMonitor.resumeAfterCooldown()
-                    }
-                    return
-                }
-                let commandEndedAt = Date()
-                let dictationID = try? self.dictationStore.insertDictation(
-                    text: text,
-                    durationSeconds: duration,
-                    source: "cua",
-                    startedAt: startedAt,
-                    endedAt: commandEndedAt
-                )
-                await MainActor.run {
-                    self.scheduleICloudSyncAfterLocalChange()
-                }
-                await self.handleComputerUseCommand(transcript: text, dictationID: dictationID)
-            } catch is CancellationError {
-                fputs("[cua] command parsing cancelled\n", stderr)
-                await MainActor.run {
-                    self.computerUseCommandTask = nil
-                    self.setState(.idle)
-                    self.meetingMonitor.resumeAfterCooldown()
-                }
-            } catch {
-                fputs("[cua] transcription failed: \(error)\n", stderr)
-                await MainActor.run {
-                    self.computerUseCommandTask = nil
-                    self.setState(.idle)
-                    self.indicator.showWarning("CUA command failed", icon: "!")
-                    self.meetingMonitor.resumeAfterCooldown()
-                }
-            }
-        }
-        computerUseCommandTask?.cancel()
-        computerUseCommandTask = task
-    }
-
-    private var canPrepareComputerUseCommand: Bool {
-        !isMeetingRecording()
-            && !isDictationTestMode
-            && dictationStartedAt == nil
-            && computerUseCommandStartedAt == nil
-            && !isNemotron35Streaming
-            && dictationState == .idle
-    }
-
-    private var canStartComputerUseCommand: Bool {
-        !isMeetingRecording()
-            && !isDictationTestMode
-            && dictationStartedAt == nil
-            && computerUseCommandStartedAt == nil
-            && !isNemotron35Streaming
-            && (dictationState == .idle || dictationState == .preparing)
-    }
-
-    @MainActor
-    private func handleComputerUseCommand(transcript: String, dictationID: Int64?) async {
-        resetComputerUseFloatingStatus()
-        presentComputerUseTranscript(transcript)
-        setState(.transcribing)
-        let runtime = ComputerUsePlannerRuntime(config: config) { [weak self] status in
-            guard let self else { return }
-            self.presentComputerUseFloatingStatus(status)
-        }
-
-        let result = await runtime.run(command: transcript)
-        indicator.hideComputerUseCursor()
-        if result.status == .cancelled {
-            computerUseCommandTask = nil
-            setState(.idle)
-            meetingMonitor.resumeAfterCooldown()
-            return
-        }
-        persistComputerUseTrace(result, dictationID: dictationID)
-        computerUseCommandTask = nil
-        await waitForComputerUseFloatingStatusDwell()
-        presentComputerUseRuntimeResult(result)
-        meetingMonitor.resumeAfterCooldown()
-    }
-
-    @MainActor
-    private func resetComputerUseFloatingStatus() {
-        computerUseFloatingStatusWorkItem?.cancel()
-        computerUseFloatingStatusWorkItem = nil
-        computerUseLastFloatingStatusAt = .distantPast
-        computerUseLastFloatingStatus = ""
-        computerUseTranscriptVisible = false
-    }
-
-    @MainActor
-    private func presentComputerUseTranscript(_ transcript: String) {
-        computerUseTranscriptVisible = true
-        computerUseLastFloatingStatusAt = .distantPast
-        computerUseLastFloatingStatus = ""
-        indicator.showComputerUseTranscript(transcript, config: config)
-    }
-
-    @MainActor
-    private func presentComputerUseFloatingStatus(_ status: String) {
-        let trimmed = status.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-
-        statusBarController?.setStatus(trimmed)
-        guard dictationState == .transcribing else { return }
-        guard let floatingStatus = computerUseFloatingStatusLabel(for: trimmed) else { return }
-        if computerUseTranscriptVisible && !shouldReplaceComputerUseTranscript(with: floatingStatus) {
-            return
-        }
-        guard floatingStatus != computerUseLastFloatingStatus else { return }
-
-        let now = Date()
-        let elapsed = now.timeIntervalSince(computerUseLastFloatingStatusAt)
-        if shouldShowComputerUseStatusImmediately(floatingStatus, elapsed: elapsed) {
-            computerUseFloatingStatusWorkItem?.cancel()
-            computerUseFloatingStatusWorkItem = nil
-            applyComputerUseFloatingStatus(floatingStatus, at: now)
-            return
-        }
-
-        let delay = max(0.08, computerUseFloatingStatusMinimumDwell - elapsed)
-        computerUseFloatingStatusWorkItem?.cancel()
-        let workItem = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            Task { @MainActor in
-                guard self.dictationState == .transcribing else { return }
-                self.applyComputerUseFloatingStatus(floatingStatus, at: Date())
-                self.computerUseFloatingStatusWorkItem = nil
-            }
-        }
-        computerUseFloatingStatusWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
-    }
-
-    @MainActor
-    private func computerUseFloatingStatusLabel(for status: String) -> String? {
-        if status.hasPrefix("Planning step") {
-            return computerUseLastFloatingStatus.isEmpty ? "Thinking..." : nil
-        }
-        if status == "Observing screen" {
-            return "Reading screen"
-        }
-        if status == "Screen fallback" {
-            return "Using screen"
-        }
-        if status == "Retrying planner" {
-            return "Retrying"
-        }
-        return status
-    }
-
-    @MainActor
-    private func shouldShowComputerUseStatusImmediately(_ status: String, elapsed: TimeInterval) -> Bool {
-        guard !computerUseLastFloatingStatus.isEmpty else { return true }
-        if elapsed >= computerUseFloatingStatusMinimumDwell { return true }
-        if status == "Done" || status == "Failed" || status == "Confirm" { return true }
-        if computerUseLastFloatingStatus == "Thinking...", elapsed >= 0.25 {
-            return true
-        }
-        if isConcreteComputerUseFloatingStatus(status) {
-            return elapsed >= 0.2
-        }
-        return false
-    }
-
-    @MainActor
-    private func shouldReplaceComputerUseTranscript(with status: String) -> Bool {
-        if status == "Thinking..." || status == "Reading screen" {
-            return false
-        }
-        return true
-    }
-
-    @MainActor
-    private func isConcreteComputerUseFloatingStatus(_ status: String) -> Bool {
-        status.hasPrefix("Opening")
-            || status.hasPrefix("Opened")
-            || status.hasPrefix("Clicked")
-            || status.hasPrefix("Typed")
-            || status.hasPrefix("Navigated")
-            || status == "Navigating"
-            || status == "Typing"
-            || status == "Moving cursor"
-            || status.hasPrefix("Moving to")
-            || status == "Clicking"
-            || status == "Scrolling"
-            || status == "Pressing key"
-            || status == "Using screen"
-    }
-
-    @MainActor
-    private func applyComputerUseFloatingStatus(_ status: String, at date: Date) {
-        computerUseTranscriptVisible = false
-        computerUseLastFloatingStatus = status
-        computerUseLastFloatingStatusAt = date
-        indicator.setTranscribingTitle(status, config: config)
-    }
-
-    @MainActor
-    private func waitForComputerUseFloatingStatusDwell() async {
-        computerUseFloatingStatusWorkItem?.cancel()
-        computerUseFloatingStatusWorkItem = nil
-        let elapsed = Date().timeIntervalSince(computerUseLastFloatingStatusAt)
-        let remaining = computerUseLastFloatingStatus.isEmpty
-            ? 0
-            : computerUseFloatingStatusMinimumDwell - elapsed
-        if remaining > 0 {
-            try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
-        }
-    }
-
-    private func persistComputerUseTrace(_ result: ComputerUsePlannerRuntimeResult, dictationID: Int64?) {
-        guard let dictationID else { return }
-        try? dictationStore.insertComputerUseTrace(
-            dictationID: dictationID,
-            finalStatus: computerUseTraceStatus(result.status),
-            finalMessage: result.message,
-            events: result.traceEvents
-        )
-        statusBarController?.refresh()
-        historyWindowController?.reload()
-        syncAppState()
-    }
-
-    private func computerUseTraceStatus(_ status: ComputerUsePlannerRuntimeResult.Status) -> String {
-        switch status {
-        case .done:
-            return "done"
-        case .timedOut:
-            return "timed_out"
-        case .needsConfirmation:
-            return "confirm"
-        case .failed:
-            return "failed"
-        case .cancelled:
-            return "cancelled"
-        }
-    }
-
-    private func presentComputerUseRuntimeResult(_ result: ComputerUsePlannerRuntimeResult) {
-        setState(.idle)
-        let message: String
-        let floatingMessage: String
-        let icon: String
-        switch result.status {
-        case .done:
-            message = result.message.hasPrefix("Done") ? result.message : "Done: \(result.message)"
-            floatingMessage = "Done"
-            icon = ""
-        case .timedOut:
-            message = result.message
-            floatingMessage = "Timed out"
-            icon = "!"
-        case .needsConfirmation:
-            message = result.message.hasPrefix("Confirm") ? result.message : "Confirm: \(result.message)"
-            floatingMessage = "Confirm"
-            icon = "!"
-        case .failed:
-            message = result.message
-            floatingMessage = "Failed"
-            icon = "!"
-        case .cancelled:
-            message = result.message
-            floatingMessage = "Cancelled"
-            icon = ""
-        }
-        statusBarController?.setStatus(message)
-        indicator.showWarning(floatingMessage, icon: icon, duration: 3.0)
-    }
-
     /// Streaming RNNT dictation backend (handsfree live text at cursor).
     private var isStreamingDictationBackend: Bool {
         selectedBackend.isStreamingDictationBackend
@@ -8650,7 +8175,6 @@ public final class MuesliController: NSObject {
             && config.resolvedOnboardingUseCase.includesPushToTalk
             && AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
             && dictationState == .idle
-            && computerUseCommandStartedAt == nil
             && !isMeetingRecording()
             && !isStartingMeetingRecording
             && !isStoppingMeetingRecording

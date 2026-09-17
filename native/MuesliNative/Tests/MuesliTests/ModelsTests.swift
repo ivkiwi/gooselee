@@ -376,16 +376,6 @@ struct SummaryModelPresetTests {
         }
     }
 
-    @Test("Computer use planner presets include GPT-5.6 Sol default")
-    func computerUsePlannerModels() {
-        #expect(SummaryModelPreset.computerUsePlannerModels.first?.id == "gpt-5.6-sol")
-        #expect(SummaryModelPreset.computerUsePlannerModels.contains { $0.id == "gpt-5.4-mini" })
-        for preset in SummaryModelPreset.computerUsePlannerModels {
-            #expect(!preset.id.isEmpty)
-            #expect(!preset.label.isEmpty)
-        }
-    }
-
     @Test("GPT-5.5 config migrates to GPT-5.6 Sol")
     func migratesGPT55() {
         #expect(SummaryModelPreset.migratedFromGPT55("gpt-5.5") == "gpt-5.6-sol")

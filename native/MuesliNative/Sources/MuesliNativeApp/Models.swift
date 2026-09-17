@@ -400,15 +400,6 @@ struct SummaryModelPreset {
         SummaryModelPreset(id: "gpt-5.6-luna", label: "GPT-5.6 Luna"),
     ]
 
-    static let computerUsePlannerModels: [SummaryModelPreset] = [
-        SummaryModelPreset(id: "gpt-5.6-sol", label: "GPT-5.6 Sol (default)"),
-        SummaryModelPreset(id: "gpt-5.6-terra", label: "GPT-5.6 Terra"),
-        SummaryModelPreset(id: "gpt-5.6-luna", label: "GPT-5.6 Luna"),
-        SummaryModelPreset(id: "gpt-5.4", label: "GPT-5.4"),
-        SummaryModelPreset(id: "gpt-5.4-mini", label: "GPT-5.4 Mini"),
-        SummaryModelPreset(id: "gpt-5.2", label: "GPT-5.2"),
-    ]
-
     static let openRouterModels: [SummaryModelPreset] = [
         SummaryModelPreset(id: "stepfun/step-3.5-flash:free", label: "Step 3.5 Flash (256k ctx)"),
         SummaryModelPreset(id: "nvidia/nemotron-3-super-120b-a12b:free", label: "Nemotron 3 Super 120B (262k ctx)"),

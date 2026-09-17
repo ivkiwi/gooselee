@@ -30,6 +30,25 @@ private enum RemovedGigaAMBackendMigration {
     }
 }
 
+private enum RemovedLegacyASRMigration {
+    static let fallback = BackendOption.parakeetMultilingual
+    static let removedBackends: Set<String> = [
+        "parakeet-unified",
+        "whisper",
+        "qwen",
+        "cohere",
+        "sensevoice",
+    ]
+    static let removedFluidAudioModels: Set<String> = [
+        "FluidInference/parakeet-tdt-0.6b-v2-coreml",
+    ]
+
+    static func matches(backend: String, model: String) -> Bool {
+        removedBackends.contains(backend)
+            || (backend == "fluidaudio" && removedFluidAudioModels.contains(model))
+    }
+}
+
 final class ConfigStore {
     private struct LegacySettingsImportResult {
         let didAttempt: Bool
@@ -84,7 +103,11 @@ final class ConfigStore {
         let legacyImport = importLegacySettingsIfNeeded(into: &config)
         let didMigrateRemovedCanaryQwen = migrateRemovedCanaryQwenSelection(in: &config)
         let didMigrateRemovedGigaAM = migrateRemovedGigaAMSelection(in: &config)
-        if legacyImport.didChangeConfig || didMigrateRemovedCanaryQwen || didMigrateRemovedGigaAM {
+        let didMigrateRemovedLegacyASR = migrateRemovedLegacyASRSelection(in: &config)
+        if legacyImport.didChangeConfig
+            || didMigrateRemovedCanaryQwen
+            || didMigrateRemovedGigaAM
+            || didMigrateRemovedLegacyASR {
             save(config)
         }
         if legacyImport.didAttempt {
@@ -154,6 +177,24 @@ final class ConfigStore {
             model = RemovedGigaAMBackendMigration.fallback.model
             didMigrate = true
             DiagnosticsLog.write("[config-store] migrated removed GigaAM \(field) backend to \(RemovedGigaAMBackendMigration.fallback.label)")
+        }
+
+        migrate("dictation", backend: &config.sttBackend, model: &config.sttModel)
+        migrate("meeting", backend: &config.meetingTranscriptionBackend, model: &config.meetingTranscriptionModel)
+        return didMigrate
+    }
+
+    private func migrateRemovedLegacyASRSelection(in config: inout AppConfig) -> Bool {
+        var didMigrate = false
+
+        func migrate(_ field: String, backend: inout String, model: inout String) {
+            guard RemovedLegacyASRMigration.matches(backend: backend, model: model) else { return }
+            backend = RemovedLegacyASRMigration.fallback.backend
+            model = RemovedLegacyASRMigration.fallback.model
+            didMigrate = true
+            DiagnosticsLog.write(
+                "[config-store] migrated removed legacy \(field) ASR backend to \(RemovedLegacyASRMigration.fallback.label)"
+            )
         }
 
         migrate("dictation", backend: &config.sttBackend, model: &config.sttModel)

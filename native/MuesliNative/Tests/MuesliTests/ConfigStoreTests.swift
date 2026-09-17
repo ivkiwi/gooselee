@@ -145,6 +145,51 @@ struct ConfigStoreTests {
         #expect(saved.meetingTranscriptionModel == BackendOption.gigaAMV3Russian.model)
     }
 
+    @Test("load migrates retired ASR selections to multilingual Parakeet")
+    func loadMigratesRetiredASRSelections() throws {
+        let retiredSelections = [
+            ("parakeet-unified", "FluidInference/parakeet-unified-en-0.6b-coreml"),
+            ("fluidaudio", "FluidInference/parakeet-tdt-0.6b-v2-coreml"),
+            ("whisper", "large-v3-v20240930_626MB"),
+            ("qwen", "FluidInference/qwen3-asr-0.6b-coreml"),
+            ("cohere", "phequals/cohere-transcribe-coreml-mixed-precision"),
+            ("sensevoice", "FluidInference/sensevoice-small-coreml"),
+        ]
+
+        for (index, selection) in retiredSelections.enumerated() {
+            let root = FileManager.default.temporaryDirectory
+                .appendingPathComponent("retired-asr-migration-test-\(index)-\(UUID().uuidString)", isDirectory: true)
+            defer { try? FileManager.default.removeItem(at: root) }
+
+            let supportURL = root.appendingPathComponent("Guesli", isDirectory: true)
+            let store = ConfigStore(
+                supportURL: supportURL,
+                legacySupportURL: root.appendingPathComponent("Muesli", isDirectory: true)
+            )
+            try FileManager.default.createDirectory(at: supportURL, withIntermediateDirectories: true)
+            let payload: [String: String] = [
+                "stt_backend": selection.0,
+                "stt_model": selection.1,
+                "meeting_transcription_backend": selection.0,
+                "meeting_transcription_model": selection.1,
+            ]
+            try JSONEncoder().encode(payload).write(to: store.configPath())
+
+            let loaded = store.load()
+
+            #expect(loaded.sttBackend == BackendOption.parakeetMultilingual.backend)
+            #expect(loaded.sttModel == BackendOption.parakeetMultilingual.model)
+            #expect(loaded.meetingTranscriptionBackend == BackendOption.parakeetMultilingual.backend)
+            #expect(loaded.meetingTranscriptionModel == BackendOption.parakeetMultilingual.model)
+
+            let saved = try JSONDecoder().decode(AppConfig.self, from: Data(contentsOf: store.configPath()))
+            #expect(saved.sttBackend == BackendOption.parakeetMultilingual.backend)
+            #expect(saved.sttModel == BackendOption.parakeetMultilingual.model)
+            #expect(saved.meetingTranscriptionBackend == BackendOption.parakeetMultilingual.backend)
+            #expect(saved.meetingTranscriptionModel == BackendOption.parakeetMultilingual.model)
+        }
+    }
+
     @Test("cleanup prompt selection and custom prompt persist")
     func cleanupPromptSelectionAndCustomPromptPersist() {
         let store = makeStore()

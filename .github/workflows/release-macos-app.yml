@@ -55,7 +55,7 @@ jobs:
           RELEASE_NOTES=$'Russian-first GooseLee / Гусли build: lightweight local meeting recording, transcription, and summaries with the optional Google Meet speaker bridge.\n\nThis build uses the stable self-signed Guesli Dev identity with local-only entitlements, so macOS privacy grants survive updates. It is not Apple-notarized; first launch may require System Settings > Privacy & Security > Open Anyway.'
           ASSET_SUFFIX="-selfsigned-unnotarized"
 
-          APP_DIR="dist/Guesli.app"
+          APP_DIR="dist/GooseLee.app"
           APP_ZIP="dist/GooseLee-${SAFE_VERSION}${ASSET_SUFFIX}.zip"
           DMG_PATH="dist/GooseLee-${SAFE_VERSION}${ASSET_SUFFIX}.dmg"
           EXTENSION_ZIP="dist/GooseLee-Meet-Speaker-Bridge-${SAFE_VERSION}.zip"
@@ -128,9 +128,9 @@ jobs:
           GUESLI_BUILD_VERSION: ${{ steps.meta.outputs.version }}
           GUESLI_BUNDLE_VERSION: ${{ steps.meta.outputs.bundle_version }}
           GUESLI_SHORT_VERSION: ${{ steps.meta.outputs.version }}
-          GUESLI_APP_NAME: Guesli
+          GUESLI_APP_NAME: GooseLee
           GUESLI_DISPLAY_NAME: GooseLee
-          GUESLI_APP_BUNDLE_NAME: Guesli.app
+          GUESLI_APP_BUNDLE_NAME: GooseLee.app
           GUESLI_EXECUTABLE_NAME: Guesli
           GUESLI_SUPPORT_DIR_NAME: Guesli
           GUESLI_BUNDLE_ID: com.guesli.app
@@ -301,7 +301,7 @@ jobs:
             --dmg "$RUNNER_TEMP/hosted-release/$(basename "$DMG_PATH")" \
             --version "$BUNDLE_VERSION" \
             --short-version "$SHORT_VERSION" \
-            --app-name Guesli \
+            --app-name GooseLee \
             --asset-url "$ASSET_URL" \
             --legacy-asset-url-prefix https://github.com/ivkiwi/guesli/releases/download/ \
             --require-runtimes \
@@ -330,7 +330,7 @@ jobs:
             --dmg "$RUNNER_TEMP/hosted-release/$(basename "$DMG_PATH")" \
             --version "$BUNDLE_VERSION" \
             --short-version "$SHORT_VERSION" \
-            --app-name Guesli \
+            --app-name GooseLee \
             --asset-url "$ASSET_URL" \
             --legacy-asset-url-prefix https://github.com/ivkiwi/guesli/releases/download/ \
             --require-runtimes \

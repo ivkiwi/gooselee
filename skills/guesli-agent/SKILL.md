@@ -11,9 +11,10 @@ Use the local `guesli-cli` CLI as the source of truth for meeting and dictation 
 
 Resolve the binary in this order:
 1. `command -v guesli-cli`
-2. `command -v guesli` only when the resolved path is a Homebrew cask alias to `Guesli.app/Contents/MacOS/guesli-cli`; verify with `guesli info`
-3. `/Applications/Guesli.app/Contents/MacOS/guesli-cli`
-4. A local SwiftPM build path inside this repo
+2. `command -v guesli` only when the resolved path is a Homebrew cask alias to `GooseLee.app/Contents/MacOS/guesli-cli`; verify with `guesli info`
+3. `/Applications/GooseLee.app/Contents/MacOS/guesli-cli`
+4. `/Applications/Guesli.app/Contents/MacOS/guesli-cli` for a legacy installation
+5. A local SwiftPM build path inside this repo
 
 If discovery is uncertain, run the candidate binary with `info` first and reject unrelated `guesli` executables.
 

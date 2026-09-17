@@ -6,6 +6,31 @@ WORKFLOW="$ROOT/.github/workflows/release-macos-app.yml"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/guesli-release-security.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
+cat > "$TMP/gooselee-appcast.xml" <<'XML'
+<?xml version="1.0"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+  <channel>
+    <item>
+      <sparkle:version>1009.1.0</sparkle:version>
+      <sparkle:shortVersionString>0.9.1</sparkle:shortVersionString>
+      <enclosure
+        url="https://github.com/ivkiwi/gooselee/releases/download/beta/GooseLee-0.9.1-selfsigned-unnotarized.dmg"
+        length="1"
+        type="application/octet-stream"
+        sparkle:edSignature="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==" />
+    </item>
+  </channel>
+</rss>
+XML
+"$ROOT/scripts/verify_update_flow.sh" \
+  --skip-dmg \
+  --appcast "$TMP/gooselee-appcast.xml" \
+  --version 1009.1.0 \
+  --short-version 0.9.1 \
+  --app-name GooseLee \
+  --asset-url-prefix https://github.com/ivkiwi/gooselee/releases/download/ \
+  >/dev/null
+
 test "$(GUESLI_RELEASE_VERSION='0.8.0-beta.2' GITHUB_RUN_NUMBER=41 "$ROOT/scripts/release_version.sh")" = '0.8.0-beta.2'
 test "$(GUESLI_RELEASE_VERSION='' GITHUB_RUN_NUMBER=41 "$ROOT/scripts/release_version.sh")" = '0.0.0-beta.41'
 test "$("$ROOT/scripts/build_native_app.sh" --print-bundle-version 0.8.3.2)" = '1008.3.2'
@@ -58,6 +83,9 @@ grep -Fq 'actions: read' "$WORKFLOW"
 grep -Fq 'contents: write' "$WORKFLOW"
 grep -Fq 'GUESLI_RELEASE_VERSION: ${{ inputs.version }}' "$WORKFLOW"
 grep -Fq 'BUNDLE_VERSION="$(./scripts/build_native_app.sh --print-bundle-version "$VERSION")"' "$WORKFLOW"
+grep -Fq 'APP_DIR="dist/GooseLee.app"' "$WORKFLOW"
+grep -Fq 'GUESLI_APP_BUNDLE_NAME: GooseLee.app' "$WORKFLOW"
+grep -Fq -- '--app-name GooseLee' "$WORKFLOW"
 test "$(grep -Fc '${{ inputs.version }}' "$WORKFLOW")" -eq 1
 if grep -Fq '${{ github.event.inputs.version }}' "$WORKFLOW"; then
   echo "Release input is still interpolated into shell source" >&2

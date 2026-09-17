@@ -6,10 +6,12 @@ if command -v guesli-cli >/dev/null 2>&1; then
   exit 0
 fi
 
-if [[ -x "/Applications/Guesli.app/Contents/MacOS/guesli-cli" ]]; then
-  echo "/Applications/Guesli.app/Contents/MacOS/guesli-cli"
-  exit 0
-fi
+for app in GooseLee Guesli; do
+  if [[ -x "/Applications/$app.app/Contents/MacOS/guesli-cli" ]]; then
+    echo "/Applications/$app.app/Contents/MacOS/guesli-cli"
+    exit 0
+  fi
+done
 
 if [[ -x "native/Guesli/.build/debug/guesli-cli" ]]; then
   echo "$(pwd)/native/Guesli/.build/debug/guesli-cli"

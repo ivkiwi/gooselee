@@ -34,6 +34,8 @@ fi
 
 if [[ -x "/Applications/GuesliDev.app/Contents/MacOS/guesli-cli" ]]; then
   CLI_BIN="/Applications/GuesliDev.app/Contents/MacOS/guesli-cli"
+elif [[ -x "/Applications/GooseLee.app/Contents/MacOS/guesli-cli" ]]; then
+  CLI_BIN="/Applications/GooseLee.app/Contents/MacOS/guesli-cli"
 elif [[ -x "/Applications/Guesli.app/Contents/MacOS/guesli-cli" ]]; then
   CLI_BIN="/Applications/Guesli.app/Contents/MacOS/guesli-cli"
 elif command -v guesli-cli >/dev/null 2>&1; then

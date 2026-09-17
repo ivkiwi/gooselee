@@ -65,7 +65,7 @@ jobs:
 
   browser-extension:
     needs: changes
-    if: needs.changes.outputs.native_or_packaging == 'true'
+    if: needs.changes.outputs.browser_extension == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -112,7 +112,7 @@ jobs:
   # missing signatures, accidental delta entries, and malformed appcast XML.
   update-flow:
     needs: changes
-    if: needs.changes.outputs.native_or_packaging == 'true'
+    if: needs.changes.outputs.release_update == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -127,7 +127,8 @@ jobs:
           ./scripts/verify_update_flow.sh \
             --skip-dmg \
             --appcast "$RUNNER_TEMP/appcast-guesli.xml" \
-            --app-name Guesli \
+            --app-name GooseLee \
+            --legacy-asset-name Guesli \
             --feed-url https://raw.githubusercontent.com/ivkiwi/gooselee/sparkle-feed/docs/appcast-guesli.xml \
             --asset-url-prefix https://github.com/ivkiwi/gooselee/releases/download/ \
             --legacy-asset-url-prefix https://github.com/ivkiwi/guesli/releases/download/

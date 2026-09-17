@@ -1,4 +1,5 @@
 const MUESLI_BRIDGE_URL = "http://127.0.0.1:1477/v1/meet-speaker";
+const PAIRING_TOKEN_STORAGE_KEY = "muesliMeetSpeakerBridge.pairingToken.v1";
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type !== "muesli.postBridgePayload") return false;
@@ -10,9 +11,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 async function postBridgePayload(payload) {
+  const values = await chrome.storage.local.get(PAIRING_TOKEN_STORAGE_KEY);
+  const pairingToken = (values[PAIRING_TOKEN_STORAGE_KEY] || "").trim();
+  if (!pairingToken) {
+    throw new Error("Set the Guesli pairing token in the extension options");
+  }
   const response = await fetch(MUESLI_BRIDGE_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Authorization": `Bearer ${pairingToken}`,
+      "Content-Type": "application/json"
+    },
     body: JSON.stringify(payload)
   });
   if (!response.ok) {

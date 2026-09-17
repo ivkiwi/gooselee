@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Guesli Meet Speaker Bridge</title>
+    <style>
+      body { font: 14px system-ui, sans-serif; margin: 32px; max-width: 560px; color: #202124; }
+      label { display: block; font-weight: 600; margin-bottom: 8px; }
+      input { box-sizing: border-box; font: 13px ui-monospace, monospace; padding: 9px; width: 100%; }
+      button { margin-top: 12px; padding: 8px 16px; }
+      p { color: #5f6368; line-height: 1.5; }
+      #status { margin-left: 10px; color: #137333; }
+    </style>
+  </head>
+  <body>
+    <h1>Guesli Meet Speaker Bridge</h1>
+    <p>Enable the bridge in Guesli Settings → Meetings → Advanced, copy its pairing token, and paste it here.</p>
+    <label for="pairing-token">Pairing token</label>
+    <input id="pairing-token" type="password" autocomplete="off" spellcheck="false">
+    <button id="save" type="button">Save</button><span id="status" role="status"></span>
+    <script src="options.js"></script>
+  </body>
+</html>

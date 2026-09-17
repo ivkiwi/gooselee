@@ -1186,6 +1186,8 @@ struct AppConfig: Codable {
     var meetingHookEnabled: Bool = false
     var meetingHookPath: String = ""
     var meetingHookTimeoutSeconds: Int = 30
+    var enableMeetSpeakerBridge: Bool = false
+    var meetSpeakerBridgePairingToken: String = ""
     var autoExportMarkdownEnabled: Bool = false
     var autoExportMarkdownFolderPath: String = ""
     var autoExportMarkdownContent: String = MeetingExportContent.notes.rawValue
@@ -1289,6 +1291,8 @@ struct AppConfig: Codable {
         case meetingHookEnabled = "meeting_hook_enabled"
         case meetingHookPath = "meeting_hook_path"
         case meetingHookTimeoutSeconds = "meeting_hook_timeout_seconds"
+        case enableMeetSpeakerBridge = "enable_meet_speaker_bridge"
+        case meetSpeakerBridgePairingToken = "meet_speaker_bridge_pairing_token"
         case autoExportMarkdownEnabled = "auto_export_markdown_enabled"
         case autoExportMarkdownFolderPath = "auto_export_markdown_folder_path"
         case autoExportMarkdownContent = "auto_export_markdown_content"
@@ -1467,6 +1471,8 @@ struct AppConfig: Codable {
         meetingHookEnabled = (try? c.decode(Bool.self, forKey: .meetingHookEnabled)) ?? defaults.meetingHookEnabled
         meetingHookPath = (try? c.decode(String.self, forKey: .meetingHookPath)) ?? defaults.meetingHookPath
         meetingHookTimeoutSeconds = (try? c.decode(Int.self, forKey: .meetingHookTimeoutSeconds)) ?? defaults.meetingHookTimeoutSeconds
+        enableMeetSpeakerBridge = (try? c.decode(Bool.self, forKey: .enableMeetSpeakerBridge)) ?? defaults.enableMeetSpeakerBridge
+        meetSpeakerBridgePairingToken = (try? c.decode(String.self, forKey: .meetSpeakerBridgePairingToken)) ?? defaults.meetSpeakerBridgePairingToken
         autoExportMarkdownEnabled = (try? c.decode(Bool.self, forKey: .autoExportMarkdownEnabled)) ?? defaults.autoExportMarkdownEnabled
         autoExportMarkdownFolderPath = (try? c.decode(String.self, forKey: .autoExportMarkdownFolderPath)) ?? defaults.autoExportMarkdownFolderPath
         let decodedAutoExportMarkdownContent = (try? c.decode(String.self, forKey: .autoExportMarkdownContent)) ?? defaults.autoExportMarkdownContent

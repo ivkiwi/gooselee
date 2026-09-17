@@ -6,6 +6,7 @@ const speakerDetection = require("./speaker-detection.js");
 const manifest = require("./manifest.json");
 
 const source = fs.readFileSync(path.join(__dirname, "content.js"), "utf8");
+const backgroundSource = fs.readFileSync(path.join(__dirname, "background.js"), "utf8");
 
 test("active speakers only come from explicit speaking state", () => {
   assert.doesNotMatch(source, /\[jscontroller\]/);
@@ -86,8 +87,10 @@ test("page lifecycle persists backup observations for reload recovery", () => {
   assert.match(source, /document\.addEventListener\("visibilitychange", handleVisibilityChange\)/);
 });
 
-test("transport falls back to direct bridge fetch after extension reload", () => {
-  assert.match(source, /Extension context invalidated/i);
-  assert.match(source, /await fetchBridgePayload\(payload\)/);
+test("transport stays in the authenticated extension background worker", () => {
+  assert.doesNotMatch(source, /fetch\(/);
   assert.match(source, /chrome\.runtime\.sendMessage\(message,/);
+  assert.match(backgroundSource, /"Authorization": `Bearer \$\{pairingToken\}`/);
+  assert.equal(manifest.options_page, "options.html");
+  assert.ok(manifest.permissions.includes("storage"));
 });

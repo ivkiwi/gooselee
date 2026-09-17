@@ -1171,6 +1171,40 @@ struct SettingsView: View {
             }
 
             settingsSection("Advanced") {
+                settingsRow("Google Meet speaker bridge", controlWidth: meetingControlWidth) {
+                    settingsSwitch(isOn: appState.config.enableMeetSpeakerBridge) { newValue in
+                        controller.setMeetSpeakerBridgeEnabled(newValue)
+                    }
+                }
+                settingsDescription("Optional Chrome extension integration for speaker names. The local bridge listens only while Guesli records an active Google Meet.")
+                if appState.config.enableMeetSpeakerBridge {
+                    Divider().background(MuesliTheme.surfaceBorder)
+                    settingsRow("Pairing token", controlWidth: meetingControlWidth) {
+                        HStack(spacing: MuesliTheme.spacing8) {
+                            Text(String(appState.config.meetSpeakerBridgePairingToken.prefix(8)) + "…")
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(MuesliTheme.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Button("Copy") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(
+                                    appState.config.meetSpeakerBridgePairingToken,
+                                    forType: .string
+                                )
+                            }
+                            .buttonStyle(.bordered)
+                            Button {
+                                controller.regenerateMeetSpeakerBridgePairingToken()
+                            } label: {
+                                Image(systemName: "arrow.clockwise")
+                            }
+                            .buttonStyle(.bordered)
+                            .help("Generate a new pairing token")
+                        }
+                    }
+                    settingsDescription("Paste this token into the extension options. Regenerating it disconnects the old extension configuration.")
+                }
+                Divider().background(MuesliTheme.surfaceBorder)
                 settingsRow("Enable post-meeting hook", controlWidth: meetingControlWidth) {
                     settingsSwitch(isOn: appState.config.meetingHookEnabled) { newValue in
                         controller.updateConfig { $0.meetingHookEnabled = newValue }

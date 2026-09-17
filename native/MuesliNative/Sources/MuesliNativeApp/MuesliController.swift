@@ -458,6 +458,7 @@ public final class MuesliController: NSObject {
     private let meetingNotification = MeetingNotificationController()
     private let meetingSourceWindowLocator = MeetingSourceWindowLocator()
     private let meetSpeakerBridge = MeetSpeakerBridgeServer()
+    private var meetSpeakerBridgeSource: MeetingAutoStopSource?
 
     private let chatGPTAuth = ChatGPTAuthManager.shared
     private let googleCalAuth = GoogleCalendarAuthManager.shared
@@ -779,7 +780,6 @@ public final class MuesliController: NSObject {
                 self?.handleMeetSpeakerObservation(observation)
             }
         }
-        meetSpeakerBridge.start()
         refreshUI()
         if appleCloudCapabilities.canUseCloudKit && config.iCloudSyncEnabled {
             enableICloudPersistentSync()
@@ -1487,6 +1487,7 @@ public final class MuesliController: NSObject {
         syncAutoRecordWakes()
         updateMeetingNotificationVisibility()
         syncDictationRecorderWarmup(intent: .idlePrewarm(.configChange))
+        syncMeetSpeakerBridge()
         if appleCloudCapabilities.canUseCloudKit && !wasICloudSyncEnabled && config.iCloudSyncEnabled {
             enableICloudPersistentSync()
             scheduleICloudSync(delay: 0.2, userInitiated: false)
@@ -2684,6 +2685,39 @@ public final class MuesliController: NSObject {
             meetSpeakerBridgeStats.droppedSourceMismatch += 1
         case .dropStale:
             meetSpeakerBridgeStats.droppedStale += 1
+        }
+    }
+
+    func setMeetSpeakerBridgeEnabled(_ enabled: Bool) {
+        updateConfig { config in
+            config.enableMeetSpeakerBridge = enabled
+            if enabled && config.meetSpeakerBridgePairingToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                config.meetSpeakerBridgePairingToken = Self.makeMeetSpeakerBridgePairingToken()
+            }
+        }
+    }
+
+    func regenerateMeetSpeakerBridgePairingToken() {
+        updateConfig { config in
+            config.meetSpeakerBridgePairingToken = Self.makeMeetSpeakerBridgePairingToken()
+        }
+    }
+
+    private static func makeMeetSpeakerBridgePairingToken() -> String {
+        UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+    }
+
+    private func syncMeetSpeakerBridge() {
+        let shouldRun = MeetSpeakerBridgeActivation.shouldRun(
+            enabled: config.enableMeetSpeakerBridge,
+            pairingToken: config.meetSpeakerBridgePairingToken,
+            source: meetSpeakerBridgeSource,
+            isMeetingActive: isStartingMeetingRecording || activeMeetingSession?.isRecording == true
+        )
+        if shouldRun {
+            meetSpeakerBridge.start(pairingToken: config.meetSpeakerBridgePairingToken)
+        } else {
+            meetSpeakerBridge.stop()
         }
     }
 
@@ -5519,13 +5553,17 @@ public final class MuesliController: NSObject {
             presentErrorAlert(title: "Meeting failed to start", message: error.localizedDescription)
             return false
         }
+        let observedMeetingSource = autoStopSource ?? recentMeetingAutoStopSource()
         armMeetingAutoStop(
             source: startOrigin.signalLossSource(
                 explicitSource: autoStopSource,
-                recentSource: recentMeetingAutoStopSource()
+                recentSource: observedMeetingSource
             ),
             response: startOrigin.signalLossResponse
         )
+        meetSpeakerBridgeSource = MeetSpeakerBridgeActivation.isGoogleMeetSource(observedMeetingSource)
+            ? observedMeetingSource
+            : nil
         let resolvedParticipantCandidates = participantCandidates.isEmpty
             ? self.participantCandidates(forCalendarEventID: resolvedCalendarEventID)
             : participantCandidates
@@ -5546,6 +5584,7 @@ public final class MuesliController: NSObject {
             }
         }
         isStartingMeetingRecording = true
+        syncMeetSpeakerBridge()
         // Keep this after backend normalization and live-meeting creation so
         // a failed meeting start does not silently cancel an active dictation.
         cancelDictationAudioSessionForMeetingRecordingIfNeeded()
@@ -6143,6 +6182,7 @@ public final class MuesliController: NSObject {
                     throw CancellationError()
                 }
                 activeMeetingSession = meetingSession
+                syncMeetSpeakerBridge()
                 recordBufferedMeetSpeakerObservations(to: meetingSession)
                 activeMeetingID = meetingID
                 activeMeetingAutoStop.markRecordingStarted(now: Date())
@@ -7907,6 +7947,8 @@ public final class MuesliController: NSObject {
         meetingSignalLossPromptState.resetForRecording()
         latestMeetingActivityCandidate = nil
         latestMeetingActivityCandidateObservedAt = nil
+        meetSpeakerBridgeSource = nil
+        syncMeetSpeakerBridge()
         syncMeetingDetectionMonitor()
     }
 

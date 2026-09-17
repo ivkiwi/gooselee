@@ -478,7 +478,6 @@ public final class MuesliController: NSObject {
     private var meetingSummaryTasks: [Int64: Task<Void, Never>] = [:]
     private var meetingSummaryRequestGate = MeetingSummaryRequestGate()
     private var onboardingModelPreparationTask: Task<Void, Never>?
-    private var maraudersMapCountdown: MaraudersMapCountdownController?
 
     private var statusBarController: StatusBarController?
     private var historyWindowController: RecentHistoryWindowController?
@@ -830,7 +829,7 @@ public final class MuesliController: NSObject {
 
         // Defer permission-triggering monitors until after onboarding
         if canRunMainApp && shouldRunMeetingFeatureMonitors {
-            startMeetingFeatureMonitors(includeMaraudersMap: true)
+            startMeetingFeatureMonitors()
         }
 
         if canRunMainApp {
@@ -2752,10 +2751,7 @@ public final class MuesliController: NSObject {
         """)
     }
 
-    private func startMeetingFeatureMonitors(includeMaraudersMap: Bool) {
-        if includeMaraudersMap, config.maraudersMapUnlocked {
-            startMaraudersMapMonitoring()
-        }
+    private func startMeetingFeatureMonitors() {
         syncMeetingDetectionMonitor()
     }
 
@@ -3079,7 +3075,7 @@ public final class MuesliController: NSObject {
         return false
     }
 
-    /// Show a "Meeting starting now" notification — independent of Marauder's Map.
+    /// Show a "Meeting starting now" notification.
     @discardableResult
     private func showMeetingStartingNowNotification(
         title: String,
@@ -3859,7 +3855,7 @@ public final class MuesliController: NSObject {
             syncCalendarMonitor()
             // Start monitors that were deferred during onboarding
             if shouldRunMeetingFeatureMonitors {
-                startMeetingFeatureMonitors(includeMaraudersMap: false)
+                startMeetingFeatureMonitors()
             }
             let completionTab = OnboardingFlow.completionTab(for: onboardingUseCase)
             openHistoryWindow(tab: completionTab)
@@ -8780,8 +8776,6 @@ public final class MuesliController: NSObject {
         let cleaned = FillerWordFilter.apply(finalText)
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if !config.maraudersMapUnlocked { checkMaraudersMapActivation(cleaned) }
-
         if !cleaned.isEmpty {
             _ = try? dictationStore.insertDictation(
                 text: cleaned,
@@ -8879,9 +8873,6 @@ public final class MuesliController: NSObject {
                     return
                 }
 
-                if !self.config.maraudersMapUnlocked {
-                    await MainActor.run { self.checkMaraudersMapActivation(text) }
-                }
                 guard !text.isEmpty else {
                     await MainActor.run {
                         self.clearCapturedDictationSessionContext()
@@ -8991,86 +8982,6 @@ public final class MuesliController: NSObject {
             return "Guesli could not access the microphone. Check Microphone permission and try again."
         }
         return "Dictation could not start. Try again in a moment."
-    }
-
-    // MARK: - Marauder's Map
-
-    private func checkMaraudersMapActivation(_ text: String) {
-        guard !config.maraudersMapUnlocked else { return }
-        guard MaraudersMapDetector.containsActivationPhrase(text) else { return }
-
-        fputs("[muesli-native] Marauder's Map unlocked!\n", stderr)
-        updateConfig { $0.maraudersMapUnlocked = true }
-        SoundController.playMaraudersMapUnlock()
-        indicator.showWarning("Mischief Managed", icon: "\u{26A1}", duration: 3.0)
-        startMaraudersMapMonitoring()
-    }
-
-    private func startMaraudersMapMonitoring() {
-        guard config.maraudersMapUnlocked else { return }
-
-        let countdown = MaraudersMapCountdownController()
-        self.maraudersMapCountdown = countdown
-
-        countdown.startMonitoring(
-            eventProvider: { [weak self] in
-                guard let self else { return nil }
-                let now = Date()
-                let hidden = self.appState.hiddenCalendarEventIDs
-                guard let event = (self.appState.upcomingCalendarEvents
-                    .filter {
-                        ScheduledMeetingNotificationPolicy.isJoinableMeeting($0, hiddenEventIDs: hidden)
-                            && $0.startDate > now
-                    }
-                    .min(by: { $0.startDate < $1.startDate })) else { return nil }
-                return (id: event.id, title: event.title, startDate: event.startDate)
-            },
-            audioClipID: config.maraudersMapAudioClip,
-            customAudioPath: config.maraudersMapCustomAudioPath,
-            onStatusBarUpdate: { [weak self] text in
-                self?.statusBarController?.setCountdownOverride(text)
-            },
-            onCountdownFinished: { [weak self] info in
-                guard let self, !self.isMeetingRecording() else { return }
-                // Cancel any scheduled "starting now" timer for this event.
-                // Match by event ID prefix so deleted/cancelled events (no longer
-                // in upcomingCalendarEvents) still get their timers cancelled.
-                let prefix = "\(info.id)|"
-                let matchingTimerKeys = self.meetingStartingNowTimers.keys.filter { $0.hasPrefix(prefix) }
-                for key in matchingTimerKeys {
-                    guard let timer = self.meetingStartingNowTimers[key] else { continue }
-                    timer.invalidate()
-                    self.meetingStartingNowTimers.removeValue(forKey: key)
-                }
-                guard let event = ScheduledMeetingNotificationPolicy.startingNowCandidate(
-                    from: self.appState.upcomingCalendarEvents,
-                    eventID: info.id,
-                    startDate: info.startDate,
-                    hiddenEventIDs: self.appState.hiddenCalendarEventIDs
-                ) else { return }
-                // Reuse the same notification method as the timer path
-                self.showMeetingStartingNowNotification(
-                    title: event.title,
-                    calendarOccurrence: event.resolvedCalendarOccurrence,
-                    meetingURL: event.meetingURL,
-                    endDate: event.endDate
-                )
-            }
-        )
-    }
-
-    func updateMaraudersMapAudioClip() {
-        maraudersMapCountdown?.updateAudioClip(config.maraudersMapAudioClip, customPath: config.maraudersMapCustomAudioPath)
-    }
-
-    func resetMaraudersMap() {
-        maraudersMapCountdown?.stopMonitoring()
-        maraudersMapCountdown = nil
-        updateConfig {
-            $0.maraudersMapUnlocked = false
-            $0.maraudersMapAudioClip = "bbc_world_news"
-            $0.maraudersMapCustomAudioPath = nil
-        }
     }
 
     @discardableResult

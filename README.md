@@ -1,8 +1,8 @@
-# Guesli / Гусли
+# GooseLee / Гусли
 
 Лёгкое, бесплатное и настраиваемое macOS-приложение для записи, распознавания и конспектирования встреч. Главный сценарий — русские и мультиязычные разговоры; диктовка остаётся удобным дополнительным режимом.
 
-Guesli начинались как русский fork [Muesli](https://github.com/Muesli-HQ/muesli), но больше не пытаются синхронизироваться с upstream целиком. Это самостоятельный downstream-продукт со своим набором моделей, интерфейсом, хранением данных и релизным циклом. Полезные upstream-исправления переносятся точечно.
+GooseLee начинались как русский fork [Muesli](https://github.com/Muesli-HQ/muesli), но больше не пытаются синхронизироваться с upstream целиком. Это самостоятельный downstream-продукт со своим набором моделей, интерфейсом, хранением данных и релизным циклом. Полезные upstream-исправления переносятся точечно.
 
 ## Что умеют Гусли
 
@@ -44,6 +44,6 @@ Guesli начинались как русский fork [Muesli](https://github.c
 
 ## English
 
-Guesli is a lightweight, free, configurable macOS meeting recorder, local transcription app, and meeting summarizer with a Russian-first focus. It started as a fork of [Muesli](https://github.com/Muesli-HQ/muesli), but is now maintained as an independent downstream product rather than a continuously synchronized fork. Useful upstream fixes are reviewed and ported selectively.
+GooseLee is a lightweight, free, configurable macOS meeting recorder, local transcription app, and meeting summarizer with a Russian-first focus. It started as a fork of [Muesli](https://github.com/Muesli-HQ/muesli), but is now maintained as an independent downstream product rather than a continuously synchronized fork. Useful upstream fixes are reviewed and ported selectively.
 
 The deliberately small ASR catalog contains GigaAM v3, Parakeet v3, and Nemotron 3.5 Multilingual. Optional Parakeet Realtime EOU support is available only for English live meeting previews. Guesli has no product telemetry, donation prompts, or paid upsells.

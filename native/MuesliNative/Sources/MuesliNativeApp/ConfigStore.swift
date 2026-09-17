@@ -255,8 +255,6 @@ final class ConfigStore {
             config.dictationInputDeviceUID = legacy.dictationInputDeviceUID
             importedFields.append("dictation_input_device_uid")
         }
-        importValue("cohere_language_dictation", \.cohereLanguageDictation)
-        importValue("cohere_language_meetings", \.cohereLanguageMeetings)
         importValue("nemotron35_language", \.nemotron35Language)
 
         if config.preferredMeetingBrowserBundleID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,

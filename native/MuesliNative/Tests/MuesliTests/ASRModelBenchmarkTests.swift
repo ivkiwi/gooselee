@@ -65,7 +65,6 @@ private struct BenchmarkConfig {
     let startSeconds: Double
     let maxSeconds: Double?
     let allowDownloads: Bool
-    let cohereLanguage: CohereTranscribeLanguage
     let includeText: Bool
 
     init(environment: [String: String]) throws {
@@ -92,7 +91,6 @@ private struct BenchmarkConfig {
             maxSeconds = nil
         }
         allowDownloads = environment["MUESLI_ASR_BENCH_ALLOW_DOWNLOADS"] == "1"
-        cohereLanguage = CohereTranscribeLanguage.resolved(environment["MUESLI_ASR_BENCH_COHERE_LANGUAGE"] ?? CohereTranscribeLanguage.defaultLanguage.rawValue)
         includeText = environment["MUESLI_ASR_BENCH_INCLUDE_TEXT"] == "1"
     }
 
@@ -196,15 +194,7 @@ private struct BenchmarkConfig {
         let all = [
             ("gigaam-onnx-coreml", BackendOption.gigaAMV3Russian),
             ("parakeet-v3", BackendOption.parakeetMultilingual),
-            ("parakeet-v2", BackendOption.parakeetEnglish),
-            ("whisper-tiny-en", BackendOption.whisperTinyEnglish),
-            ("whisper-small", BackendOption.whisperSmall),
-            ("whisper-medium", BackendOption.whisperMedium),
-            ("whisper-large-turbo", BackendOption.whisperLargeTurbo),
-            ("sensevoice", BackendOption.senseVoiceSmall),
             ("nemotron35", BackendOption.nemotron35Multilingual),
-            ("qwen3", BackendOption.qwen3Asr),
-            ("cohere", BackendOption.cohereTranscribe),
         ]
         return all.compactMap { id, option in
             if downloadedOnly, !isBenchmarkModelAvailable(option) { return nil }
@@ -216,15 +206,7 @@ private struct BenchmarkConfig {
         switch id {
         case "gigaam-onnx-coreml": return .gigaAMV3Russian
         case "parakeet-v3": return .parakeetMultilingual
-        case "parakeet-v2": return .parakeetEnglish
-        case "whisper-tiny-en": return .whisperTinyEnglish
-        case "whisper-small": return .whisperSmall
-        case "whisper-medium": return .whisperMedium
-        case "whisper-large-turbo": return .whisperLargeTurbo
-        case "sensevoice": return .senseVoiceSmall
         case "nemotron35": return .nemotron35Multilingual
-        case "qwen3": return .qwen3Asr
-        case "cohere": return .cohereTranscribe
         default: return nil
         }
     }
@@ -630,8 +612,7 @@ private func runProduction(
     let result = try await coordinator.transcribeMeeting(
         at: prepared.wavURL,
         samples: prepared.samples,
-        backend: option,
-        cohereLanguage: config.cohereLanguage
+        backend: option
     )
     let transcribeSec = now() - transcribeStart
     await coordinator.shutdown()
@@ -864,18 +845,14 @@ private func diskFootprintMB(candidate: BenchmarkCandidate, config: BenchmarkCon
 }
 
 private func diskURL(for option: BackendOption) -> URL? {
-    let home = FileManager.default.homeDirectoryForCurrentUser
     switch option {
     case .gigaAMV3Russian:
         return ONNXGigaAMModelStore.cacheDirectory()
     case .parakeetMultilingual:
         return fluidAudioModelDirectory(version: "v3")
-    case .parakeetEnglish:
-        return fluidAudioModelDirectory(version: "v2")
-    case .senseVoiceSmall:
-        return SenseVoiceTranscriber.cacheDirectory()
-    case .whisperTinyEnglish, .whisperSmall, .whisperMedium, .whisperLargeTurbo:
-        return home.appendingPathComponent("Documents/huggingface/models/argmaxinc/whisperkit-coreml/openai_whisper-\(option.model)")
+    case .nemotron35Multilingual:
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".cache/muesli/models/nemotron35-multilingual-2240ms", isDirectory: true)
     default:
         return nil
     }
@@ -885,8 +862,6 @@ private func isBenchmarkModelAvailable(_ option: BackendOption) -> Bool {
     switch option {
     case .parakeetMultilingual:
         return fluidAudioModelDirectory(version: "v3").map { FileManager.default.fileExists(atPath: $0.path) } ?? false
-    case .parakeetEnglish:
-        return fluidAudioModelDirectory(version: "v2").map { FileManager.default.fileExists(atPath: $0.path) } ?? false
     default:
         return option.isDownloaded
     }

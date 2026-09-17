@@ -47,14 +47,13 @@ enum OnboardingPermissionGate {
 }
 
 struct OnboardingProgress: Codable {
-    static let currentSchemaVersion = 4
+    static let currentSchemaVersion = 5
 
     var schemaVersion: Int = currentSchemaVersion
     var currentStep: Int
     var userName: String
     var selectedBackendKey: String
     var selectedModelKey: String
-    var selectedCohereLanguageCode: String
     var hotkeyKeyCode: UInt16
     var hotkeyLabel: String
     var systemAudioRequested: Bool = false
@@ -68,7 +67,6 @@ struct OnboardingProgress: Codable {
         userName: String,
         selectedBackendKey: String,
         selectedModelKey: String,
-        selectedCohereLanguageCode: String = CohereTranscribeLanguage.defaultLanguage.rawValue,
         hotkeyKeyCode: UInt16,
         hotkeyLabel: String,
         systemAudioRequested: Bool = false,
@@ -81,7 +79,6 @@ struct OnboardingProgress: Codable {
         self.userName = userName
         self.selectedBackendKey = selectedBackendKey
         self.selectedModelKey = selectedModelKey
-        self.selectedCohereLanguageCode = CohereTranscribeLanguage.resolvedCode(selectedCohereLanguageCode)
         self.hotkeyKeyCode = hotkeyKeyCode
         self.hotkeyLabel = hotkeyLabel
         self.systemAudioRequested = systemAudioRequested
@@ -97,9 +94,6 @@ struct OnboardingProgress: Codable {
         userName = try c.decode(String.self, forKey: .userName)
         selectedBackendKey = try c.decode(String.self, forKey: .selectedBackendKey)
         selectedModelKey = try c.decode(String.self, forKey: .selectedModelKey)
-        selectedCohereLanguageCode = CohereTranscribeLanguage.resolvedCode(
-            try c.decodeIfPresent(String.self, forKey: .selectedCohereLanguageCode)
-        )
         hotkeyKeyCode = try c.decode(UInt16.self, forKey: .hotkeyKeyCode)
         hotkeyLabel = try c.decode(String.self, forKey: .hotkeyLabel)
         systemAudioRequested = try c.decodeIfPresent(Bool.self, forKey: .systemAudioRequested) ?? false

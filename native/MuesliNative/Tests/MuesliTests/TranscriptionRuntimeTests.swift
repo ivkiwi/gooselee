@@ -116,7 +116,7 @@ struct TranscriptionCoordinatorTests {
             SpeechTranscriptionResult(text: "um ship the release", segments: [
                 SpeechSegment(start: 0, end: 1, text: "um ship the release"),
             ]),
-            backend: .whisper,
+            backend: .parakeetMultilingual,
             enabled: true,
             appContext: "Release notes"
         )
@@ -140,7 +140,7 @@ struct TranscriptionCoordinatorTests {
 
         let result = await coordinator.postProcessDictationIfNeeded(
             SpeechTranscriptionResult(text: "raw dictation", segments: []),
-            backend: .whisper,
+            backend: .parakeetMultilingual,
             enabled: true
         )
 
@@ -156,7 +156,7 @@ struct TranscriptionCoordinatorTests {
 
         let result = await coordinator.postProcessDictationIfNeeded(
             SpeechTranscriptionResult(text: "raw dictation", segments: []),
-            backend: .whisper,
+            backend: .parakeetMultilingual,
             enabled: true
         )
 
@@ -179,149 +179,6 @@ private actor TranscriptCleanupCallRecorder {
 
     func recordedCall() -> TranscriptCleanupCall? {
         call
-    }
-}
-
-@Suite("CohereTranscribeLanguage", .muesliHermeticSupport)
-struct CohereTranscribeLanguageTests {
-
-    @Test("english prompt ids match the current default prompt")
-    func englishPromptIds() {
-        #expect(
-            CohereTranscribeLanguage.english.promptIds == [13764, 7, 4, 16, 62, 62, 5, 9, 11, 13]
-        )
-    }
-
-    @Test("german prompt ids swap in the german language token")
-    func germanPromptIds() {
-        #expect(
-            CohereTranscribeLanguage.german.promptIds == [13764, 7, 4, 16, 76, 76, 5, 9, 11, 13]
-        )
-    }
-
-    @Test("unset and unsupported codes fall back to english")
-    func resolvedFallbacks() {
-        #expect(CohereTranscribeLanguage.resolved(nil) == .english)
-        #expect(CohereTranscribeLanguage.resolved("xx") == .english)
-    }
-}
-
-@Suite("CohereTranscribeUtils", .muesliHermeticSupport)
-struct CohereTranscribeUtilsTests {
-
-    @Test("single transcript returns unchanged")
-    func singleTranscript() {
-        let result = CohereTranscribeUtils.mergeOverlappingTranscripts(["Hello world"])
-        #expect(result == "Hello world")
-    }
-
-    @Test("empty list returns empty string")
-    func emptyList() {
-        #expect(CohereTranscribeUtils.mergeOverlappingTranscripts([]) == "")
-    }
-
-    @Test("no overlap joins with space")
-    func noOverlap() {
-        let result = CohereTranscribeUtils.mergeOverlappingTranscripts([
-            "The quick brown fox",
-            "jumped over the lazy dog",
-        ])
-        #expect(result == "The quick brown fox jumped over the lazy dog")
-    }
-
-    @Test("exact trigram overlap deduplicates")
-    func exactOverlap() {
-        let result = CohereTranscribeUtils.mergeOverlappingTranscripts([
-            "I went to the store and bought some milk",
-            "and bought some milk then came home",
-        ])
-        #expect(result == "I went to the store and bought some milk then came home")
-    }
-
-    @Test("case-insensitive trigram matching")
-    func caseInsensitive() {
-        let result = CohereTranscribeUtils.mergeOverlappingTranscripts([
-            "The Model Works well",
-            "the model works well on device",
-        ])
-        #expect(result == "The Model Works well on device")
-    }
-
-    @Test("shared overlap merger returns only unique suffix")
-    func sharedOverlapMergerUniqueSuffix() {
-        let result = TranscriptOverlapMerger.uniqueAddition(
-            previous: "Speaker one explains the migration plan in detail",
-            next: "the migration plan in detail then assigns owners"
-        )
-        #expect(result == "then assigns owners")
-    }
-
-    @Test("cleanTranscript strips endoftext token")
-    func stripsEndOfText() {
-        let result = CohereTranscribeUtils.cleanTranscript("Hello world<|endoftext|>garbage after")
-        #expect(result == "Hello world")
-    }
-
-    @Test("cleanTranscript strips special tokens")
-    func stripsSpecialTokens() {
-        let result = CohereTranscribeUtils.cleanTranscript("Hello<|nospeech|> world<|pnc|>")
-        #expect(result == "Hello world")
-    }
-
-    @Test("cleanTranscript trims repeated suffix")
-    func trimsRepeatedSuffix() {
-        // Split on ". " produces: ["First", "Second", "Third", "Fourth", "Second", "more"]
-        // Position 4 "Second" matches position 1 "Second", i-j=3 ≤ 3 → truncate at position 4
-        let result = CohereTranscribeUtils.cleanTranscript(
-            "First. Second. Third. Fourth. Second. more text"
-        )
-        #expect(result == "First. Second. Third. Fourth.")
-    }
-
-    @Test("cleanTranscript passes normal text unchanged")
-    func normalTextUnchanged() {
-        #expect(CohereTranscribeUtils.cleanTranscript("Normal transcription text.") == "Normal transcription text.")
-    }
-}
-
-@Suite("SenseVoiceFileChunking", .muesliHermeticSupport)
-struct SenseVoiceFileChunkingTests {
-
-    @Test("short files use one passthrough window")
-    func shortFilesUseOnePassthroughWindow() {
-        let sampleCount = 15 * SenseVoiceFileChunking.sampleRate
-        #expect(SenseVoiceFileChunking.windows(sampleCount: sampleCount) == [0..<sampleCount])
-        #expect(!SenseVoiceFileChunking.shouldChunk(sampleCount: sampleCount))
-    }
-
-    @Test("long files use 15 second windows with 2 second overlap")
-    func longFilesUseOverlappingWindows() {
-        let sampleRate = SenseVoiceFileChunking.sampleRate
-        let sampleCount = 46 * sampleRate
-        let windows = SenseVoiceFileChunking.windows(sampleCount: sampleCount)
-
-        #expect(windows == [
-            0..<(15 * sampleRate),
-            (13 * sampleRate)..<(28 * sampleRate),
-            (26 * sampleRate)..<(41 * sampleRate),
-            (39 * sampleRate)..<(46 * sampleRate),
-        ])
-    }
-
-    @Test("empty audio produces no windows")
-    func emptyAudioProducesNoWindows() {
-        #expect(SenseVoiceFileChunking.windows(sampleCount: 0).isEmpty)
-    }
-
-    @Test("merge deduplicates overlap")
-    func mergeDeduplicatesOverlap() {
-        let result = SenseVoiceFileChunking.mergeTranscripts([
-            "alpha beta gamma delta epsilon",
-            "gamma delta epsilon zeta eta",
-            "epsilon zeta eta theta iota",
-        ])
-
-        #expect(result == "alpha beta gamma delta epsilon zeta eta theta iota")
     }
 }
 

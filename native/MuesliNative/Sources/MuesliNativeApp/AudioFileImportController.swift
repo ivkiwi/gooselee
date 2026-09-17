@@ -191,7 +191,7 @@ enum AudioFileImportController {
 
         try Task.checkCancellation()
 
-        // Run VAD to skip silent files (prevents Cohere hallucinations on silence)
+        // Run VAD to skip silent files and avoid ASR hallucinations on silence.
         if let vadManager = await transcriptionCoordinator.getVadManager() {
             do {
                 let vadResults = try await vadManager.process(wavURL)
@@ -213,7 +213,6 @@ enum AudioFileImportController {
             at: wavURL,
             samples: audioSamples,
             backend: backend,
-            cohereLanguage: config.resolvedCohereLanguageMeetings
         )
         let rawTranscript = transcription.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !rawTranscript.isEmpty else {

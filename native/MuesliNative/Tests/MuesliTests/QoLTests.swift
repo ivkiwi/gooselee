@@ -244,7 +244,7 @@ struct IndicatorFrameSizeTests {
         )
     }
 
-    @Test("transcribing pill widens for live CUA status labels")
+    @Test("transcribing pill widens for status labels")
     @MainActor
     func transcribingPillWidensForStatusText() {
         let short = FloatingIndicatorController.transcribingPillSizeForTesting(
@@ -272,24 +272,6 @@ struct IndicatorFrameSizeTests {
 
         #expect(size.width <= 148)
         #expect(size.height == 32)
-    }
-
-    @Test("CUA transcript pill wraps and grows vertically instead of truncating")
-    @MainActor
-    func computerUseTranscriptPillWrapsAndExpands() {
-        let short = FloatingIndicatorController.computerUseTranscriptPillSizeForTesting(
-            transcript: "Open Twitter",
-            screenWidth: 1200
-        )
-        let long = FloatingIndicatorController.computerUseTranscriptPillSizeForTesting(
-            transcript: "Open Twitter in Google Chrome and write a tweet saying this was written using Muesli CUA without posting it",
-            screenWidth: 420
-        )
-
-        #expect(short.width >= 280)
-        #expect(short.height >= 44)
-        #expect(long.width <= 372)
-        #expect(long.height > short.height)
     }
 }
 
@@ -741,13 +723,13 @@ struct MeetingChunkTimingTrackerTests {
     @Test("GigaAM meeting chunking uses longer chunks and overlap")
     func gigaAMMeetingChunkingPolicy() {
         let gigaAM = MeetingSession.liveChunkingConfiguration(for: .gigaAMV3Russian)
-        let whisper = MeetingSession.liveChunkingConfiguration(for: .whisperTinyEnglish)
+        let parakeet = MeetingSession.liveChunkingConfiguration(for: .parakeetMultilingual)
 
         #expect(gigaAM.maxChunkDuration == 20)
         #expect(gigaAM.overlapSampleCount == 32_000)
         #expect(gigaAM.deduplicatesText)
-        #expect(whisper.maxChunkDuration == 5)
-        #expect(whisper.overlapSampleCount == 0)
-        #expect(!whisper.deduplicatesText)
+        #expect(parakeet.maxChunkDuration == 5)
+        #expect(parakeet.overlapSampleCount == 0)
+        #expect(!parakeet.deduplicatesText)
     }
 }

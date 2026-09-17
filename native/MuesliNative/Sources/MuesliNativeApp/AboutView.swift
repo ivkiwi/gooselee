@@ -114,17 +114,12 @@ struct AboutView: View {
                 aboutCard {
                     acknowledgement(
                         name: "FluidAudio by FluidInference",
-                        description: "CoreML speech stack powering Parakeet, Qwen3 ASR, Silero VAD, and speaker diarization on Apple Silicon."
+                        description: "CoreML speech stack powering Parakeet, Nemotron, Silero VAD, and speaker diarization on Apple Silicon."
                     )
                     Divider().background(MuesliTheme.surfaceBorder)
                     acknowledgement(
                         name: "LocalVQE by localai-org",
                         description: "On-device acoustic echo cancellation powering cleaner meeting transcription."
-                    )
-                    Divider().background(MuesliTheme.surfaceBorder)
-                    acknowledgement(
-                        name: "WhisperKit by Argmax",
-                        description: "Swift Whisper inference on CoreML/ANE powering the app's Whisper Small, Medium, and Large Turbo backends."
                     )
                 }
 

@@ -12,17 +12,8 @@ enum HeadlessAudioLoadingStrategy: Equatable {
 public enum HeadlessTranscriptionModel: String, CaseIterable, Sendable {
     case gigaAMONNX = "gigaam-onnx"
     case parakeetV3 = "parakeet-v3"
-    case parakeetV2 = "parakeet-v2"
-    case parakeetUnified = "parakeet-unified"
     case parakeetEOU320ms = "parakeet-eou-320ms"
-    case senseVoice = "sensevoice"
-    case qwen3ASR = "qwen3-asr"
     case nemotron35 = "nemotron35"
-    case cohere = "cohere"
-    case whisperTinyEnglish = "whisper-tiny-english"
-    case whisperSmallEnglish = "whisper-small-english"
-    case whisperMediumEnglish = "whisper-medium-english"
-    case whisperLargeTurbo = "whisper-large-turbo"
 
     var audioLoadingStrategy: HeadlessAudioLoadingStrategy {
         switch self {
@@ -36,8 +27,6 @@ public enum HeadlessTranscriptionModel: String, CaseIterable, Sendable {
         switch self {
         case .gigaAMONNX: .gigaAMV3Russian
         case .parakeetV3: .parakeetMultilingual
-        case .parakeetV2: .parakeetEnglish
-        case .parakeetUnified: .parakeetUnified
         case .parakeetEOU320ms:
             BackendOption(
                 backend: "parakeet-eou-320ms",
@@ -47,14 +36,7 @@ public enum HeadlessTranscriptionModel: String, CaseIterable, Sendable {
                 description: "Streaming English ASR with cumulative partials.",
                 recommended: false
             )
-        case .senseVoice: .senseVoiceSmall
-        case .qwen3ASR: .qwen3Asr
         case .nemotron35: .nemotron35Multilingual
-        case .cohere: .cohereTranscribe
-        case .whisperTinyEnglish: .whisperTinyEnglish
-        case .whisperSmallEnglish: .whisperSmall
-        case .whisperMediumEnglish: .whisperMedium
-        case .whisperLargeTurbo: .whisperLargeTurbo
         }
     }
 }

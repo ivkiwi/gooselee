@@ -10,15 +10,6 @@ struct BackendOption: Equatable {
     let description: String
     let recommended: Bool
 
-    static let parakeetUnified = BackendOption(
-        backend: "parakeet-unified",
-        model: "FluidInference/parakeet-unified-en-0.6b-coreml",
-        label: "Parakeet Unified",
-        sizeLabel: "~565 MB",
-        description: "Newest English-focused Parakeet generation with lower error rates and fast offline CoreML inference.",
-        recommended: false
-    )
-
     static let parakeetMultilingual = BackendOption(
         backend: "fluidaudio",
         model: "FluidInference/parakeet-tdt-0.6b-v3-coreml",
@@ -26,51 +17,6 @@ struct BackendOption: Equatable {
         sizeLabel: "~450 MB",
         description: "Multilingual, 25 languages. Runs on Apple Neural Engine.",
         recommended: true
-    )
-
-    static let parakeetEnglish = BackendOption(
-        backend: "fluidaudio",
-        model: "FluidInference/parakeet-tdt-0.6b-v2-coreml",
-        label: "Parakeet v2",
-        sizeLabel: "~450 MB",
-        description: "English-only, highest recall. Runs on Apple Neural Engine.",
-        recommended: false
-    )
-
-    static let whisperSmall = BackendOption(
-        backend: "whisper",
-        model: "small.en",
-        label: "Whisper Small",
-        sizeLabel: "~250 MB",
-        description: "Fast, English-optimized. Runs on Apple Neural Engine via CoreML.",
-        recommended: false
-    )
-
-    static let whisperTinyEnglish = BackendOption(
-        backend: "whisper",
-        model: "tiny.en",
-        label: "Whisper Tiny English",
-        sizeLabel: "~153 MB",
-        description: "Smallest English WhisperKit CoreML model. Quickest local setup.",
-        recommended: false
-    )
-
-    static let whisperMedium = BackendOption(
-        backend: "whisper",
-        model: "medium.en",
-        label: "Whisper Medium",
-        sizeLabel: "~1.5 GB",
-        description: "Better accuracy, English-only. Runs on Apple Neural Engine via CoreML.",
-        recommended: false
-    )
-
-    static let whisperLargeTurbo = BackendOption(
-        backend: "whisper",
-        model: "large-v3-v20240930_626MB",
-        label: "Whisper Large Turbo",
-        sizeLabel: "~626 MB",
-        description: "Highest accuracy, multilingual. Quantized CoreML for faster inference.",
-        recommended: false
     )
 
     static let nemotron35Multilingual = BackendOption(
@@ -91,63 +37,14 @@ struct BackendOption: Equatable {
         recommended: true
     )
 
-    static let cohereTranscribe = BackendOption(
-        backend: "cohere",
-        model: "phequals/cohere-transcribe-coreml-mixed-precision",
-        label: "Cohere Transcribe",
-        sizeLabel: "~3.8 GB",
-        description: "Mixed precision (FP16 encoder + INT8 decoder). 14 languages. High accuracy (#1 Open ASR Leaderboard). Final transcript after stop. May decode hallucinated text during silence — use in quiet environments or with VAD.",
-        recommended: false
-    )
-
-    static let senseVoiceSmall = BackendOption(
-        backend: "sensevoice",
-        model: "FluidInference/sensevoice-small-coreml",
-        label: "SenseVoice Small",
-        sizeLabel: SenseVoiceTranscriber.downloadedModelSizeLabel,
-        description: "FunASR SenseVoiceSmall via FluidAudio. INT8 CoreML/ANE on macOS 14+, 50+ languages. Non-autoregressive with built-in punctuation.",
-        recommended: false
-    )
-
-    // Default alias
-    static let whisper = parakeetMultilingual
-
-    static let parakeetFamily: [BackendOption] = [
-        .parakeetMultilingual, .parakeetUnified, .parakeetEnglish,
-    ]
-
-    static let whisperFamily: [BackendOption] = [
-        .whisperTinyEnglish, .whisperSmall, .whisperMedium, .whisperLargeTurbo,
-    ]
-
-    static let qwen3Asr = BackendOption(
-        backend: "qwen",
-        model: "FluidInference/qwen3-asr-0.6b-coreml",
-        label: "Qwen3 ASR",
-        sizeLabel: "~1.3 GB",
-        description: "Multilingual, 52 languages. Slower than Parakeet (~2-3s). First use takes ~30s to warm up.",
-        recommended: false
-    )
-
-    static let experimental: [BackendOption] = [
-        .senseVoiceSmall, .qwen3Asr,
-    ]
-
-    /// The supported product catalog. Legacy options remain resolvable below so an
-    /// existing installation is never silently switched before its migration runs.
+    /// The supported product catalog. Retired selections are migrated by ConfigStore.
     static let primaryCatalog: [BackendOption] = [
         .gigaAMV3Russian,
         .parakeetMultilingual,
         .nemotron35Multilingual,
     ]
 
-    static let legacy: [BackendOption] = [
-        .parakeetUnified,
-        .parakeetEnglish,
-    ] + whisperFamily + [.cohereTranscribe] + experimental
-
-    /// All runtime-resolvable models, including hidden legacy selections.
-    static let all: [BackendOption] = primaryCatalog + legacy
+    static let all: [BackendOption] = primaryCatalog
 
     /// Curated first-run choices shown in onboarding's "Other models" section.
     /// This is a deliberate hand-picked list, not a derived rule. Experimental models
@@ -210,27 +107,14 @@ struct BackendOption: Equatable {
     var isDownloaded: Bool {
         let fm = FileManager.default
         switch backend {
-        case "parakeet-unified":
-            return ManagedASRModelPlans.parakeetUnified().isAvailableLocally(fileManager: fm)
-        case "whisper":
-            return WhisperKitTranscriber.isModelDownloaded(model)
         case "fluidaudio":
-            let plan = model.contains("v2")
-                ? ManagedASRModelPlans.parakeetV2()
-                : ManagedASRModelPlans.parakeetV3()
-            return plan.isAvailableLocally(fileManager: fm)
-        case "qwen":
-            return Qwen3AsrModelStore.isModelDownloaded(fileManager: fm)
+            return ManagedASRModelPlans.parakeetV3().isAvailableLocally(fileManager: fm)
         case "nemotron35":
             let path = fm.homeDirectoryForCurrentUser
                 .appendingPathComponent(".cache/muesli/models/nemotron35-multilingual-2240ms/encoder.mlmodelc/coremldata.bin")
             return fm.fileExists(atPath: path.path)
         case "gigaam_v3":
             return ONNXGigaAMModelStore.isAvailableLocally()
-        case "cohere":
-            return CohereTranscribeModelStore.isAvailableLocally()
-        case "sensevoice":
-            return SenseVoiceTranscriber.isModelDownloaded(fileManager: fm)
         default:
             return false
         }
@@ -300,54 +184,6 @@ enum Nemotron35Language: String, CaseIterable, Codable, Sendable {
             return defaultLanguage
         }
         return language
-    }
-
-    static func resolvedCode(_ rawValue: String?) -> String {
-        resolved(rawValue).rawValue
-    }
-}
-
-/// Qwen3 uses nil for automatic language detection and an ISO code when pinned.
-enum Qwen3AsrLanguage: Hashable, Sendable {
-    case auto
-    case pinned(MuesliQwen3AsrConfig.Language)
-
-    static let defaultLanguage: Self = .auto
-    static var allCases: [Self] {
-        [.auto] + MuesliQwen3AsrConfig.Language.allCases.map(Self.pinned)
-    }
-
-    var label: String {
-        switch self {
-        case .auto: return "Auto-detect"
-        case .pinned(let language): return language.englishName
-        }
-    }
-
-    var rawValue: String {
-        switch self {
-        case .auto: return "auto"
-        case .pinned(let language): return language.rawValue
-        }
-    }
-
-    var pinnedCode: String? {
-        switch self {
-        case .auto: return nil
-        case .pinned(let language): return language.rawValue
-        }
-    }
-
-    static func resolved(_ rawValue: String?) -> Self {
-        let normalized = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard let normalized, !normalized.isEmpty, normalized != "auto" else { return .auto }
-        if let language = MuesliQwen3AsrConfig.Language(rawValue: normalized) {
-            return .pinned(language)
-        }
-        if let language = MuesliQwen3AsrConfig.Language(from: normalized) {
-            return .pinned(language)
-        }
-        return .auto
     }
 
     static func resolvedCode(_ rawValue: String?) -> String {
@@ -1115,11 +951,7 @@ struct AppConfig: Codable {
     var sttBackend: String = BackendOption.gigaAMV3Russian.backend
     var sttModel: String = BackendOption.gigaAMV3Russian.model
     var dictationInputDeviceUID: String? = nil
-    var cohereLanguageDictation: String = CohereTranscribeLanguage.defaultLanguage.rawValue
-    var cohereLanguageMeetings: String = CohereTranscribeLanguage.defaultLanguage.rawValue
-    private var legacyCohereLanguage: String? = nil
     var nemotron35Language: String = Nemotron35Language.defaultLanguage.rawValue
-    var qwen3AsrLanguage: String = Qwen3AsrLanguage.defaultLanguage.rawValue
     var parakeetLanguage: String = ParakeetLanguage.defaultLanguage.rawValue
     var meetingTranscriptionBackend: String = BackendOption.gigaAMV3Russian.backend
     var meetingTranscriptionModel: String = BackendOption.gigaAMV3Russian.model
@@ -1127,7 +959,6 @@ struct AppConfig: Codable {
     var meetingSummaryBackend: String = MeetingSummaryBackendOption.chatGPT.backend
     var defaultMeetingTemplateID: String = MeetingTemplates.simpleID
     var meetingProcessingMode: String = MeetingProcessingMode.post.rawValue
-    var whisperModel: String = BackendOption.whisper.model
     var idleTimeout: Double = 120
     var autoRecordMeetings: Bool = false
     var upcomingMeetingsDayCount: Int = UpcomingMeetingsWindow.defaultDayCount
@@ -1222,11 +1053,7 @@ struct AppConfig: Codable {
         case sttBackend = "stt_backend"
         case sttModel = "stt_model"
         case dictationInputDeviceUID = "dictation_input_device_uid"
-        case legacyCohereLanguage = "cohere_language"
-        case cohereLanguageDictation = "cohere_language_dictation"
-        case cohereLanguageMeetings = "cohere_language_meetings"
         case nemotron35Language = "nemotron35_language"
-        case qwen3AsrLanguage = "qwen3_asr_language"
         case parakeetLanguage = "parakeet_language"
         case meetingTranscriptionBackend = "meeting_transcription_backend"
         case meetingTranscriptionModel = "meeting_transcription_model"
@@ -1234,7 +1061,6 @@ struct AppConfig: Codable {
         case meetingSummaryBackend = "meeting_summary_backend"
         case defaultMeetingTemplateID = "default_meeting_template_id"
         case meetingProcessingMode = "meeting_processing_mode"
-        case whisperModel = "whisper_model"
         case idleTimeout = "idle_timeout"
         case autoRecordMeetings = "auto_record_meetings"
         case upcomingMeetingsDayCount = "upcoming_meetings_day_count"
@@ -1332,17 +1158,7 @@ struct AppConfig: Codable {
         sttBackend = (try? c.decode(String.self, forKey: .sttBackend)) ?? defaults.sttBackend
         sttModel = (try? c.decode(String.self, forKey: .sttModel)) ?? defaults.sttModel
         dictationInputDeviceUID = try? c.decode(String.self, forKey: .dictationInputDeviceUID)
-        let legacyCohereLanguage = try? c.decode(String.self, forKey: .legacyCohereLanguage)
-        let cohereLanguageDictationRaw = c.contains(.cohereLanguageDictation)
-            ? (try? c.decode(String.self, forKey: .cohereLanguageDictation))
-            : legacyCohereLanguage
-        let cohereLanguageMeetingsRaw = c.contains(.cohereLanguageMeetings)
-            ? (try? c.decode(String.self, forKey: .cohereLanguageMeetings))
-            : legacyCohereLanguage
-        cohereLanguageDictation = CohereTranscribeLanguage.resolvedCode(cohereLanguageDictationRaw)
-        cohereLanguageMeetings = CohereTranscribeLanguage.resolvedCode(cohereLanguageMeetingsRaw)
         nemotron35Language = Nemotron35Language.resolvedCode(try? c.decode(String.self, forKey: .nemotron35Language))
-        qwen3AsrLanguage = Qwen3AsrLanguage.resolvedCode(try? c.decode(String.self, forKey: .qwen3AsrLanguage))
         parakeetLanguage = ParakeetLanguage.resolvedCode(try? c.decode(String.self, forKey: .parakeetLanguage))
         meetingTranscriptionBackend = (try? c.decode(String.self, forKey: .meetingTranscriptionBackend)) ?? sttBackend
         meetingTranscriptionModel = (try? c.decode(String.self, forKey: .meetingTranscriptionModel)) ?? sttModel
@@ -1352,7 +1168,6 @@ struct AppConfig: Codable {
         meetingProcessingMode = MeetingProcessingMode
             .resolved(try? c.decode(String.self, forKey: .meetingProcessingMode))
             .rawValue
-        whisperModel = (try? c.decode(String.self, forKey: .whisperModel)) ?? defaults.whisperModel
         idleTimeout = (try? c.decode(Double.self, forKey: .idleTimeout)) ?? defaults.idleTimeout
         autoRecordMeetings = (try? c.decode(Bool.self, forKey: .autoRecordMeetings)) ?? defaults.autoRecordMeetings
         if c.contains(.upcomingMeetingsDayCount) {
@@ -1502,20 +1317,8 @@ struct AppConfig: Codable {
         contributionBuyMeCoffeeClicked = (try? c.decode(Bool.self, forKey: .contributionBuyMeCoffeeClicked)) ?? defaults.contributionBuyMeCoffeeClicked
     }
 
-    var resolvedCohereLanguageDictation: CohereTranscribeLanguage {
-        CohereTranscribeLanguage.resolved(cohereLanguageDictation)
-    }
-
-    var resolvedCohereLanguageMeetings: CohereTranscribeLanguage {
-        CohereTranscribeLanguage.resolved(cohereLanguageMeetings)
-    }
-
     var resolvedNemotron35Language: Nemotron35Language {
         Nemotron35Language.resolved(nemotron35Language)
-    }
-
-    var resolvedQwen3AsrLanguage: Qwen3AsrLanguage {
-        Qwen3AsrLanguage.resolved(qwen3AsrLanguage)
     }
 
     var resolvedParakeetLanguage: ParakeetLanguage {

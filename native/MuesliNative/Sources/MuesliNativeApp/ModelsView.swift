@@ -263,27 +263,11 @@ struct ModelsView: View {
         }
     }
 
-    private var cohereLanguageSelection: Binding<CohereTranscribeLanguage> {
-        Binding(
-            get: { appState.config.resolvedCohereLanguageDictation },
-            set: { controller.selectDictationCohereLanguage($0) }
-        )
-    }
-
     private var nemotron35LanguageSelection: Binding<Nemotron35Language> {
         Binding(
             get: { appState.config.resolvedNemotron35Language },
             set: { language in
                 Task { await controller.setNemotron35Language(language) }
-            }
-        )
-    }
-
-    private var qwen3AsrLanguageSelection: Binding<Qwen3AsrLanguage> {
-        Binding(
-            get: { appState.config.resolvedQwen3AsrLanguage },
-            set: { language in
-                Task { await controller.setQwen3AsrLanguage(language) }
             }
         )
     }
@@ -655,24 +639,6 @@ struct ModelsView: View {
                 }
             }
 
-            if option.backend == BackendOption.cohereTranscribe.backend {
-                HStack(alignment: .center, spacing: MuesliTheme.spacing12) {
-                    Text("Language")
-                        .font(MuesliTheme.caption())
-                        .foregroundStyle(MuesliTheme.textTertiary)
-                        .frame(width: 64, alignment: .leading)
-
-                    Picker("", selection: cohereLanguageSelection) {
-                        ForEach(CohereTranscribeLanguage.allCases, id: \.self) { language in
-                            Text(language.label).tag(language)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: 220, alignment: .leading)
-                }
-            }
-
             if option.backend == BackendOption.nemotron35Multilingual.backend {
                 HStack(alignment: .center, spacing: MuesliTheme.spacing12) {
                     Text("Language")
@@ -703,24 +669,6 @@ struct ModelsView: View {
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(MuesliTheme.accent)
                     }
-                }
-            }
-
-            if option.backend == BackendOption.qwen3Asr.backend {
-                HStack(alignment: .center, spacing: MuesliTheme.spacing12) {
-                    Text("Language")
-                        .font(MuesliTheme.caption())
-                        .foregroundStyle(MuesliTheme.textTertiary)
-                        .frame(width: 64, alignment: .leading)
-
-                    Picker("", selection: qwen3AsrLanguageSelection) {
-                        ForEach(Qwen3AsrLanguage.allCases, id: \.self) { language in
-                            Text(language.label).tag(language)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.menu)
-                    .frame(maxWidth: 220, alignment: .leading)
                 }
             }
 
@@ -1119,9 +1067,6 @@ struct ModelsView: View {
             do {
                 await unloadModel(option)
                 try plan.delete(fileManager: fm)
-                if option.backend == "qwen" {
-                    try Qwen3AsrModelStore.deleteModelFiles(fileManager: fm)
-                }
                 await ManagedASRModelDownloader.endDeletion(deletionToken)
                 return
             } catch {
@@ -1134,8 +1079,6 @@ struct ModelsView: View {
             let path = fm.homeDirectoryForCurrentUser
                 .appendingPathComponent(".cache/muesli/models/nemotron35-multilingual-2240ms")
             try removeItemIfPresent(at: path, fileManager: fm)
-        case "cohere":
-            try removeItemIfPresent(at: CohereTranscribeModelStore.cacheDirectory(), fileManager: fm)
         case "gigaam_v3":
             try ONNXGigaAMModelStore.deleteModelFiles(fileManager: fm)
         default:
@@ -1145,24 +1088,14 @@ struct ModelsView: View {
 
     private func managedPlan(for option: BackendOption) -> ManagedASRModelPlan? {
         switch option.backend {
-        case "whisper": return ManagedASRModelPlans.whisperKit(modelName: option.model)
-        case "fluidaudio": return option.model.contains("v2") ? ManagedASRModelPlans.parakeetV2() : ManagedASRModelPlans.parakeetV3()
-        case "parakeet-unified": return ManagedASRModelPlans.parakeetUnified()
-        case "qwen": return ManagedASRModelPlans.qwen3ASRInt8()
-        case "sensevoice": return ManagedASRModelPlans.senseVoice()
+        case "fluidaudio": return ManagedASRModelPlans.parakeetV3()
         default: return nil
         }
     }
 
     private func unloadModel(_ option: BackendOption) async {
         switch option.backend {
-        case "whisper": await controller.transcriptionCoordinator.unloadWhisperTranscriber()
-        case "fluidaudio":
-            let version: AsrModelVersion = option.model.contains("v2") ? .v2 : .v3
-            await controller.transcriptionCoordinator.unloadFluidAudioTranscriber(version: version)
-        case "parakeet-unified": await controller.transcriptionCoordinator.unloadParakeetUnifiedTranscriber()
-        case "qwen": await controller.transcriptionCoordinator.unloadQwen3Transcriber()
-        case "sensevoice": await controller.transcriptionCoordinator.unloadSenseVoiceTranscriber()
+        case "fluidaudio": await controller.transcriptionCoordinator.unloadFluidAudioTranscriber()
         default: break
         }
     }
@@ -1210,34 +1143,14 @@ struct ModelsView: View {
 
     private func isModelDownloaded(_ option: BackendOption, fm: FileManager) -> Bool {
         switch option.backend {
-        case "whisper":
-            return WhisperKitTranscriber.isModelDownloaded(option.model)
         case "nemotron35":
             let path = fm.homeDirectoryForCurrentUser
                 .appendingPathComponent(".cache/muesli/models/nemotron35-multilingual-2240ms/encoder.mlmodelc/coremldata.bin")
             return fm.fileExists(atPath: path.path)
-        case "fluidaudio", "parakeet-unified":
-            // Check FluidAudio's cache
-            if option.backend == "parakeet-unified" {
-                return ParakeetUnifiedTranscriber.isModelDownloaded(fileManager: fm)
-            }
-            let supportDir = fm.homeDirectoryForCurrentUser
-                .appendingPathComponent("Library/Application Support/FluidAudio/Models")
-            if option.model.contains("parakeet") {
-                let version = option.model.contains("v2") ? "v2" : "v3"
-                if let contents = try? fm.contentsOfDirectory(at: supportDir, includingPropertiesForKeys: nil) {
-                    return contents.contains { $0.lastPathComponent.contains("parakeet") && $0.lastPathComponent.contains(version) }
-                }
-            }
-            return false
-        case "qwen":
-            return Qwen3AsrModelStore.isModelDownloaded(fileManager: fm)
-        case "cohere":
-            return CohereTranscribeModelStore.isAvailableLocally()
+        case "fluidaudio":
+            return ManagedASRModelPlans.parakeetV3().isAvailableLocally(fileManager: fm)
         case "gigaam_v3":
             return ONNXGigaAMModelStore.isAvailableLocally()
-        case "sensevoice":
-            return SenseVoiceTranscriber.isModelDownloaded()
         default:
             return false
         }

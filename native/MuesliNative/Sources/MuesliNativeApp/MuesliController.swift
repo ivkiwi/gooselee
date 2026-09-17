@@ -860,9 +860,6 @@ public final class MuesliController: NSObject {
                     await self.transcriptionCoordinator.setNemotron35PromptId(
                         self.config.resolvedNemotron35Language.promptId
                     )
-                    await self.transcriptionCoordinator.setQwen3AsrLanguage(
-                        self.config.resolvedQwen3AsrLanguage
-                    )
                 }
                 await self.transcriptionCoordinator.setParakeetLanguage(
                     self.config.resolvedParakeetLanguage
@@ -1440,7 +1437,7 @@ public final class MuesliController: NSObject {
         MuesliTheme.accentOverrideHex = config.recordingColorHex == "1e1e2e" ? nil : config.recordingColorHex
         selectedBackend = BackendOption.all.first(where: {
             $0.backend == config.sttBackend && $0.model == config.sttModel
-        }) ?? .whisper
+        }) ?? .gigaAMV3Russian
         selectedMeetingTranscriptionBackend = BackendOption.all.first(where: {
             $0.backend == config.meetingTranscriptionBackend && $0.model == config.meetingTranscriptionModel
         }) ?? selectedBackend
@@ -2025,14 +2022,7 @@ public final class MuesliController: NSObject {
             // Push the selected Nemotron 3.5 language before preload so the loaded
             // transcriber is conditioned on the right prompt_id.
             await self.transcriptionCoordinator.setNemotron35PromptId(self.config.resolvedNemotron35Language.promptId)
-            await self.transcriptionCoordinator.setQwen3AsrLanguage(self.config.resolvedQwen3AsrLanguage)
             await self.transcriptionCoordinator.setParakeetLanguage(self.config.resolvedParakeetLanguage)
-            let needsWarmup = option.backend == "whisper"
-            if needsWarmup {
-                await MainActor.run {
-                    self.indicator.showLoading("Warming up...")
-                }
-            }
             let ppOption = self.runtimePostProcessorOption()
             await self.transcriptionCoordinator.setTranscriptCleanupSettings(
                 TranscriptCleanupSettings(config: self.config)
@@ -2054,9 +2044,6 @@ public final class MuesliController: NSObject {
                 )
             }
             await MainActor.run {
-                if needsWarmup {
-                    self.indicator.hideLoading()
-                }
                 self.statusBarController?.refresh()
                 self.historyWindowController?.updateBackendLabel()
             }
@@ -2086,11 +2073,6 @@ public final class MuesliController: NSObject {
     func setNemotron35Language(_ language: Nemotron35Language) async {
         updateConfig { $0.nemotron35Language = language.rawValue }
         await transcriptionCoordinator.setNemotron35PromptId(language.promptId)
-    }
-
-    func setQwen3AsrLanguage(_ language: Qwen3AsrLanguage) async {
-        updateConfig { $0.qwen3AsrLanguage = language.rawValue }
-        await transcriptionCoordinator.setQwen3AsrLanguage(language)
     }
 
     func setParakeetLanguage(_ language: ParakeetLanguage) async {
@@ -2130,18 +2112,6 @@ public final class MuesliController: NSObject {
             await MainActor.run {
                 self.statusBarController?.refresh()
             }
-        }
-    }
-
-    func selectDictationCohereLanguage(_ language: CohereTranscribeLanguage) {
-        updateConfig {
-            $0.cohereLanguageDictation = language.rawValue
-        }
-    }
-
-    func selectMeetingCohereLanguage(_ language: CohereTranscribeLanguage) {
-        updateConfig {
-            $0.cohereLanguageMeetings = language.rawValue
         }
     }
 
@@ -3720,7 +3690,6 @@ public final class MuesliController: NSObject {
     var dictationTestFailureCallback: ((String) -> Void)?
     var dictationTestRecordingStarted: (() -> Void)?
     var dictationTestBackend: BackendOption?
-    var dictationTestCohereLanguage: CohereTranscribeLanguage?
     private var dictationTestTask: Task<Void, Never>?
 
     var isDictationTestMode: Bool { dictationTestCallback != nil }
@@ -3855,7 +3824,6 @@ public final class MuesliController: NSObject {
     func completeOnboarding(
         userName: String,
         backend: BackendOption,
-        cohereLanguage: CohereTranscribeLanguage,
         hotkey: HotkeyConfig,
         onboardingUseCase: OnboardingUseCase,
         summaryBackend: MeetingSummaryBackendOption?,
@@ -3866,8 +3834,6 @@ public final class MuesliController: NSObject {
             config.userName = userName
             config.sttBackend = backend.backend
             config.sttModel = backend.model
-            config.cohereLanguageDictation = cohereLanguage.rawValue
-            config.cohereLanguageMeetings = cohereLanguage.rawValue
             config.meetingTranscriptionBackend = backend.backend
             config.meetingTranscriptionModel = backend.model
             config.dictationHotkey = hotkey
@@ -3890,7 +3856,6 @@ public final class MuesliController: NSObject {
         dictationTestFailureCallback = nil
         dictationTestRecordingStarted = nil
         dictationTestBackend = nil
-        dictationTestCohereLanguage = nil
 
         onboardingWindowController?.close()
         onboardingWindowController = nil
@@ -3990,7 +3955,6 @@ public final class MuesliController: NSObject {
             userName: config.userName,
             selectedBackendKey: config.sttBackend,
             selectedModelKey: config.sttModel,
-            selectedCohereLanguageCode: config.cohereLanguageDictation,
             hotkeyKeyCode: config.dictationHotkey.keyCode,
             hotkeyLabel: config.dictationHotkey.label,
             systemAudioRequested: false,
@@ -4395,7 +4359,6 @@ public final class MuesliController: NSObject {
                 at: preparedAudio.wavURL,
                 samples: preparedAudio.samples,
                 backend: backend,
-                cohereLanguage: config.resolvedCohereLanguageMeetings
             )
             return await formatRetranscribedMeeting(
                 transcription,
@@ -4427,7 +4390,7 @@ public final class MuesliController: NSObject {
             transcription = try await MeetingRetranscriptionPipeline.transcribeSegmentedAudio(
                 samples: preparedAudio.samples,
                 vadSegments: speechSegments
-            ) { [transcriptionCoordinator, config] _, samples in
+            ) { [transcriptionCoordinator] _, samples in
                 let segmentURL = try WavWriter.writeTemporaryWAV(
                     samples: samples,
                     directoryName: AppTemporaryDirectories.meetingRetranscription
@@ -4437,7 +4400,6 @@ public final class MuesliController: NSObject {
                     at: segmentURL,
                     samples: samples,
                     backend: backend,
-                    cohereLanguage: config.resolvedCohereLanguageMeetings
                 )
             }
         }
@@ -4583,7 +4545,6 @@ public final class MuesliController: NSObject {
                 at: url,
                 samples: wavData.samples,
                 backend: backend,
-                cohereLanguage: config.resolvedCohereLanguageMeetings
             )
             let segments = normalizeRetranscribedTrack(
                 transcription,
@@ -4649,7 +4610,7 @@ public final class MuesliController: NSObject {
                 trackRole: trackRole,
                 diagnosticsLabel: "[muesli-native] source-track retranscribe meeting_id=\(meetingID)",
                 logger: { DiagnosticsLog.write($0) }
-            ) { [transcriptionCoordinator, config] _, samples in
+            ) { [transcriptionCoordinator] _, samples in
                 let segmentURL = try WavWriter.writeTemporaryWAV(
                     samples: samples,
                     directoryName: AppTemporaryDirectories.meetingRetranscription
@@ -4659,7 +4620,6 @@ public final class MuesliController: NSObject {
                     at: segmentURL,
                     samples: samples,
                     backend: backend,
-                    cohereLanguage: config.resolvedCohereLanguageMeetings
                 )
             }
         }
@@ -4706,7 +4666,6 @@ public final class MuesliController: NSObject {
             at: url,
             samples: wavData.samples,
             backend: backend,
-            cohereLanguage: config.resolvedCohereLanguageMeetings
         )
         let segments = normalizeRetranscribedTrack(
             transcription,
@@ -8885,9 +8844,6 @@ public final class MuesliController: NSObject {
         let isTestMode = isDictationTestMode
         let outputMode = currentDictationOutputMode
         let transcriptionBackend = isTestMode ? (dictationTestBackend ?? selectedBackend) : selectedBackend
-        let transcriptionLanguage = isTestMode
-            ? (dictationTestCohereLanguage ?? config.resolvedCohereLanguageDictation)
-            : config.resolvedCohereLanguageDictation
         let capturedContext = capturedDictationContext
         let promptContext = capturedContext.map { DictationContextCapture.formatForPrompt($0) }
         let correctionTargetApp = capturedDictationCorrectionTargetApp
@@ -8904,7 +8860,6 @@ public final class MuesliController: NSObject {
                 let result = try await self.transcriptionCoordinator.transcribeDictation(
                     at: wavURL,
                     backend: transcriptionBackend,
-                    cohereLanguage: transcriptionLanguage,
                     enablePostProcessor: self.isPostProcessorReady,
                     customWords: self.serializedCustomWords(),
                     appContext: promptContext
@@ -9013,10 +8968,6 @@ public final class MuesliController: NSObject {
             switch nsError.code {
             case 1:
                 return "Nemotron requires macOS 15 or later. Choose another model to test dictation."
-            case 2:
-                return "Qwen3 ASR requires macOS 15 or later. Choose another model to test dictation."
-            case 4:
-                return "Cohere Transcribe requires macOS 15 or later. Choose another model to test dictation."
             default:
                 return "The selected model is not available. Choose another model and try again."
             }

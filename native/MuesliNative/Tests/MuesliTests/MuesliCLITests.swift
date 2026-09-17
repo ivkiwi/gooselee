@@ -85,17 +85,10 @@ struct MuesliCLITests {
     func transcribeEnumsAcceptDocumentedValues() {
         #expect(TranscribeModel(argument: "gigaam-onnx") == .gigaAMONNX)
         #expect(TranscribeModel(argument: "parakeet-v3") == .parakeetV3)
-        #expect(TranscribeModel(argument: "parakeet-v2") == .parakeetV2)
-        #expect(TranscribeModel(argument: "parakeet-unified") == .parakeetUnified)
         #expect(TranscribeModel(argument: "parakeet-eou-320ms") == .parakeetEou320ms)
-        #expect(TranscribeModel(argument: "sensevoice") == .senseVoice)
-        #expect(TranscribeModel(argument: "qwen3-asr") == .qwen3Asr)
         #expect(TranscribeModel(argument: "nemotron35") == .nemotron35)
-        #expect(TranscribeModel(argument: "cohere") == .cohere)
-        #expect(TranscribeModel(argument: "whisper-tiny-english") == .whisperTinyEnglish)
-        #expect(TranscribeModel(argument: "whisper-small-english") == .whisperSmallEnglish)
-        #expect(TranscribeModel(argument: "whisper-medium-english") == .whisperMediumEnglish)
-        #expect(TranscribeModel(argument: "whisper-large-turbo") == .whisperLargeTurbo)
+        #expect(TranscribeModel(argument: "parakeet-v2") == nil)
+        #expect(TranscribeModel(argument: "whisper-large-turbo") == nil)
         #expect(TranscribeModel(argument: "canary-qwen") == nil)
         #expect(TranscribeOutputFormat(argument: "text") == .text)
         #expect(TranscribeOutputFormat(argument: "json") == .json)
@@ -124,7 +117,7 @@ struct MuesliCLITests {
     func headlessAudioLoadingStrategyIsBounded() throws {
         #expect(HeadlessTranscriptionModel.gigaAMONNX.audioLoadingStrategy == .directSamples)
         #expect(HeadlessTranscriptionModel.parakeetEOU320ms.audioLoadingStrategy == .streamedChunks)
-        #expect(HeadlessTranscriptionModel.senseVoice.audioLoadingStrategy == .backendFile)
+        #expect(HeadlessTranscriptionModel.parakeetV3.audioLoadingStrategy == .backendFile)
         #expect(throws: Error.self) {
             try HeadlessTranscriptionRuntime.validateBufferedDuration(
                 HeadlessTranscriptionRuntime.maximumBufferedAudioDurationSeconds + 1,
@@ -419,7 +412,7 @@ struct MuesliCLITests {
                 summary: "## Summary\n\n- Done",
                 durationSeconds: 4,
                 wordCount: 3,
-                model: .parakeetV2,
+                model: .parakeetV3,
                 warnings: ["summary warning"],
                 savedMeetingID: 12
             )
@@ -436,7 +429,7 @@ struct MuesliCLITests {
         #expect(json["command"] as? String == "muesli-cli transcribe")
         let payloadData = try #require(json["data"] as? [String: Any])
         #expect(payloadData["transcript"] as? String == "hello from muesli")
-        #expect(payloadData["model"] as? String == "parakeet-v2")
+        #expect(payloadData["model"] as? String == "parakeet-v3")
         #expect(payloadData["savedMeetingID"] as? Int == 12)
         #expect(payloadData["summary"] as? String == "## Summary\n\n- Done")
 

@@ -18,7 +18,7 @@ struct MeetingCaptureFirstTests {
         let session = MeetingSession(
             title: "Bounded capture start",
             calendarEventID: nil,
-            backend: .whisperTinyEnglish,
+            backend: .parakeetMultilingual,
             runtime: testRuntime(),
             config: config,
             transcriptionCoordinator: TranscriptionCoordinator(),

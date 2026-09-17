@@ -39,8 +39,6 @@ struct ConfigStoreTests {
         config.openRouterModel = "nvidia/nemotron-3-super-120b-a12b:free"
         config.chatGPTDictationCleanupModel = "gpt-dictation-roundtrip"
         config.chatGPTMeetingCleanupModel = "gpt-meeting-roundtrip"
-        config.cohereLanguageDictation = CohereTranscribeLanguage.german.rawValue
-        config.cohereLanguageMeetings = CohereTranscribeLanguage.french.rawValue
         config.meetingSummaryBackend = "openrouter"
         store.save(config)
 
@@ -51,8 +49,6 @@ struct ConfigStoreTests {
         #expect(loaded.openRouterModel == "nvidia/nemotron-3-super-120b-a12b:free")
         #expect(loaded.chatGPTDictationCleanupModel == "gpt-dictation-roundtrip")
         #expect(loaded.chatGPTMeetingCleanupModel == "gpt-meeting-roundtrip")
-        #expect(loaded.cohereLanguageDictation == CohereTranscribeLanguage.german.rawValue)
-        #expect(loaded.cohereLanguageMeetings == CohereTranscribeLanguage.french.rawValue)
         #expect(loaded.meetingSummaryBackend == "openrouter")
 
         // Restore original
@@ -258,8 +254,6 @@ struct ConfigStoreTests {
         legacyConfig.chatGPTMeetingCleanupModel = "gpt-legacy-meeting"
         legacyConfig.meetingRecordingSavePolicy = .always
         legacyConfig.meetingRecordingFileFormat = MeetingRecordingFileFormat.wav.rawValue
-        legacyConfig.cohereLanguageDictation = CohereTranscribeLanguage.french.rawValue
-        legacyConfig.cohereLanguageMeetings = CohereTranscribeLanguage.german.rawValue
         legacyConfig.enableMeetingTranscriptCleanup = true
         legacyConfig.meetingTranscriptCleanupProvider = MeetingTranscriptCleanupProviderOption.chatGPT.rawValue
         legacyStore.save(legacyConfig)
@@ -289,8 +283,6 @@ struct ConfigStoreTests {
         #expect(loaded.chatGPTMeetingCleanupModel == "gpt-legacy-meeting")
         #expect(loaded.meetingRecordingSavePolicy == .always)
         #expect(loaded.meetingRecordingFileFormat == MeetingRecordingFileFormat.wav.rawValue)
-        #expect(loaded.cohereLanguageDictation == CohereTranscribeLanguage.french.rawValue)
-        #expect(loaded.cohereLanguageMeetings == CohereTranscribeLanguage.german.rawValue)
         #expect(loaded.enableMeetingTranscriptCleanup == true)
         #expect(loaded.meetingTranscriptCleanupProvider == MeetingTranscriptCleanupProviderOption.chatGPT.rawValue)
         #expect(
@@ -312,8 +304,8 @@ struct ConfigStoreTests {
         #expect(targetStore.load().userName == "Manual")
     }
 
-    @Test("load imports legacy cleanup and cohere split settings")
-    func importsLegacyCleanupAndCohereSplitSettings() throws {
+    @Test("load imports legacy cleanup settings")
+    func importsLegacyCleanupSettings() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("legacy-recent-settings-import-test-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -339,8 +331,6 @@ struct ConfigStoreTests {
         let targetStore = ConfigStore(supportURL: targetSupport, legacySupportURL: legacySupport)
         let loaded = targetStore.load()
 
-        #expect(loaded.cohereLanguageDictation == CohereTranscribeLanguage.french.rawValue)
-        #expect(loaded.cohereLanguageMeetings == CohereTranscribeLanguage.french.rawValue)
         #expect(loaded.pasteShortcut == .commandShiftV)
         #expect(loaded.transcriptCleanupProvider == TranscriptCleanupProviderOption.chatGPT.rawValue)
         #expect(loaded.enableMeetingTranscriptCleanup == true)

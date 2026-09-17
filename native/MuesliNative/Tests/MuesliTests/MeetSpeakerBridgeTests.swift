@@ -667,7 +667,7 @@ struct MeetSpeakerBridgeTests {
         MeetingSession(
             title: "Bridge test",
             calendarEventID: nil,
-            backend: .whisper,
+            backend: .parakeetMultilingual,
             runtime: RuntimePaths(
                 repoRoot: FileManager.default.temporaryDirectory,
                 menuIcon: nil,

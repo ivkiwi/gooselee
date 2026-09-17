@@ -6,8 +6,6 @@ import MuesliCore
 /// running on Apple's Neural Engine (ANE) via CoreML.
 actor FluidAudioTranscriber {
     private var asrManager: AsrManager?
-    private var loadedVersion: AsrModelVersion?
-    private var loadingVersion: AsrModelVersion?
     private var loadGeneration: UInt64 = 0
 
     enum TranscriberError: Error, LocalizedError {
@@ -22,18 +20,15 @@ actor FluidAudioTranscriber {
     }
 
     /// Downloads models (if needed) and initializes the ASR manager.
-    /// - Parameter version: .v3 for multilingual (25 langs), .v2 for English-only
     func loadModels(
-        version: AsrModelVersion = .v3,
         progress: ((Double, String?) -> Void)? = nil,
         progressSnapshot: ModelDownloadProgressHandler? = nil
     ) async throws {
-        if loadedVersion == version, asrManager != nil { return }
+        if asrManager != nil { return }
         let generation = loadGeneration
-        loadingVersion = version
 
-        fputs("[fluidaudio] downloading/loading models (version: \(version))...\n", stderr)
-        let plan = version == .v2 ? ManagedASRModelPlans.parakeetV2() : ManagedASRModelPlans.parakeetV3()
+        fputs("[fluidaudio] downloading/loading Parakeet v3...\n", stderr)
+        let plan = ManagedASRModelPlans.parakeetV3()
         let manager = try await ManagedASRModelDownloader.loadValidated(
             plan,
             progress: progress,
@@ -45,15 +40,13 @@ actor FluidAudioTranscriber {
             )
             progress?(0.95, preparing.message)
             progressSnapshot?(preparing)
-            let models = try await AsrModels.load(from: modelDirectory, version: version)
+            let models = try await AsrModels.load(from: modelDirectory, version: .v3)
             let manager = AsrManager(config: .default)
             try await manager.loadModels(models)
             return manager
         }
         guard generation == loadGeneration else { throw CancellationError() }
         self.asrManager = manager
-        self.loadedVersion = version
-        self.loadingVersion = nil
         let preparing = ModelDownloadProgress.preparing(
             modelID: plan.modelID,
             message: "Loading Parakeet into Core ML..."
@@ -65,7 +58,7 @@ actor FluidAudioTranscriber {
 
     /// Transcribe a WAV file URL directly.
     /// `language` is an optional ISO code enabling FluidAudio's script-level
-    /// token filter on the v3 joint decoder (v2 ignores the hint; nil = auto).
+    /// token filter on the v3 joint decoder (nil = auto).
     func transcribe(wavURL: URL, language: String? = nil) async throws -> ASRResult {
         guard let asrManager else { throw TranscriberError.notLoaded }
         let languageHint = language.flatMap(Language.init(rawValue:))
@@ -75,27 +68,6 @@ actor FluidAudioTranscriber {
 
     func shutdown() {
         asrManager = nil
-        loadedVersion = nil
-        loadingVersion = nil
         loadGeneration &+= 1
-    }
-
-    func shutdown(ifLoadedVersion version: AsrModelVersion) {
-        guard FluidAudioUnloadPolicy.shouldUnload(
-            loadedVersion: loadedVersion,
-            loadingVersion: loadingVersion,
-            deletingVersion: version
-        ) else { return }
-        shutdown()
-    }
-}
-
-enum FluidAudioUnloadPolicy {
-    static func shouldUnload(
-        loadedVersion: AsrModelVersion?,
-        loadingVersion: AsrModelVersion? = nil,
-        deletingVersion: AsrModelVersion
-    ) -> Bool {
-        loadedVersion == deletingVersion || loadingVersion == deletingVersion
     }
 }

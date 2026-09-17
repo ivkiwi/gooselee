@@ -15,16 +15,6 @@ struct OnboardingModelDownloadPolicyTests {
         #expect(alternatives == [.nemotron35Multilingual])
     }
 
-    @Test("alternative models do not re-expose a selected legacy option")
-    func alternativeModelsHideSelectedLegacyOption() {
-        let alternatives = makeOnboardingAlternativeModels(
-            selectedBackend: .whisperSmall,
-            onboardingOptions: [.gigaAMV3Russian, .parakeetMultilingual, .cohereTranscribe]
-        )
-
-        #expect(alternatives == [.cohereTranscribe])
-    }
-
     @Test("GigaAM stale download progress resets when model is missing")
     func gigaAMStaleDownloadProgressResetsWhenModelIsMissing() {
         let choice = onboardingInitialDownloadProgressStatusChoice(
@@ -40,10 +30,10 @@ struct OnboardingModelDownloadPolicyTests {
         ))
     }
 
-    @Test("non-GigaAM download resumes stored progress and status")
-    func nonGigaAMDownloadResumesStoredProgressAndStatus() {
+    @Test("Parakeet download resumes stored progress and status")
+    func parakeetDownloadResumesStoredProgressAndStatus() {
         let choice = onboardingInitialDownloadProgressStatusChoice(
-            backend: .whisperSmall,
+            backend: .parakeetMultilingual,
             alreadyDownloaded: false,
             currentProgress: 0.72,
             currentStatus: "180 MB of 250 MB"

@@ -385,8 +385,8 @@ if [[ "$REQUIRE_RUNTIMES" == "1" ]]; then
   }
   muesli_localvqe_runtime_is_complete "$MACOS_DIR" || exit 1
   [[ -s "$APP_PATH/Contents/Resources/NOTICE" ]] || { echo "ERROR: bundled NOTICE is missing" >&2; exit 1; }
-  [[ -s "$APP_PATH/Contents/Resources/Qwen3ASR-LICENSE-Apache-2.0" ]] || {
-    echo "ERROR: bundled Qwen3 Apache license is missing" >&2
+  [[ -s "$APP_PATH/Contents/Resources/FluidAudio-LICENSE-Apache-2.0.txt" ]] || {
+    echo "ERROR: bundled FluidAudio Apache license is missing" >&2
     exit 1
   }
   echo "Bundled ASR/AEC runtimes and notices OK."

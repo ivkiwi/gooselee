@@ -1385,13 +1385,13 @@ struct MeetingsNavigationTests {
     func meetingTranscriptionBackendSelectionIsIndependent() {
         let controller = makeController()
 
-        controller.selectBackend(.parakeetEnglish)
-        controller.selectMeetingTranscriptionBackend(.whisperLargeTurbo, requireDownloaded: false)
+        controller.selectBackend(.nemotron35Multilingual)
+        controller.selectMeetingTranscriptionBackend(.parakeetMultilingual, requireDownloaded: false)
 
-        #expect(controller.appState.selectedBackend == .parakeetEnglish)
-        #expect(controller.appState.selectedMeetingTranscriptionBackend == .whisperLargeTurbo)
-        #expect(controller.appState.config.sttModel == BackendOption.parakeetEnglish.model)
-        #expect(controller.appState.config.meetingTranscriptionModel == BackendOption.whisperLargeTurbo.model)
+        #expect(controller.appState.selectedBackend == .nemotron35Multilingual)
+        #expect(controller.appState.selectedMeetingTranscriptionBackend == .parakeetMultilingual)
+        #expect(controller.appState.config.sttModel == BackendOption.nemotron35Multilingual.model)
+        #expect(controller.appState.config.meetingTranscriptionModel == BackendOption.parakeetMultilingual.model)
     }
 
     private func makeMeeting(

@@ -397,7 +397,7 @@ final class MeetingSession {
     private let calendarEventID: String?
     private let liveMeetingID: Int64?
     private let participantCandidates: [MeetingParticipant]
-    private let backendLock = OSAllocatedUnfairLock(initialState: BackendOption.whisper)
+    private let backendLock = OSAllocatedUnfairLock(initialState: BackendOption.parakeetMultilingual)
     private let runtime: RuntimePaths
     private let config: AppConfig
     private var liveChunkingConfiguration: LiveMeetingChunkingConfiguration
@@ -1194,7 +1194,6 @@ final class MeetingSession {
                     try await self.transcriptionCoordinator.transcribeMeetingChunk(
                         at: lastSystemChunkURL,
                         backend: self.currentBackend(),
-                        cohereLanguage: self.config.resolvedCohereLanguageMeetings
                     )
                 }
                 let normalizedSegments = normalizeSystemTranscription(
@@ -1780,7 +1779,6 @@ final class MeetingSession {
                 at: url,
                 samples: wavData.samples,
                 backend: backend,
-                cohereLanguage: config.resolvedCohereLanguageMeetings
             )
             let segments = normalizePostModeTrack(
                 transcription,
@@ -1851,7 +1849,7 @@ final class MeetingSession {
                 trackRole: trackRole,
                 diagnosticsLabel: "[meeting] post-mode",
                 logger: { DiagnosticsLog.write($0) }
-            ) { [transcriptionCoordinator, config] _, samples in
+            ) { [transcriptionCoordinator] _, samples in
                 let segmentURL = try WavWriter.writeTemporaryWAV(
                     samples: samples,
                     directoryName: AppTemporaryDirectories.meetingRetranscription
@@ -1861,7 +1859,6 @@ final class MeetingSession {
                     at: segmentURL,
                     samples: samples,
                     backend: backend,
-                    cohereLanguage: config.resolvedCohereLanguageMeetings
                 )
             }
         }
@@ -1906,7 +1903,6 @@ final class MeetingSession {
             at: url,
             samples: wavData.samples,
             backend: backend,
-            cohereLanguage: config.resolvedCohereLanguageMeetings
         )
         let segments = normalizePostModeTrack(
             transcription,
@@ -2339,7 +2335,6 @@ final class MeetingSession {
                 let result = try await self.transcriptionCoordinator.transcribeMeetingChunk(
                     at: chunkURL,
                     backend: backend,
-                    cohereLanguage: config.resolvedCohereLanguageMeetings
                 )
                 if !result.text.isEmpty {
                     fputs("[meeting] system chunk transcribed: \"\(String(result.text.prefix(60)))...\"\n", stderr)
@@ -2753,7 +2748,6 @@ final class MeetingSession {
             let result = try await transcriptionCoordinator.transcribeMeetingChunk(
                 at: url,
                 backend: currentBackend(),
-                cohereLanguage: config.resolvedCohereLanguageMeetings
             )
             if !result.text.isEmpty {
                 fputs("[meeting] mic chunk transcribed (raw): \"\(String(result.text.prefix(60)))...\"\n", stderr)
@@ -2863,7 +2857,6 @@ final class MeetingSession {
                     let result = try await transcriptionCoordinator.transcribeMeeting(
                         at: segmentURL,
                         backend: currentBackend(),
-                        cohereLanguage: config.resolvedCohereLanguageMeetings
                     )
                     repairedSegments.append(contentsOf: normalizeSystemTranscription(
                         result: result,
@@ -2897,7 +2890,6 @@ final class MeetingSession {
                 at: systemAudioURL,
                 samples: samples,
                 backend: currentBackend(),
-                cohereLanguage: config.resolvedCohereLanguageMeetings
             )
             return normalizeSystemTranscription(
                 result: result,

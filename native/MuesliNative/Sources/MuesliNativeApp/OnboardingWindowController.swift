@@ -70,7 +70,6 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
             let backend = BackendOption.all.first(where: {
                 $0.backend == progress.selectedBackendKey && $0.model == progress.selectedModelKey
             }) ?? .parakeetMultilingual
-            let cohereLanguage = CohereTranscribeLanguage.resolved(progress.selectedCohereLanguageCode)
             let hotkey = HotkeyConfig(keyCode: progress.hotkeyKeyCode, label: progress.hotkeyLabel)
             rootView = OnboardingView(
                 controller: controller,
@@ -78,7 +77,6 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
                 initialStep: progress.currentStep,
                 initialUserName: progress.userName,
                 initialBackend: backend,
-                initialCohereLanguage: cohereLanguage,
                 initialHotkey: hotkey,
                 initialSystemAudioRequested: progress.systemAudioRequested,
                 initialUseCase: OnboardingUseCase.resolved(progress.onboardingUseCaseRawValue),
@@ -90,7 +88,6 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
             rootView = OnboardingView(
                 controller: controller,
                 appState: controller.appState,
-                initialCohereLanguage: controller.config.resolvedCohereLanguageDictation,
                 initialUseCase: controller.config.resolvedOnboardingUseCase,
                 initialSummaryBackend: .chatGPT
             )

@@ -1213,180 +1213,18 @@ struct ModelDownloadCoordinatorTests {
         #expect(fallbackTracker.requestCount == 0)
     }
 
-    @Test("managed ASR plans require complete compiled artifacts")
-    func managedASRPlanCompleteness() throws {
+    @Test("supported managed ASR plans keep immutable mirrors")
+    func supportedManagedASRPlanMirrors() throws {
         let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        let plan = ManagedASRModelPlans.qwen3ASRInt8(modelsRoot: root)
-        #expect(plan.cacheDirectory.standardizedFileURL.path.hasPrefix(root.standardizedFileURL.path + "/"))
-
-        try FileManager.default.createDirectory(
-            at: plan.cacheDirectory.appendingPathComponent("qwen3_asr_audio_encoder_v2.mlmodelc"),
-            withIntermediateDirectories: true
-        )
-        #expect(!plan.isComplete())
-
-        for relativePath in [
-            "qwen3_asr_audio_encoder_v2.mlmodelc/coremldata.bin",
-            "qwen3_asr_audio_encoder_v2.mlmodelc/weights/weight.bin",
-            "qwen3_asr_decoder_stateful.mlmodelc/coremldata.bin",
-            "qwen3_asr_decoder_stateful.mlmodelc/weights/weight.bin",
-            "qwen3_asr_embeddings.bin",
-            "vocab.json",
-        ] {
-            let url = plan.cacheDirectory.appendingPathComponent(relativePath)
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try Data([0x01]).write(to: url)
-        }
-
-        #expect(!plan.isComplete())
-        #expect(plan.isAvailableLocally())
-        let partialState = plan.cacheDirectory.appendingPathComponent(".muesli-download-state.json")
-        try Data("{}".utf8).write(to: partialState)
-        #expect(!plan.isAvailableLocally())
-        try FileManager.default.removeItem(at: partialState)
-        let partialFile = plan.cacheDirectory.appendingPathComponent("pending.bin.part")
-        try Data([0x01]).write(to: partialFile)
-        #expect(!plan.isAvailableLocally())
-        try FileManager.default.removeItem(at: partialFile)
-
-        try plan.recordValidatedLegacyInstallationIfNeeded()
-        #expect(plan.isComplete())
-
-        try FileManager.default.removeItem(
-            at: plan.cacheDirectory.appendingPathComponent(
-                "qwen3_asr_audio_encoder_v2.mlmodelc/weights/weight.bin"
-            )
-        )
-        #expect(!plan.isComplete())
-        #expect(!plan.isAvailableLocally())
-        #expect(plan.modelID == "FluidInference/qwen3-asr-0.6b-coreml")
-        #expect(plan.cacheDirectory.path.hasSuffix("qwen3-asr-0.6b/int8"))
-        #expect(plan.selections.count == 1)
-        #expect(plan.selections[0].remoteDirectory == "int8")
-        #expect(plan.selections[0].includedPaths.contains("vocab.json"))
-
-        let parakeet = ManagedASRModelPlans.parakeetV2(modelsRoot: root)
-        #expect(parakeet.mirror?.manifestURL.absoluteString == "https://assets.muesli.works/models/fluidaudio/parakeet-tdt-0.6b-v2/legacy-local-v1/manifest.json")
 
         let parakeetV3 = ManagedASRModelPlans.parakeetV3(modelsRoot: root)
+        #expect(parakeetV3.cacheDirectory.standardizedFileURL.path.hasPrefix(root.standardizedFileURL.path + "/"))
         #expect(parakeetV3.mirror?.manifestURL.absoluteString == "https://assets.muesli.works/models/fluidaudio/parakeet-tdt-0.6b-v3/legacy-local-v1/manifest.json")
 
-        let unified = ManagedASRModelPlans.parakeetUnified(modelsRoot: root)
-        #expect(unified.mirror?.manifestURL.absoluteString == "https://assets.muesli.works/models/fluidaudio/parakeet-unified-en-0.6b/legacy-local-v1/manifest.json")
-
-        let whisper = ManagedASRModelPlans.whisperKit(modelName: "tiny", downloadRoot: root)
-        #expect(whisper.selections[0].includedPaths.contains("AudioEncoder.mlmodelc"))
-        #expect(whisper.selections[0].includedPaths.contains("config.json"))
-        #expect(whisper.selections[0].includedPaths.contains("generation_config.json"))
-        #expect(!whisper.selections[0].includedPaths.contains("AudioEncoder.mlpackage"))
-        #expect(whisper.mirror?.manifestURL.absoluteString == "https://assets.muesli.works/models/whisperkit/openai_whisper-tiny/legacy-local-v1/manifest.json")
-    }
-
-    @Test("supported WhisperKit variants have immutable Muesli mirrors")
-    func mirroredWhisperKitVariants() {
-        let expectedPaths = [
-            "tiny": "openai_whisper-tiny",
-            "tiny.en": "openai_whisper-tiny.en",
-            "small": "openai_whisper-small",
-            "small.en": "openai_whisper-small.en",
-            "medium.en": "openai_whisper-medium.en",
-            "large-v3-v20240930_626MB": "openai_whisper-large-v3-v20240930_626MB",
-        ]
-
-        for (modelName, remoteDirectory) in expectedPaths {
-            let plan = ManagedASRModelPlans.whisperKit(modelName: modelName)
-            #expect(plan.mirror?.manifestURL.absoluteString == "https://assets.muesli.works/models/whisperkit/\(remoteDirectory)/legacy-local-v1/manifest.json")
-        }
-
-        #expect(ManagedASRModelPlans.whisperKit(modelName: "distil-large-v3").mirror == nil)
-    }
-
-    @Test("English-only Whisper checkpoints use their exact downloadable cache identities")
-    func englishWhisperCheckpointAvailability() throws {
-        let root = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: root) }
-
-        for modelName in ["tiny.en", "small.en", "medium.en"] {
-            let plan = ManagedASRModelPlans.whisperKit(modelName: modelName, downloadRoot: root)
-            #expect(plan.modelID == modelName)
-            #expect(plan.cacheDirectory.lastPathComponent == "openai_whisper-\(modelName)")
-            #expect(plan.selections[0].remoteDirectory == "openai_whisper-\(modelName)")
-
-            for model in ["MelSpectrogram.mlmodelc", "AudioEncoder.mlmodelc", "TextDecoder.mlmodelc"] {
-                for artifact in ["coremldata.bin", "weights/weight.bin"] {
-                    let url = plan.cacheDirectory
-                        .appendingPathComponent(model, isDirectory: true)
-                        .appendingPathComponent(artifact)
-                    try FileManager.default.createDirectory(
-                        at: url.deletingLastPathComponent(),
-                        withIntermediateDirectories: true
-                    )
-                    try Data([0x01]).write(to: url)
-                }
-            }
-            try Data("{}".utf8).write(
-                to: plan.cacheDirectory.appendingPathComponent("config.json")
-            )
-            try Data("{}".utf8).write(
-                to: plan.cacheDirectory.appendingPathComponent("generation_config.json")
-            )
-
-            #expect(plan.isAvailableLocally())
-        }
-
-        let incompleteSmall = ManagedASRModelPlans.whisperKit(
-            modelName: "small.en",
-            downloadRoot: root
-        )
-        try FileManager.default.removeItem(
-            at: incompleteSmall.cacheDirectory
-                .appendingPathComponent("AudioEncoder.mlmodelc/weights/weight.bin")
-        )
-        #expect(!incompleteSmall.isAvailableLocally())
-    }
-
-    @Test("legacy ASR installs stay available without manifest discovery")
-    func legacyASRInstallSkipsNetworkResolution() async throws {
-        let tracker = DownloadTestTracker()
-        ModelDownloadTestURLProtocol.install { _ in
-            Issue.record("Legacy installation unexpectedly requested the network")
-            return ModelDownloadTestURLProtocol.Response(tracker: tracker)
-        }
-        defer { ModelDownloadTestURLProtocol.uninstall() }
-
-        let root = try makeTemporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let plan = ManagedASRModelPlans.qwen3ASRInt8(modelsRoot: root)
-        for relativePath in [
-            "qwen3_asr_audio_encoder_v2.mlmodelc/coremldata.bin",
-            "qwen3_asr_audio_encoder_v2.mlmodelc/weights/weight.bin",
-            "qwen3_asr_decoder_stateful.mlmodelc/coremldata.bin",
-            "qwen3_asr_decoder_stateful.mlmodelc/weights/weight.bin",
-            "qwen3_asr_embeddings.bin",
-            "vocab.json",
-        ] {
-            let url = plan.cacheDirectory.appendingPathComponent(relativePath)
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(),
-                withIntermediateDirectories: true
-            )
-            try Data([0x01]).write(to: url)
-        }
-
-        let resolver = HuggingFaceModelManifestResolver(configuration: makeSessionConfiguration())
-        let directory = try await ManagedASRModelDownloader.downloadIfNeeded(
-            plan,
-            resolver: resolver,
-            coordinator: makeCoordinator()
-        )
-        #expect(directory == plan.cacheDirectory)
-        #expect(tracker.requestCount == 0)
-        #expect(!plan.isComplete())
-        #expect(plan.isAvailableLocally())
+        let realtimeEOU = ManagedASRModelPlans.parakeetRealtimeEOU320(modelsRoot: root)
+        #expect(realtimeEOU.cacheDirectory.path.hasSuffix("parakeet-eou-streaming/320ms"))
+        #expect(realtimeEOU.mirror == nil)
     }
 
     @Test("invalid legacy ASR installs are replaced after runtime validation fails")

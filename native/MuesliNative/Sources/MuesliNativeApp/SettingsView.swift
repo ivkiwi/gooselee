@@ -195,14 +195,6 @@ struct SettingsView: View {
         return meetingBrowserOpenOptions.first { $0.bundleID == bundleID }?.name ?? "System Default"
     }
 
-    private var selectedDictationCohereLanguage: CohereTranscribeLanguage {
-        appState.config.resolvedCohereLanguageDictation
-    }
-
-    private var selectedMeetingCohereLanguage: CohereTranscribeLanguage {
-        appState.config.resolvedCohereLanguageMeetings
-    }
-
     private var selectedUpcomingMeetingsWindow: UpcomingMeetingsWindow {
         UpcomingMeetingsWindow.resolve(dayCount: appState.config.upcomingMeetingsDayCount)
     }
@@ -583,18 +575,6 @@ struct SettingsView: View {
                         }
                     }
                 }
-                if appState.selectedBackend.backend == BackendOption.cohereTranscribe.backend {
-                    Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow("Cohere language") {
-                        settingsMenu(
-                            selection: selectedDictationCohereLanguage.label,
-                            options: CohereTranscribeLanguage.allCases.map(\.label)
-                        ) { label in
-                            guard let language = CohereTranscribeLanguage.allCases.first(where: { $0.label == label }) else { return }
-                            controller.selectDictationCohereLanguage(language)
-                        }
-                    }
-                }
                 Divider().background(MuesliTheme.surfaceBorder)
                 settingsRow(
                     "Microphone",
@@ -787,18 +767,6 @@ struct SettingsView: View {
                             if let option = meetingBackendOptions.first(where: { $0.label == label }) {
                                 controller.selectMeetingTranscriptionBackend(option)
                             }
-                        }
-                    }
-                }
-                if appState.selectedMeetingTranscriptionBackend.backend == BackendOption.cohereTranscribe.backend {
-                    Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow("Cohere language") {
-                        settingsMenu(
-                            selection: selectedMeetingCohereLanguage.label,
-                            options: CohereTranscribeLanguage.allCases.map(\.label)
-                        ) { label in
-                            guard let language = CohereTranscribeLanguage.allCases.first(where: { $0.label == label }) else { return }
-                            controller.selectMeetingCohereLanguage(language)
                         }
                     }
                 }

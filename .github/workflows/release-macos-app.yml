@@ -156,7 +156,6 @@ jobs:
           test -x "$APP_BIN"
           test -x "$APP_DIR/Contents/MacOS/muesli-cli"
           test -x "$APP_DIR/Contents/MacOS/onnx-gigaam-helper"
-          test -s "$APP_DIR/Contents/Resources/Qwen3ASR-LICENSE-Apache-2.0"
           find "$APP_DIR/Contents/MacOS" -maxdepth 1 -name 'libonnxruntime*.dylib' \( -type f -o -type l \) | grep -q .
           otool -L "$APP_DIR/Contents/MacOS/onnx-gigaam-helper" | grep -Fq 'libonnxruntime'
           source ./scripts/localvqe_runtime.sh

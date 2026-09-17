@@ -4,7 +4,7 @@ import GuesliCore
 struct AboutView: View {
     let appState: AppState
 
-    private let githubURL = "https://github.com/ivkiwi/guesli"
+    private let githubURL = "https://github.com/ivkiwi/gooselee"
 
     private var version: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.2.0"
@@ -154,7 +154,7 @@ struct AboutView: View {
             return UpdateBanner(
                 icon: "arrow.triangle.2.circlepath",
                 title: "Checking for updates",
-                message: "Guesli is checking the appcast for the latest version.",
+                message: "GooseLee is checking the appcast for the latest version.",
                 tint: GuesliTheme.transcribing
             )
         case .busy(let message):
@@ -167,28 +167,28 @@ struct AboutView: View {
         case .available(let version):
             return UpdateBanner(
                 icon: "exclamationmark.triangle.fill",
-                title: "Guesli \(version) is available",
+                title: "GooseLee \(version) is available",
                 message: "An update is available. Use the menu bar icon > Check for Updates... to open the updater.",
                 tint: GuesliTheme.transcribing
             )
         case .downloaded(let version):
             return UpdateBanner(
                 icon: "exclamationmark.triangle.fill",
-                title: "Guesli \(version) is ready to install",
+                title: "GooseLee \(version) is ready to install",
                 message: "The update is downloaded. Use the menu bar updater to finish installation.",
                 tint: GuesliTheme.transcribing
             )
         case .installing(let version):
             return UpdateBanner(
                 icon: "arrow.down.circle.fill",
-                title: "Installing Guesli \(version)",
-                message: "Sparkle is preparing the update. Guesli may relaunch when installation finishes.",
+                title: "Installing GooseLee \(version)",
+                message: "Sparkle is preparing the update. GooseLee may relaunch when installation finishes.",
                 tint: GuesliTheme.transcribing
             )
         case .upToDate:
             return UpdateBanner(
                 icon: "checkmark.circle.fill",
-                title: "Guesli is up to date",
+                title: "GooseLee is up to date",
                 message: "No newer version was found in the appcast.",
                 tint: GuesliTheme.success
             )

@@ -2,7 +2,8 @@ import Foundation
 import GuesliCore
 
 enum AppIdentity {
-    private static let defaultName = "Guesli"
+    private static let defaultName = "GooseLee"
+    private static let defaultSupportDirectoryName = "Guesli"
 
     static var bundleName: String {
         stringValue(for: "CFBundleName") ?? defaultName
@@ -13,7 +14,7 @@ enum AppIdentity {
     }
 
     static var supportDirectoryName: String {
-        stringValue(for: "GuesliSupportDirectoryName") ?? displayName
+        stringValue(for: "GuesliSupportDirectoryName") ?? defaultSupportDirectoryName
     }
 
     static var supportDirectoryURL: URL {

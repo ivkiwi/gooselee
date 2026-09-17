@@ -174,10 +174,10 @@ struct DiagnosticIncidentTests {
         )
 
         let url = try #require(incident.githubIssueURL)
-        #expect(url.absoluteString.hasPrefix("https://github.com/ivkiwi/guesli/issues/new?"))
+        #expect(url.absoluteString.hasPrefix("https://github.com/ivkiwi/gooselee/issues/new?"))
         #expect(url.absoluteString.contains("title="))
         #expect(url.absoluteString.contains("body="))
-        #expect(DiagnosticIncident.githubIssueFallbackURL.absoluteString == "https://github.com/ivkiwi/guesli/issues/new")
+        #expect(DiagnosticIncident.githubIssueFallbackURL.absoluteString == "https://github.com/ivkiwi/gooselee/issues/new")
     }
 
     @Test("controller wires hard-failure incident hooks")

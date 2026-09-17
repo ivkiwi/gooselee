@@ -6105,7 +6105,7 @@ public final class GuesliController: NSObject {
         guard pendingMeetingJoinRecording == nil else {
             presentErrorAlert(
                 title: "Already waiting for a meeting",
-                message: "Guesli is already waiting for a meeting to start before recording."
+                message: "GooseLee is already waiting for a meeting to start before recording."
             )
             return
         }
@@ -6113,7 +6113,7 @@ public final class GuesliController: NSObject {
         guard let request = PendingMeetingJoinRecordingPolicy.Request(meetingURL: meetingURL) else {
             presentErrorAlert(
                 title: "Meeting link not recognized",
-                message: "Guesli could not recognize this meeting link. Open the meeting, then use Record Only."
+                message: "GooseLee could not recognize this meeting link. Open the meeting, then use Record Only."
             )
             return
         }
@@ -6135,7 +6135,7 @@ public final class GuesliController: NSObject {
                 self.cancelPendingMeetingJoinRecording(id: pendingID)
                 self.presentErrorAlert(
                     title: "Meeting failed to open",
-                    message: "Guesli could not open the meeting link in the selected browser."
+                    message: "GooseLee could not open the meeting link in the selected browser."
                 )
             }
         }
@@ -8869,7 +8869,7 @@ public final class GuesliController: NSObject {
             return "The model could not finish downloading. Check your connection and retry."
         }
         if lowercasedMessage.contains("permission") || lowercasedMessage.contains("microphone") {
-            return "Guesli could not access the microphone. Check Microphone permission and try again."
+            return "GooseLee could not access the microphone. Check Microphone permission and try again."
         }
         return "Dictation could not start. Try again in a moment."
     }

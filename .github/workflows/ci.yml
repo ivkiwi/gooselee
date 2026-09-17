@@ -122,14 +122,15 @@ jobs:
       - name: Verify Sparkle update metadata
         run: |
           curl -fsSL --retry 3 \
-            https://raw.githubusercontent.com/ivkiwi/guesli/sparkle-feed/docs/appcast-guesli.xml \
+            https://raw.githubusercontent.com/ivkiwi/gooselee/sparkle-feed/docs/appcast-guesli.xml \
             -o "$RUNNER_TEMP/appcast-guesli.xml"
           ./scripts/verify_update_flow.sh \
             --skip-dmg \
             --appcast "$RUNNER_TEMP/appcast-guesli.xml" \
             --app-name Guesli \
-            --feed-url https://raw.githubusercontent.com/ivkiwi/guesli/sparkle-feed/docs/appcast-guesli.xml \
-            --asset-url-prefix https://github.com/ivkiwi/guesli/releases/download/
+            --feed-url https://raw.githubusercontent.com/ivkiwi/gooselee/sparkle-feed/docs/appcast-guesli.xml \
+            --asset-url-prefix https://github.com/ivkiwi/gooselee/releases/download/ \
+            --legacy-asset-url-prefix https://github.com/ivkiwi/guesli/releases/download/
 
   # Gate job — always runs, always reports a status
   # This is the only required check in branch protection

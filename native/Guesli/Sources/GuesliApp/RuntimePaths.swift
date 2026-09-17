@@ -12,7 +12,7 @@ struct RuntimePaths {
             return RuntimePaths(
                 repoRoot: bundleResource,
                 menuIcon: bundleResource.appendingPathComponent("menu_m_template.png"),
-                appIcon: bundleResource.appendingPathComponent("guesli.icns"),
+                appIcon: bundleResource.appendingPathComponent("gooselee.icns"),
                 bundlePath: Bundle.main.bundleURL
             )
         }
@@ -21,7 +21,7 @@ struct RuntimePaths {
         let fileManager = FileManager.default
         var searchURL = URL(fileURLWithPath: fileManager.currentDirectoryPath)
         for _ in 0..<8 {
-            let candidate = searchURL.appendingPathComponent("assets/guesli.icns")
+            let candidate = searchURL.appendingPathComponent("assets/gooselee.icns")
             if fileManager.fileExists(atPath: candidate.path) {
                 return RuntimePaths(
                     repoRoot: searchURL,

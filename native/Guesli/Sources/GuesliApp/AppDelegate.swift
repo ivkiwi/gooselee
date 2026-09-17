@@ -382,7 +382,7 @@ final class SparkleUpdateDelegate: NSObject, SPUUpdaterDelegate, SPUStandardUser
 enum UpdateFailureGuidance {
     private static let noUpdateErrorCode = 1001
 
-    static let downloadPageURLString = "https://github.com/ivkiwi/guesli/releases"
+    static let downloadPageURLString = "https://github.com/ivkiwi/gooselee/releases"
 
     static var message: String {
         """

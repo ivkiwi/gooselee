@@ -50,15 +50,15 @@ jobs:
           BUNDLE_VERSION="$(./scripts/build_native_app.sh --print-bundle-version "$VERSION")"
           SAFE_VERSION="$VERSION"
           TAG_NAME="beta-${SAFE_VERSION}-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
-          RELEASE_TITLE="Guesli Beta ${VERSION}"
+          RELEASE_TITLE="GooseLee Beta ${VERSION}"
           PRERELEASE="true"
-          RELEASE_NOTES=$'Russian-first Guesli build: lightweight local meeting recording, transcription, and summaries with the optional Google Meet speaker bridge.\n\nThis build uses the stable self-signed Guesli Dev identity with local-only entitlements, so macOS privacy grants survive Guesli updates. It is not Apple-notarized; first launch may require System Settings > Privacy & Security > Open Anyway.'
+          RELEASE_NOTES=$'Russian-first GooseLee / Гусли build: lightweight local meeting recording, transcription, and summaries with the optional Google Meet speaker bridge.\n\nThis build uses the stable self-signed Guesli Dev identity with local-only entitlements, so macOS privacy grants survive updates. It is not Apple-notarized; first launch may require System Settings > Privacy & Security > Open Anyway.'
           ASSET_SUFFIX="-selfsigned-unnotarized"
 
           APP_DIR="dist/Guesli.app"
-          APP_ZIP="dist/Guesli-${SAFE_VERSION}${ASSET_SUFFIX}.zip"
-          DMG_PATH="dist/Guesli-${SAFE_VERSION}${ASSET_SUFFIX}.dmg"
-          EXTENSION_ZIP="dist/Guesli-Meet-Speaker-Bridge-${SAFE_VERSION}.zip"
+          APP_ZIP="dist/GooseLee-${SAFE_VERSION}${ASSET_SUFFIX}.zip"
+          DMG_PATH="dist/GooseLee-${SAFE_VERSION}${ASSET_SUFFIX}.dmg"
+          EXTENSION_ZIP="dist/GooseLee-Meet-Speaker-Bridge-${SAFE_VERSION}.zip"
 
           {
             echo "version=$VERSION"
@@ -129,12 +129,12 @@ jobs:
           GUESLI_BUNDLE_VERSION: ${{ steps.meta.outputs.bundle_version }}
           GUESLI_SHORT_VERSION: ${{ steps.meta.outputs.version }}
           GUESLI_APP_NAME: Guesli
-          GUESLI_DISPLAY_NAME: Guesli
+          GUESLI_DISPLAY_NAME: GooseLee
           GUESLI_APP_BUNDLE_NAME: Guesli.app
           GUESLI_EXECUTABLE_NAME: Guesli
           GUESLI_SUPPORT_DIR_NAME: Guesli
           GUESLI_BUNDLE_ID: com.guesli.app
-          GUESLI_SPARKLE_FEED_URL: https://raw.githubusercontent.com/ivkiwi/guesli/sparkle-feed/docs/appcast-guesli.xml
+          GUESLI_SPARKLE_FEED_URL: https://raw.githubusercontent.com/ivkiwi/gooselee/sparkle-feed/docs/appcast-guesli.xml
           GUESLI_SPARKLE_EDKEY: x1xV1WAX32xkX4Yl4dxV9HctwCP/dm/K/9YUzWxk7Kc=
           GUESLI_ENTITLEMENTS: ${{ github.workspace }}/scripts/GuesliLocalOnly.entitlements
           GUESLI_SKIP_SIGN: "1"
@@ -191,7 +191,7 @@ jobs:
           STAGING="$(mktemp -d)"
           cp -R "${{ steps.meta.outputs.app_dir }}" "$STAGING/"
           ln -s /Applications "$STAGING/Applications"
-          hdiutil create -volname "Guesli" -srcfolder "$STAGING" -ov -format UDZO "${{ steps.meta.outputs.dmg_path }}"
+          hdiutil create -volname "GooseLee" -srcfolder "$STAGING" -ov -format UDZO "${{ steps.meta.outputs.dmg_path }}"
           rm -rf "$STAGING"
 
       - name: Package Meet speaker extension
@@ -207,7 +207,7 @@ jobs:
       - name: Upload app artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Guesli-macos
+          name: GooseLee-macos
           path: |
             ${{ steps.meta.outputs.dmg_path }}
             ${{ steps.meta.outputs.app_zip }}
@@ -217,7 +217,7 @@ jobs:
         if: hashFiles('browser-extension/guesli-meet-speaker/content.js') != ''
         uses: actions/upload-artifact@v4
         with:
-          name: Guesli-Meet-Speaker-Bridge
+          name: GooseLee-Meet-Speaker-Bridge
           path: |
             ${{ steps.meta.outputs.extension_zip }}
           compression-level: 0
@@ -283,13 +283,13 @@ jobs:
           GENERATE_APPCAST="$RUNNER_TEMP/guesli-spm/artifacts/sparkle/Sparkle/bin/generate_appcast"
           printf '%s' "$SPARKLE_PRIVATE_KEY" | "$GENERATE_APPCAST" \
             --ed-key-file - \
-            --download-url-prefix "https://github.com/ivkiwi/guesli/releases/download/${TAG_NAME}/" \
-            --link "https://github.com/ivkiwi/guesli/releases" \
+            --download-url-prefix "https://github.com/ivkiwi/gooselee/releases/download/${TAG_NAME}/" \
+            --link "https://github.com/ivkiwi/gooselee/releases" \
             -o "$UPDATES_DIR/generated-appcast.xml" \
             "$UPDATES_DIR"
           git fetch origin sparkle-feed
           git show origin/sparkle-feed:docs/appcast-guesli.xml > "$RUNNER_TEMP/existing-appcast.xml"
-          ASSET_URL="https://github.com/ivkiwi/guesli/releases/download/${TAG_NAME}/$(basename "$DMG_PATH")"
+          ASSET_URL="https://github.com/ivkiwi/gooselee/releases/download/${TAG_NAME}/$(basename "$DMG_PATH")"
           python3 ./scripts/merge_appcast_item.py \
             --existing "$RUNNER_TEMP/existing-appcast.xml" \
             --generated "$UPDATES_DIR/generated-appcast.xml" \
@@ -303,6 +303,7 @@ jobs:
             --short-version "$SHORT_VERSION" \
             --app-name Guesli \
             --asset-url "$ASSET_URL" \
+            --legacy-asset-url-prefix https://github.com/ivkiwi/guesli/releases/download/ \
             --require-runtimes \
             --self-signed-artifact
 
@@ -331,6 +332,7 @@ jobs:
             --short-version "$SHORT_VERSION" \
             --app-name Guesli \
             --asset-url "$ASSET_URL" \
+            --legacy-asset-url-prefix https://github.com/ivkiwi/guesli/releases/download/ \
             --require-runtimes \
             --self-signed-artifact; then
             echo "ERROR: forged Sparkle signature was accepted." >&2

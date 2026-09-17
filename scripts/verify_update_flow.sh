@@ -8,9 +8,10 @@ SHORT_VERSION=""
 ARTIFACT_VERSION=""
 DMG_PATH=""
 APP_NAME="Guesli"
-EXPECTED_FEED_URL="https://raw.githubusercontent.com/ivkiwi/guesli/sparkle-feed/docs/appcast-guesli.xml"
+EXPECTED_FEED_URL="https://raw.githubusercontent.com/ivkiwi/gooselee/sparkle-feed/docs/appcast-guesli.xml"
 EXPECTED_ASSET_URL=""
-ASSET_URL_PREFIX="https://github.com/ivkiwi/guesli/releases/download/"
+ASSET_URL_PREFIX="https://github.com/ivkiwi/gooselee/releases/download/"
+LEGACY_ASSET_URL_PREFIX=""
 EXPECTED_BUNDLE_ID="com.guesli.app"
 SKIP_DMG=0
 SELF_SIGNED_ARTIFACT=0
@@ -35,6 +36,8 @@ Options:
   --feed-url <url>          Expected SUFeedURL. Defaults to the production appcast.
   --asset-url <url>         Require the latest enclosure to use this exact URL.
   --asset-url-prefix <url>  Allowed GitHub release URL prefix.
+  --legacy-asset-url-prefix <url>
+                            Also allow this prefix for historical appcast items.
   --bundle-id <id>          Expected app bundle ID. Defaults to com.guesli.app.
   --require-runtimes        Require LocalVQE, ONNX GigaAM, and bundled notices.
   --skip-dmg                Only validate appcast metadata. Suitable for CI.
@@ -82,6 +85,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --asset-url-prefix)
       ASSET_URL_PREFIX="${2:?missing value for --asset-url-prefix}"
+      shift 2
+      ;;
+    --legacy-asset-url-prefix)
+      LEGACY_ASSET_URL_PREFIX="${2:?missing value for --legacy-asset-url-prefix}"
       shift 2
       ;;
     --bundle-id)
@@ -143,7 +150,7 @@ if [[ ! -f "$APPCAST" ]]; then
   exit 1
 fi
 
-if ! APPCAST_METADATA="$(python3 - "$APPCAST" "$VERSION" "$SHORT_VERSION" "$APP_NAME" "$REQUIRE_RELEASE_NOTES" "$EXPECTED_ASSET_URL" "$ASSET_URL_PREFIX" <<'PY'
+if ! APPCAST_METADATA="$(python3 - "$APPCAST" "$VERSION" "$SHORT_VERSION" "$APP_NAME" "$REQUIRE_RELEASE_NOTES" "$EXPECTED_ASSET_URL" "$ASSET_URL_PREFIX" "$LEGACY_ASSET_URL_PREFIX" <<'PY'
 import base64
 import re
 import shlex
@@ -157,6 +164,10 @@ app_name = sys.argv[4]
 require_release_notes = sys.argv[5] == "1"
 expected_url = sys.argv[6]
 url_prefix = sys.argv[7]
+legacy_url_prefix = sys.argv[8]
+allowed_url_prefixes = tuple(
+    prefix for prefix in (url_prefix, legacy_url_prefix) if prefix
+)
 sparkle_ns = "http://www.andymatuschak.org/xml-namespaces/sparkle"
 
 try:
@@ -198,8 +209,11 @@ if not signature:
 
 if expected_url and url != expected_url:
     raise SystemExit(f"ERROR: latest appcast URL is {url!r}, expected {expected_url!r}")
-if not url.startswith(url_prefix):
-    raise SystemExit(f"ERROR: latest appcast URL is outside {url_prefix!r}: {url!r}")
+if not url.startswith(allowed_url_prefixes):
+    raise SystemExit(
+        f"ERROR: latest appcast URL is outside allowed release prefixes "
+        f"{allowed_url_prefixes!r}: {url!r}"
+    )
 asset_name = url.rsplit("/", 1)[-1]
 if not asset_name.startswith(f"{app_name}-") or not asset_name.endswith(".dmg"):
     raise SystemExit(f"ERROR: latest appcast asset is not a {app_name} DMG: {asset_name!r}")
@@ -235,7 +249,7 @@ for item in items:
     if item_enclosure is None:
         raise SystemExit("ERROR: appcast history item is missing enclosure")
     item_url = item_enclosure.attrib.get("url", "")
-    if not item_url.startswith(url_prefix):
+    if not item_url.startswith(allowed_url_prefixes):
         raise SystemExit(f"ERROR: appcast history contains a foreign URL: {item_url!r}")
 
 if not re.fullmatch(r"[0-9][0-9A-Za-z.\-]*", version):

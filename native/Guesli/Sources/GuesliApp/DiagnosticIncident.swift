@@ -211,7 +211,7 @@ struct DiagnosticIncident: Codable, Equatable, Identifiable, Sendable {
     }
 
     var githubIssueURL: URL? {
-        var components = URLComponents(string: "https://github.com/ivkiwi/guesli/issues/new")
+        var components = URLComponents(string: "https://github.com/ivkiwi/gooselee/issues/new")
         components?.queryItems = [
             URLQueryItem(name: "title", value: issueTitle),
             URLQueryItem(name: "body", value: issueBody),
@@ -219,7 +219,7 @@ struct DiagnosticIncident: Codable, Equatable, Identifiable, Sendable {
         return components?.url
     }
 
-    static let githubIssueFallbackURL = URL(string: "https://github.com/ivkiwi/guesli/issues/new")!
+    static let githubIssueFallbackURL = URL(string: "https://github.com/ivkiwi/gooselee/issues/new")!
 
     static func sanitizeToken(_ value: String) -> String {
         let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-")

@@ -1,0 +1,4 @@
+interface:
+  display_name: "GooseLee Agent"
+  short_description: "Inspect and summarize local GooseLee transcripts and notes"
+  default_prompt: "Use $gooselee-agent to inspect local GooseLee meetings or dictations, analyze them, and write notes back when requested."

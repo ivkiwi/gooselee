@@ -9,6 +9,7 @@ from xml.dom import Node, minidom
 
 SPARKLE_NAMESPACE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
 ALLOWED_DOWNLOAD_PREFIX = "https://github.com/ivkiwi/gooselee/releases/download/"
+LEGACY_DOWNLOAD_PREFIX = "https://github.com/ivkiwi/guesli/releases/download/"
 
 
 def items(document: minidom.Document) -> list[minidom.Element]:
@@ -33,9 +34,14 @@ def full_enclosure(item: minidom.Element) -> minidom.Element:
     return enclosures[0]
 
 
-def validate_download_url(url: str) -> None:
+def validate_download_url(url: str, *, allow_legacy: bool = False) -> None:
     parsed = urlparse(url)
-    if not url.startswith(ALLOWED_DOWNLOAD_PREFIX) or parsed.scheme != "https" or not parsed.path.endswith(".dmg"):
+    allowed_prefixes = (
+        (ALLOWED_DOWNLOAD_PREFIX, LEGACY_DOWNLOAD_PREFIX)
+        if allow_legacy
+        else (ALLOWED_DOWNLOAD_PREFIX,)
+    )
+    if not url.startswith(allowed_prefixes) or parsed.scheme != "https" or not parsed.path.endswith(".dmg"):
         raise ValueError(f"non-Guesli release URL in appcast: {url}")
 
 
@@ -51,7 +57,7 @@ def merge(existing_path: Path, generated_path: Path, version: str, download_url:
     if version in versions:
         raise ValueError(f"existing appcast already contains version {version}")
     for item in existing_items:
-        validate_download_url(full_enclosure(item).getAttribute("url"))
+        validate_download_url(full_enclosure(item).getAttribute("url"), allow_legacy=True)
 
     matches = [item for item in items(generated) if item_version(item) == version]
     if len(matches) != 1:

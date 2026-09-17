@@ -1,15 +1,49 @@
 # Guesli / Гусли
 
-Русский fork [Muesli](https://github.com/Muesli-HQ/muesli).
+Лёгкое, бесплатное и настраиваемое macOS-приложение для записи, распознавания и конспектирования встреч. Главный сценарий — русские и мультиязычные разговоры; диктовка остаётся удобным дополнительным режимом.
 
-Guesli читается как русские гусли. Оригинальный Muesli - невероятно офигенный macOS-софт для диктовки и транскрипции встреч. Автору огромный респект. Полное описание, документация, архитектура и upstream-контекст живут в оригинальной репе: https://github.com/Muesli-HQ/muesli
+Guesli начинались как русский fork [Muesli](https://github.com/Muesli-HQ/muesli), но больше не пытаются синхронизироваться с upstream целиком. Это самостоятельный downstream-продукт со своим набором моделей, интерфейсом, хранением данных и релизным циклом. Полезные upstream-исправления переносятся точечно.
 
-Зачем этот fork: локальный русский build с вырезанной телеметрией, Google Meet speaker bridge и настройками под нормальное распознавание русской речи. Остальное часто распознает русскую речь как говно.
+## Что умеют Гусли
 
-Сборки: https://github.com/ivkiwi/guesli/releases
+- записывать микрофон и системный звук без бота в звонке;
+- локально распознавать встречи и диктовку на Apple Silicon;
+- сохранять исходную запись, расшифровку, заметки и историю встреч;
+- повторно распознавать сохранённую запись;
+- чистить расшифровку локальной Qwen-моделью или выбранным облачным провайдером;
+- делать summary встречи через настраиваемый LLM;
+- при желании подключать календарь и локальный Google Meet speaker bridge.
 
-## English note
+Основной ASR-каталог намеренно ограничен тремя вариантами:
 
-Guesli is a small Russian-focused fork of [Muesli](https://github.com/Muesli-HQ/muesli). The original app is excellent; all real product docs, architecture notes, and credit belong upstream.
+| Модель | Основное назначение |
+| --- | --- |
+| **GigaAM v3 E2E CTC** | Русская речь, встречи и диктовка |
+| **Parakeet v3** | Мультиязычные встречи и диктовка, 25 языков |
+| **Nemotron 3.5 Multilingual** | Потоковая мультиязычная диктовка и live text |
 
-This fork exists for a personal Russian build: no telemetry, Google Meet speaker bridge included, and defaults tuned for Russian speech because many otherwise great local ASR paths still butcher Russian badly. This is not a competing product, just a practical fork with deep respect for the original author.
+Для английских встреч можно отдельно скачать **Parakeet Realtime EOU**. Он используется только для необязательного live-preview, никогда не загружается автоматически и не заменяет финальную расшифровку встречи.
+
+## Принципы
+
+- **Russian-first, не Russian-only.** Русская речь не должна быть второсортным режимом, но мультиязычные встречи тоже поддерживаются.
+- **Local-first.** Запись и ASR выполняются на Mac. Сетевые запросы появляются только там, где они нужны выбранной функции: обновления, загрузка моделей, календарь, облачная чистка или summary.
+- **Без телеметрии и попрошаек.** В приложении нет продуктовой аналитики, донатных кнопок и milestone-уведомлений.
+- **Меньше магии.** Небольшой поддерживаемый набор моделей и явные настройки важнее каталога из десятков полурабочих вариантов.
+- **Данные принадлежат пользователю.** Аудио встреч не отправляется в облако и не синхронизируется через iCloud.
+
+## Требования и установка
+
+- Mac с Apple Silicon;
+- macOS 14.2 или новее;
+- свободное место для выбранных локальных моделей.
+
+Готовые сборки: [GitHub Releases](https://github.com/ivkiwi/guesli/releases).
+
+Разработка и локальная сборка описаны в [CONTRIBUTING.md](CONTRIBUTING.md). Проект распространяется по лицензии [MIT](LICENSE); исходный Muesli и его авторы сохраняют заслуженный credit и copyright.
+
+## English
+
+Guesli is a lightweight, free, configurable macOS meeting recorder, local transcription app, and meeting summarizer with a Russian-first focus. It started as a fork of [Muesli](https://github.com/Muesli-HQ/muesli), but is now maintained as an independent downstream product rather than a continuously synchronized fork. Useful upstream fixes are reviewed and ported selectively.
+
+The deliberately small ASR catalog contains GigaAM v3, Parakeet v3, and Nemotron 3.5 Multilingual. Optional Parakeet Realtime EOU support is available only for English live meeting previews. Guesli has no product telemetry, donation prompts, or paid upsells.

@@ -121,6 +121,31 @@ struct PasteControllerTests {
         _ = await waitForClipboardString(in: pasteboard, expected: "original")
     }
 
+    @Test("dictation paste appends sentence spacing without changing verbatim paste")
+    func dictationPasteSpacingIsOptIn() async {
+        let dictationPasteboard = makePasteboard()
+        dictationPasteboard.setString("original", forType: .string)
+        PasteController.paste(
+            text: "Готово.",
+            appendDictationSentenceSpace: true,
+            pasteboard: dictationPasteboard,
+            simulatePasteAction: {}
+        )
+        #expect(dictationPasteboard.string(forType: .string) == "Готово. ")
+
+        let verbatimPasteboard = makePasteboard()
+        verbatimPasteboard.setString("original", forType: .string)
+        PasteController.paste(
+            text: "Computer Use output.",
+            pasteboard: verbatimPasteboard,
+            simulatePasteAction: {}
+        )
+        #expect(verbatimPasteboard.string(forType: .string) == "Computer Use output.")
+
+        _ = await waitForClipboardString(in: dictationPasteboard, expected: "original")
+        _ = await waitForClipboardString(in: verbatimPasteboard, expected: "original")
+    }
+
     @Test("paste restores clipboard after delay")
     func pasteRestoresClipboard() async throws {
         let pasteboard = makePasteboard()

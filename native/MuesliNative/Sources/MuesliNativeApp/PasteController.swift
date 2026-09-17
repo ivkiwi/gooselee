@@ -40,6 +40,7 @@ enum PasteController {
     /// paste without restoration.
     static func paste(
         text: String,
+        appendDictationSentenceSpace: Bool = false,
         pasteboard: NSPasteboard = .general,
         shortcut: PasteShortcut = .commandV,
         simulatePasteAction: (() -> Void)? = nil
@@ -51,7 +52,12 @@ enum PasteController {
         let savedItems = saveClipboard(pasteboard)
 
         pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        // Only live dictation opts in. Computer Use and other paste callers keep
+        // their exact text; stored transcripts are never padded.
+        let pastedText = appendDictationSentenceSpace
+            ? text + DictationPasteSpacing.trailingSeparator(after: text)
+            : text
+        pasteboard.setString(pastedText, forType: .string)
         let pasteChangeCount = pasteboard.changeCount
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {

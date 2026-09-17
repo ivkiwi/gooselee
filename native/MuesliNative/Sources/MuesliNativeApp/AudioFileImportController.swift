@@ -267,14 +267,9 @@ enum AudioFileImportController {
         try Task.checkCancellation()
 
         let wordCount = DictationStore.countWords(in: finalTranscript)
-        let generatedTitle: String
-        progress("Generating title...")
-        if let autoTitle = await MeetingSummaryClient.generateTitle(transcript: finalTranscript, config: config),
-           !autoTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            generatedTitle = autoTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        } else {
-            generatedTitle = title
-        }
+        let generatedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Meeting"
+            : title
 
         try Task.checkCancellation()
 

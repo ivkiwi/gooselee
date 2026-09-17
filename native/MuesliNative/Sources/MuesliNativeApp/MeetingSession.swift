@@ -320,7 +320,6 @@ private enum MeetingStopPhaseTimeouts {
     static let systemSegmentRepair: TimeInterval = 180
     static let transcriptCleanup: TimeInterval = 120
     static let liveTitle: TimeInterval = 5
-    static let titleGeneration: TimeInterval = 60
     static let screenContextDrain: TimeInterval = 15
     static let manualNotes: TimeInterval = 15
     static let summaryGeneration: TimeInterval = 180
@@ -1404,23 +1403,7 @@ final class MeetingSession {
         ) {
             generatedTitle = calendarTitle
         } else {
-            let autoTitle = await stopPhaseValue(
-                "title_generation",
-                timeout: MeetingStopPhaseTimeouts.titleGeneration,
-                fallback: Optional<String>.none
-            ) {
-                await MeetingSummaryClient.generateTitle(
-                    transcript: rawTranscript,
-                    manualNotes: manualNotes,
-                    config: self.config
-                )
-            }
-            if let autoTitle, !autoTitle.isEmpty {
-                generatedTitle = autoTitle
-                fputs("[meeting] auto-generated title: \(generatedTitle)\n", stderr)
-            } else {
-                generatedTitle = title
-            }
+            generatedTitle = Self.fallbackTitle(originalTitle: title)
         }
 
         let templateSnapshot = templateSnapshotOverride ?? MeetingTemplates.resolveSnapshot(
@@ -1677,23 +1660,7 @@ final class MeetingSession {
         ) {
             generatedTitle = calendarTitle
         } else {
-            let autoTitle = await stopPhaseValue(
-                "title_generation",
-                timeout: MeetingStopPhaseTimeouts.titleGeneration,
-                fallback: Optional<String>.none
-            ) {
-                await MeetingSummaryClient.generateTitle(
-                    transcript: rawTranscript,
-                    manualNotes: manualNotes,
-                    config: self.config
-                )
-            }
-            if let autoTitle, !autoTitle.isEmpty {
-                generatedTitle = autoTitle
-                fputs("[meeting] auto-generated title: \(generatedTitle)\n", stderr)
-            } else {
-                generatedTitle = title
-            }
+            generatedTitle = Self.fallbackTitle(originalTitle: title)
         }
 
         let templateSnapshot = templateSnapshotOverride ?? MeetingTemplates.resolveSnapshot(
@@ -2040,6 +2007,12 @@ final class MeetingSession {
         guard calendarEventID != nil else { return nil }
         guard !originalTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
         return originalTitle
+    }
+
+    static func fallbackTitle(originalTitle: String) -> String {
+        originalTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "Meeting"
+            : originalTitle
     }
 
     static func summaryContext(participants: [MeetingParticipant], visualContext: String) -> String {

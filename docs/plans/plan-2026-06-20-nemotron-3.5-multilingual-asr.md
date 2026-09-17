@@ -132,7 +132,7 @@ These are the items I could not confirm from this environment. Pull them from th
 
 ---
 
-## 6. Caveats to surface in UI / docs (carry forward to CLAUDE.md "Known Limitations")
+## 6. Caveats to surface in UI / project documentation
 
 - RNNT limitations to surface: **append-only, no corrections, handsfree-oriented, weak on very short dictations.** Hold-to-talk is supported via record-then-transcribe; double-tap uses live streaming.
 - First run pays CoreML ANE compilation warmup cost (mitigated by silent-chunk warmup on load).
@@ -148,7 +148,7 @@ These are the items I could not confirm from this environment. Pull them from th
 3. Implement `Nemotron35StreamingBackend.swift` against verified shapes; unit-test pure helpers.
 4. Wire `TranscriptionRuntime` + `StreamingDictationController`/`MuesliController` routing.
 5. `./scripts/dev-test.sh` → download model → real handsfree dictation in 2–3 languages.
-6. Update `CLAUDE.md` (model count 7→8, Known Limitations) + this Context note.
+6. Update project documentation (model count 7→8, Known Limitations) + this Context note.
 7. PR.
 
 ---

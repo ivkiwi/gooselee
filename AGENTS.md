@@ -60,6 +60,17 @@ For direct SwiftPM test runs, pass the scratch path yourself:
 swift test --package-path native/MuesliNative --scratch-path "/Volumes/MuesliBuildCache/muesli-spm/test"
 ```
 
+## Development Safety
+
+- Use `./scripts/dev-test.sh` for local development. The default dev app is `MuesliDev` (`com.muesli.dev`) with data under `~/Library/Application Support/MuesliDev/`; named lanes use their matching isolated identities.
+- Use `./scripts/dev-test.sh --reset` (or `--lane <lane> --reset`) to repeat onboarding without deleting app data. Run `scripts/dev-reset-permissions.sh` only when intentionally testing macOS permission re-granting.
+- Config JSON keys use `snake_case` (for example, `has_completed_onboarding`).
+- The full test command is `swift test --package-path native/MuesliNative`; pass a shared scratch path as described above for direct or concurrent runs.
+- Never take screenshots with `CGWindowListCreateImage` while a meeting recording uses `SCStream`; it interrupts system-audio capture.
+- In SwiftUI, present `NSSavePanel` with `beginSheetModal(for:)`, never `runModal()`. Do not initialize `NSAttributedString(html:)` on the main thread.
+- macOS 26 can suspend timers in LSUIElement apps under App Nap. Calendar notifications must keep `EKEventStoreChangedNotification` as the reliable path; timer polling is fallback-only.
+- For notarized releases, staple the app bundle before creating the DMG.
+
 ## Production Build & Install (Guesli) — canonical flow
 
 This machine has NO Apple Developer ID certificate. The only correct production build command is:

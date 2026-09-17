@@ -12,6 +12,7 @@ case "${shard}" in
   core)
     filters=(
       ConfigStoreTests
+      LegacyInstallationPreservationTests
       DictationStoreTests
       MuesliCLITests
       ChatGPTAuthTests

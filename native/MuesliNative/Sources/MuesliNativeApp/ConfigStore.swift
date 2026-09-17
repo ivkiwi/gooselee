@@ -90,8 +90,11 @@ final class ConfigStore {
         if legacyImport.didAttempt {
             writeLegacySettingsMarker(importResult: legacyImport)
         }
-        if didMigrateRemovedCanaryQwen {
-            removeRemovedCanaryQwenModelCache()
+        if didMigrateRemovedCanaryQwen,
+           fileManager.fileExists(atPath: removedCanaryQwenModelCacheURL.path) {
+            DiagnosticsLog.write(
+                "[config-store] preserved removed Canary Qwen model cache at \(removedCanaryQwenModelCacheURL.path)"
+            )
         }
         return config
     }
@@ -156,17 +159,6 @@ final class ConfigStore {
         migrate("dictation", backend: &config.sttBackend, model: &config.sttModel)
         migrate("meeting", backend: &config.meetingTranscriptionBackend, model: &config.meetingTranscriptionModel)
         return didMigrate
-    }
-
-    private func removeRemovedCanaryQwenModelCache() {
-        guard fileManager.fileExists(atPath: removedCanaryQwenModelCacheURL.path) else { return }
-        MuesliPaths.preconditionSafeForTestWrite(removedCanaryQwenModelCacheURL)
-        do {
-            try fileManager.removeItem(at: removedCanaryQwenModelCacheURL)
-            DiagnosticsLog.write("[config-store] removed Canary Qwen model cache at \(removedCanaryQwenModelCacheURL.path)")
-        } catch {
-            DiagnosticsLog.write("[config-store] failed to remove Canary Qwen model cache at \(removedCanaryQwenModelCacheURL.path): \(error.localizedDescription)")
-        }
     }
 
     private func importLegacySettingsIfNeeded(into config: inout AppConfig) -> LegacySettingsImportResult {

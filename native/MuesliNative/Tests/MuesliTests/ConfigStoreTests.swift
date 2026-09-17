@@ -59,8 +59,8 @@ struct ConfigStoreTests {
         store.save(original)
     }
 
-    @Test("load migrates removed Canary Qwen backend and deletes cache")
-    func loadMigratesRemovedCanaryQwenBackendAndDeletesCache() throws {
+    @Test("load migrates removed Canary Qwen backend without deleting cache")
+    func loadMigratesRemovedCanaryQwenBackendWithoutDeletingCache() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("canary-qwen-migration-test-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -97,7 +97,11 @@ struct ConfigStoreTests {
         #expect(loaded.sttModel == BackendOption.gigaAMV3Russian.model)
         #expect(loaded.meetingTranscriptionBackend == BackendOption.gigaAMV3Russian.backend)
         #expect(loaded.meetingTranscriptionModel == BackendOption.gigaAMV3Russian.model)
-        #expect(!FileManager.default.fileExists(atPath: cacheURL.path))
+        #expect(FileManager.default.fileExists(atPath: cacheURL.path))
+        #expect(
+            try Data(contentsOf: cacheURL.appendingPathComponent("canary_embeddings.bin"))
+                == Data("stale model".utf8)
+        )
 
         let saved = try JSONDecoder().decode(AppConfig.self, from: Data(contentsOf: store.configPath()))
         #expect(saved.sttBackend == BackendOption.gigaAMV3Russian.backend)

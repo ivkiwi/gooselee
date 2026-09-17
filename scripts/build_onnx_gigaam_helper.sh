@@ -9,13 +9,13 @@ ORT_VERSION="1.29.0"
 ORT_ARCHIVE="onnxruntime-osx-arm64-$ORT_VERSION.tgz"
 ORT_URL="https://github.com/microsoft/onnxruntime/releases/download/v$ORT_VERSION/$ORT_ARCHIVE"
 ORT_SHA256="d0706fc34f315d8c88639d0a8c81f2e09e815f282cabed3493c06a054352cf92"
-ORT_CACHE="${MUESLI_ONNX_RUNTIME_CACHE_DIR:-$HOME/Library/Caches/muesli-onnxruntime}"
-ORT_ROOT="${MUESLI_ONNX_RUNTIME_ROOT:-$ORT_CACHE/onnxruntime-osx-arm64-$ORT_VERSION}"
+ORT_CACHE="${GUESLI_ONNX_RUNTIME_CACHE_DIR:-$HOME/Library/Caches/guesli-onnxruntime}"
+ORT_ROOT="${GUESLI_ONNX_RUNTIME_ROOT:-$ORT_CACHE/onnxruntime-osx-arm64-$ORT_VERSION}"
 ARCHIVE_PATH="$ORT_CACHE/$ORT_ARCHIVE"
 
 if [[ ! -f "$ORT_ROOT/include/onnxruntime_cxx_api.h" || ! -f "$ORT_ROOT/lib/libonnxruntime.$ORT_VERSION.dylib" ]]; then
-  if [[ -n "${MUESLI_ONNX_RUNTIME_ROOT:-}" ]]; then
-    echo "Invalid MUESLI_ONNX_RUNTIME_ROOT: $ORT_ROOT" >&2
+  if [[ -n "${GUESLI_ONNX_RUNTIME_ROOT:-}" ]]; then
+    echo "Invalid GUESLI_ONNX_RUNTIME_ROOT: $ORT_ROOT" >&2
     exit 1
   fi
   mkdir -p "$ORT_CACHE"

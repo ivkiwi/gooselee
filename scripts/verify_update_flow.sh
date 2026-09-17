@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-APPCAST="$ROOT/docs/appcast-guesli.xml"
+APPCAST=""
 VERSION=""
 SHORT_VERSION=""
 ARTIFACT_VERSION=""
@@ -29,7 +29,7 @@ Options:
   --version <version>       Require the latest appcast item to match this version.
   --short-version <version> Require the latest short/display version. Defaults to --version.
   --artifact-version <ver>  Version string used in the DMG filename. Defaults to --version.
-  --appcast <path>          Appcast XML path. Defaults to docs/appcast-guesli.xml.
+  --appcast <path>          Appcast XML path. Required.
   --dmg <path>              DMG path. Defaults to dist-release/Guesli-<version>.dmg.
   --app-name <name>         App bundle/update artifact name. Defaults to Guesli.
   --feed-url <url>          Expected SUFeedURL. Defaults to the production appcast.
@@ -119,6 +119,12 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -z "$APPCAST" ]]; then
+  echo "Missing required --appcast path." >&2
+  usage
+  exit 2
+fi
 
 if [[ "$SKIP_DMG" == "1" && "$SELF_SIGNED_ARTIFACT" == "1" ]]; then
   echo "ERROR: --skip-dmg and --self-signed-artifact cannot be combined." >&2
@@ -307,7 +313,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-HDIUTIL_ATTACH_LOG="$(mktemp -t muesli-hdiutil-attach.XXXXXX.log)"
+HDIUTIL_ATTACH_LOG="$(mktemp -t guesli-hdiutil-attach.XXXXXX.log)"
 if ! ATTACH_OUTPUT="$(hdiutil attach "$DMG_PATH" -nobrowse -readonly 2>"$HDIUTIL_ATTACH_LOG")"; then
   cat "$HDIUTIL_ATTACH_LOG" >&2
   echo "ERROR: Could not mount DMG: $DMG_PATH" >&2
@@ -383,7 +389,7 @@ if [[ "$REQUIRE_RUNTIMES" == "1" ]]; then
     echo "ERROR: ONNX GigaAM helper is not linked to ONNX Runtime" >&2
     exit 1
   }
-  muesli_localvqe_runtime_is_complete "$MACOS_DIR" || exit 1
+  guesli_localvqe_runtime_is_complete "$MACOS_DIR" || exit 1
   [[ -s "$APP_PATH/Contents/Resources/FluidAudio-LICENSE-Apache-2.0.txt" ]] || {
     echo "ERROR: bundled FluidAudio Apache license is missing" >&2
     exit 1
@@ -391,7 +397,7 @@ if [[ "$REQUIRE_RUNTIMES" == "1" ]]; then
   echo "Bundled ASR/AEC runtimes and third-party license OK."
 fi
 
-SWIFT_VERIFY_FILE="$(mktemp -t muesli-ed25519-verify.XXXXXX.swift)"
+SWIFT_VERIFY_FILE="$(mktemp -t guesli-ed25519-verify.XXXXXX.swift)"
 cat > "$SWIFT_VERIFY_FILE" <<'SWIFT'
 import CryptoKit
 import Foundation

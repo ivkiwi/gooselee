@@ -68,10 +68,10 @@ __pycache__/
 
 # Build artifacts
 dist-native/
-native/MuesliNative/.build/
-native/MuesliNative/.build-direct/
-native/MuesliNative/.xcodebuild/
-native/MuesliNative/LocalVQE/lib/
+native/Guesli/.build/
+native/Guesli/.build-direct/
+native/Guesli/.xcodebuild/
+native/Guesli/LocalVQE/lib/
 build/
 dist/
 output/
@@ -90,9 +90,8 @@ dist-notary/
 dist-preprod/
 dist-release/
 scripts/notarize_dmg.sh
-scripts/dev-test.sh
 
-# Legacy files (kept locally, not tracked)
+# Local-only files
 Context/
 app.py
 main.py
@@ -104,12 +103,10 @@ scripts/setup_no_torch_env.sh
 requirements-no-torch.txt
 requirements-no-torch-dev.txt
 research/
-assets/muesli_app_icon_traced*.svg
+assets/guesli_app_icon_traced*.svg
 assets/menu_mic_template.png
 context.md
 
 # IDE
 *.swp
 *~
-.vercel
-docs/reports/meeting-transcription-pipeline.svg

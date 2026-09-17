@@ -1,0 +1,4 @@
+interface:
+  display_name: "Guesli Agent"
+  short_description: "Inspect and summarize local Guesli transcripts and notes"
+  default_prompt: "Use the local Guesli CLI to inspect meetings or dictations, analyze them with your own model, and write notes back when requested."

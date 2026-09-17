@@ -1,0 +1,71 @@
+import SwiftUI
+import GuesliCore
+
+struct DashboardRootView: View {
+    let appState: AppState
+    let controller: GuesliController
+
+    var body: some View {
+        NavigationSplitView {
+            SidebarView(appState: appState, controller: controller)
+                .navigationSplitViewColumnWidth(min: 240, ideal: 260, max: 300)
+        } detail: {
+            detailContent
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(GuesliTheme.backgroundBase)
+        }
+        .navigationSplitViewStyle(.balanced)
+        .frame(minWidth: 900, minHeight: 600)
+        .preferredColorScheme(appState.config.darkMode ? .dark : .light)
+        .sheet(
+            item: Binding<DiagnosticIncident?>(
+                get: { appState.pendingDiagnosticIncident },
+                set: { if $0 == nil { controller.dismissDiagnosticIncidentPrompt() } }
+            )
+        ) { incident in
+            DiagnosticIncidentReportView(
+                incident: incident,
+                onOpenIssue: { controller.openDiagnosticIncidentIssue(incident) },
+                onDismiss: { controller.dismissDiagnosticIncidentPrompt() }
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var detailContent: some View {
+        if appState.isSearchActive,
+           case .document(let id) = appState.meetingsNavigationState {
+            MeetingDetailView(
+                meeting: appState.selectedMeeting,
+                controller: controller,
+                appState: appState,
+                onBack: {
+                    appState.meetingsNavigationState = .browser
+                    appState.selectedMeetingID = nil
+                    appState.selectedMeetingRecord = nil
+                },
+                backLabel: "Back to Search"
+            )
+            .id(id)
+        } else if appState.isSearchActive {
+            SearchResultsView(appState: appState, controller: controller)
+        } else {
+            switch appState.selectedTab {
+            case .dictations:
+                DictationsView(appState: appState, controller: controller)
+            case .meetings:
+                MeetingsView(appState: appState, controller: controller)
+            case .dictionary:
+                DictionaryView(appState: appState, controller: controller)
+            case .models:
+                ModelsView(appState: appState, controller: controller)
+            case .shortcuts:
+                ShortcutsView(appState: appState, controller: controller)
+            case .settings:
+                SettingsView(appState: appState, controller: controller)
+            case .about:
+                AboutView(appState: appState)
+            }
+        }
+    }
+}

@@ -16,10 +16,10 @@ chmod +x "$TMP/bin/otool"
 export PATH="$TMP/bin:$PATH"
 
 touch "$TMP/liblocalvqe.dylib" "$TMP/libggml.dylib" "$TMP/libggml-base.dylib"
-muesli_localvqe_runtime_is_complete "$TMP"
+guesli_localvqe_runtime_is_complete "$TMP"
 
 rm "$TMP/libggml-base.dylib"
-if muesli_localvqe_runtime_is_complete "$TMP" >/dev/null 2>&1; then
+if guesli_localvqe_runtime_is_complete "$TMP" >/dev/null 2>&1; then
   echo "Incomplete LocalVQE runtime was accepted" >&2
   exit 1
 fi

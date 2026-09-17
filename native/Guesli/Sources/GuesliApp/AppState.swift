@@ -1,0 +1,161 @@
+import Foundation
+import Observation
+import GuesliCore
+
+enum DashboardTab: String, CaseIterable {
+    case dictations
+    case meetings
+    case dictionary
+    case models
+    case shortcuts
+    case settings
+    case about
+}
+
+enum MeetingsNavigationState: Equatable {
+    case browser
+    case document(Int64)
+}
+
+enum SparkleUpdateStatus: Equatable {
+    case idle
+    case checking
+    case busy(message: String)
+    case available(version: String)
+    case downloaded(version: String)
+    case installing(version: String)
+    case upToDate
+    case disabled(message: String)
+    case failed(message: String)
+}
+
+enum GoogleCalendarListLoadState: Equatable {
+    case idle
+    case loading
+    case loaded
+    case failed(String)
+}
+
+enum ICloudBridgeState: Equatable {
+    case notConfigured
+    case checkingICloud
+    case syncing
+    case active
+    case needsICloud
+    case error
+}
+
+struct ActiveMeetingAudioWarning: Equatable {
+    let meetingID: Int64
+    let message: String
+}
+
+@MainActor
+@Observable
+final class AppState {
+    // Dashboard data
+    var dictationRows: [DictationRecord] = []
+    var meetingRows: [MeetingRecord] = []
+    var totalMeetingCount: Int = 0
+    var meetingCountsByFolder: [Int64: Int] = [:]
+    var directMeetingCountsByFolder: [Int64: Int] = [:]
+    var selectedMeetingID: Int64?
+    var selectedMeetingRecord: MeetingRecord?
+    var folders: [MeetingFolder] = []
+    var selectedFolderID: Int64?  // nil = "All Meetings"
+    var meetingsNavigationState: MeetingsNavigationState = .browser
+    var isMeetingTemplatesManagerPresented: Bool = false
+    var dictationStats: DictationStats = DictationStats(
+        totalWords: 0, totalSessions: 0, averageWordsPerSession: 0,
+        averageWPM: 0, currentStreakDays: 0, longestStreakDays: 0
+    )
+    var meetingStats: MeetingStats = MeetingStats(totalWords: 0, totalMeetings: 0, averageWPM: 0)
+
+    // Config-driven state
+    var selectedBackend: BackendOption = .gigaAMV3Russian
+    var selectedMeetingTranscriptionBackend: BackendOption = .gigaAMV3Russian
+    var selectedMeetingSummaryBackend: MeetingSummaryBackendOption = .chatGPT
+    var activePostProcessor: PostProcessorOption = PostProcessorOption.defaultOption
+    var config: AppConfig = AppConfig()
+    var launchAtLoginRegistrationState: LaunchAtLoginRegistrationState = .disabled
+
+    // Live status
+    var isMeetingRecording: Bool = false
+    var isMeetingRecordingPaused: Bool = false
+    var isMeetingStarting: Bool = false
+    var meetingStartStatus: String?
+    var liveMeetingTranscript: String = ""
+    var liveMeetingTranscriptOwnerID: Int64? = nil
+    var liveMeetingPartialYou: String = ""
+    var liveMeetingPartialOthers: String = ""
+    var activeMeetingAudioWarning: ActiveMeetingAudioWarning?
+    var dictationState: DictationState = .idle
+    var lastTranscriptCleanupWarning: String?
+    var pendingDiagnosticIncident: DiagnosticIncident?
+    var isVoiceNoteRecording: Bool = false
+    var isChatGPTAuthenticated: Bool = false
+    var isGoogleCalendarAvailable: Bool = false
+    var isGoogleCalendarVerified: Bool = false
+    var isGoogleCalendarAuthenticated: Bool = false
+    var upcomingCalendarEvents: [UnifiedCalendarEvent] = []
+    var hiddenCalendarEventIDs: Set<String> = []
+    var availableEventKitCalendars: [AvailableCalendar] = []
+    var availableGoogleCalendars: [GoogleCalendarSummary] = []
+    var googleCalendarListLoadState: GoogleCalendarListLoadState = .idle
+    var sparkleUpdateStatus: SparkleUpdateStatus = .idle
+    var sparkleLastCheckedAt: Date?
+    var canUseICloudSync: Bool = false
+    var iCloudSyncStatus: String?
+    var isICloudSyncInProgress: Bool = false
+    var isICloudBridgeActivationPending: Bool = false
+    var iCloudBridgeState: ICloudBridgeState = .notConfigured
+    var iCloudBridgeMessage: String?
+    var iCloudBridgeRemoteDeviceName: String?
+    var iCloudBridgeRemoteDevicePlatform: String?
+    var iCloudBridgeCompanionDeviceName: String? {
+        guard isICloudBridgeCompanionPlatform else { return nil }
+        return iCloudBridgeRemoteDeviceName
+    }
+    var isICloudBridgeCompanionPlatform: Bool {
+        guard let platform = iCloudBridgeRemoteDevicePlatform else { return false }
+        switch platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "ios", "ipados":
+            return true
+        default:
+            return false
+        }
+    }
+    var iCloudLastSyncSummary: String?
+    var iCloudLastSyncedAt: Date?
+    var modelPreparationTitle: String?
+    var modelPreparationDetail: String?
+    var modelPreparationProgress: Double?
+    var isModelPreparingAfterDownload: Bool = false
+    var modelPreparationIsComplete: Bool = false
+
+    // Dictation pagination & filtering
+    var dictationPageSize: Int = 50
+    var dictationFromDate: String? = nil
+    var dictationToDate: String? = nil
+    var hasMoreDictations: Bool = true
+
+    // Search
+    var searchQuery: String = ""
+    var searchResultDictations: [DictationRecord] = []
+    var searchResultMeetings: [MeetingRecord] = []
+    var focusSearchField: Bool = false
+    var isSearchActive: Bool { !searchQuery.isEmpty }
+
+    // Navigation
+    var selectedTab: DashboardTab = .dictations
+
+    // Computed
+    var selectedMeeting: MeetingRecord? {
+        guard let id = selectedMeetingID else { return nil }
+        if let row = meetingRows.first(where: { $0.id == id }) {
+            return row
+        }
+        guard selectedMeetingRecord?.id == id else { return nil }
+        return selectedMeetingRecord
+    }
+}

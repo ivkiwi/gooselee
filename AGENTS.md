@@ -1,6 +1,6 @@
 # Guesli agent guide
 
-Guesli is an independent downstream product. Do not restore removed Muesli
+Guesli is an independent downstream product. Do not restore removed upstream
 features or merge upstream wholesale. Port individual fixes only when they fit
 Guesli's meeting-first, Russian-first scope.
 
@@ -32,7 +32,7 @@ Guesli's meeting-first, Russian-first scope.
 Run the full suite with:
 
 ```bash
-swift test --package-path native/MuesliNative
+swift test --package-path native/Guesli
 ```
 
 Build scripts choose a shared SwiftPM scratch directory automatically. Reuse it;
@@ -43,7 +43,7 @@ The maintainer machine has no Apple Developer ID certificate. Its canonical
 local production build is:
 
 ```bash
-MUESLI_SKIP_SIGN=1 MUESLI_SIGN_IDENTITY="Guesli Dev" ./scripts/build_native_app.sh
+GUESLI_SKIP_SIGN=1 GUESLI_SIGN_IDENTITY="Guesli Dev" ./scripts/build_native_app.sh
 ```
 
 Both variables are required. The stable self-signed identity preserves macOS

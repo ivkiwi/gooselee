@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCALVQE_REPO="${LOCALVQE_REPO:-/tmp/LocalVQE}"
 LOCALVQE_REF="${LOCALVQE_REF:-134aa7fd73d6a61dcab24c4f0c70bc49a38c0494}"
-BUILD_DIR="${LOCALVQE_BUILD_DIR:-$LOCALVQE_REPO/ggml/build-muesli}"
-OUT_DIR="${MUESLI_LOCALVQE_LIB_DIR:-$ROOT/native/MuesliNative/LocalVQE/lib}"
+BUILD_DIR="${LOCALVQE_BUILD_DIR:-$LOCALVQE_REPO/ggml/build-guesli}"
+OUT_DIR="${GUESLI_LOCALVQE_LIB_DIR:-$ROOT/native/Guesli/LocalVQE/lib}"
 
 if [[ ! -d "$LOCALVQE_REPO/.git" ]]; then
   git clone https://github.com/localai-org/LocalVQE.git "$LOCALVQE_REPO"

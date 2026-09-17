@@ -6,13 +6,13 @@ WORKFLOW="$ROOT/.github/workflows/release-macos-app.yml"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/guesli-release-security.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
-test "$(MUESLI_RELEASE_VERSION='0.8.0-beta.2' GITHUB_RUN_NUMBER=41 "$ROOT/scripts/release_version.sh")" = '0.8.0-beta.2'
-test "$(MUESLI_RELEASE_VERSION='' GITHUB_RUN_NUMBER=41 "$ROOT/scripts/release_version.sh")" = '0.0.0-beta.41'
+test "$(GUESLI_RELEASE_VERSION='0.8.0-beta.2' GITHUB_RUN_NUMBER=41 "$ROOT/scripts/release_version.sh")" = '0.8.0-beta.2'
+test "$(GUESLI_RELEASE_VERSION='' GITHUB_RUN_NUMBER=41 "$ROOT/scripts/release_version.sh")" = '0.0.0-beta.41'
 test "$("$ROOT/scripts/build_native_app.sh" --print-bundle-version 0.8.3.2)" = '1008.3.2'
 test "$("$ROOT/scripts/build_native_app.sh" --print-bundle-version 0.8.3.4)" = '1008.3.4'
 test "$("$ROOT/scripts/build_native_app.sh" --print-bundle-version 0.0.0-beta.21)" = '1000.0.21'
 payload="\$(touch $TMP/injected)"
-if MUESLI_RELEASE_VERSION="$payload" GITHUB_RUN_NUMBER=41 \
+if GUESLI_RELEASE_VERSION="$payload" GITHUB_RUN_NUMBER=41 \
   "$ROOT/scripts/release_version.sh" >/dev/null 2>&1; then
   echo "Unsafe release version was accepted" >&2
   exit 1
@@ -39,14 +39,14 @@ SH
 chmod +x "$TMP/gh"
 
 SHA='0123456789abcdef0123456789abcdef01234567'
-GITHUB_REPOSITORY=ivkiwi/guesli GITHUB_SHA="$SHA" MUESLI_GH_BIN="$TMP/gh" \
+GITHUB_REPOSITORY=ivkiwi/guesli GITHUB_SHA="$SHA" GUESLI_GH_BIN="$TMP/gh" \
   "$ROOT/scripts/require_successful_ci_gate.sh" >/dev/null
-if GITHUB_REPOSITORY=ivkiwi/guesli GITHUB_SHA="$SHA" MUESLI_GH_BIN="$TMP/gh" \
+if GITHUB_REPOSITORY=ivkiwi/guesli GITHUB_SHA="$SHA" GUESLI_GH_BIN="$TMP/gh" \
   FAKE_GATE_RESULT=failure "$ROOT/scripts/require_successful_ci_gate.sh" >/dev/null 2>&1; then
   echo "Release gate accepted a CI run without successful ci-gate" >&2
   exit 1
 fi
-if GITHUB_REPOSITORY=ivkiwi/guesli GITHUB_SHA="$SHA" MUESLI_GH_BIN="$TMP/gh" \
+if GITHUB_REPOSITORY=ivkiwi/guesli GITHUB_SHA="$SHA" GUESLI_GH_BIN="$TMP/gh" \
   FAKE_RUN_SHA=ffffffffffffffffffffffffffffffffffffffff \
   "$ROOT/scripts/require_successful_ci_gate.sh" >/dev/null 2>&1; then
   echo "Release gate accepted CI from a different commit" >&2
@@ -56,7 +56,7 @@ fi
 grep -Fq 'needs: authorize' "$WORKFLOW"
 grep -Fq 'actions: read' "$WORKFLOW"
 grep -Fq 'contents: write' "$WORKFLOW"
-grep -Fq 'MUESLI_RELEASE_VERSION: ${{ inputs.version }}' "$WORKFLOW"
+grep -Fq 'GUESLI_RELEASE_VERSION: ${{ inputs.version }}' "$WORKFLOW"
 grep -Fq 'BUNDLE_VERSION="$(./scripts/build_native_app.sh --print-bundle-version "$VERSION")"' "$WORKFLOW"
 test "$(grep -Fc '${{ inputs.version }}' "$WORKFLOW")" -eq 1
 if grep -Fq '${{ github.event.inputs.version }}' "$WORKFLOW"; then

@@ -9,10 +9,10 @@ set -euo pipefail
 # - Dev builds default to local-only entitlements to preserve existing TCC
 #   permissions and avoid requiring Apple Developer profiles
 # - CloudKit/APNs dev signing is opt-in with --cloud-entitlements
-# - External contributors can set MUESLI_SKIP_SIGN=1 to build without the
+# - External contributors can set GUESLI_SKIP_SIGN=1 to build without the
 #   maintainer signing certificate
 # - Uses a shared, worktree-isolated SwiftPM scratch path by default; set
-#   MUESLI_DISABLE_SWIFTPM_SCRATCH_PATH=1 to use package-local .build instead
+#   GUESLI_DISABLE_SWIFTPM_SCRATCH_PATH=1 to use package-local .build instead
 # - Installs to /Applications/GuesliDev*.app
 #
 # Usage:
@@ -20,9 +20,9 @@ set -euo pipefail
 #   ./scripts/dev-test.sh --lane A                # Build and launch GuesliDevA
 #   ./scripts/dev-test.sh --lane A --local-only   # Omit iCloud/APNs entitlements
 #   ./scripts/dev-test.sh --reset                 # Reset onboarding only (keeps data)
-#   MUESLI_PROVISIONING_PROFILE=/path/to/profile.provisionprofile \
-#   MUESLI_SIGN_IDENTITY="Apple Development: Name (TEAMID)" \
-#   MUESLI_CODESIGN_TIMESTAMP=none ./scripts/dev-test.sh --cloud-entitlements
+#   GUESLI_PROVISIONING_PROFILE=/path/to/profile.provisionprofile \
+#   GUESLI_SIGN_IDENTITY="Apple Development: Name (TEAMID)" \
+#   GUESLI_CODESIGN_TIMESTAMP=none ./scripts/dev-test.sh --cloud-entitlements
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -46,9 +46,8 @@ com.guesli.dev, ~/Library/Application Support/GuesliDev, and
 
 Cloud-entitled dev builds require a provisioning profile whose app identifier
 matches the selected bundle ID and a signing identity included by that profile.
-For the maintainer's plain GuesliDev lane, this script auto-selects the local
-com.guesli.dev CloudKit profile from ../muesli-ios/secrets when
---cloud-entitlements is provided and the profile exists.
+Pass the profile and signing identity explicitly through
+GUESLI_PROVISIONING_PROFILE and GUESLI_SIGN_IDENTITY.
 EOF
 }
 
@@ -56,7 +55,6 @@ EOF
 RESET=0
 LANE=""
 ENTITLEMENTS_MODE=""
-ENTITLEMENTS_MODE_EXPLICIT=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --clean)
@@ -79,12 +77,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --local-only|--without-cloud-entitlements)
       ENTITLEMENTS_MODE="local-only"
-      ENTITLEMENTS_MODE_EXPLICIT=1
       shift
       ;;
     --cloud-entitlements|--with-cloud-entitlements)
       ENTITLEMENTS_MODE="cloud"
-      ENTITLEMENTS_MODE_EXPLICIT=1
       shift
       ;;
     --help|-h)
@@ -123,20 +119,18 @@ fi
 DEV_SUPPORT_DIR="$HOME/Library/Application Support/$DEV_APP_NAME"
 DEV_APP="/Applications/$DEV_APP_NAME.app"
 ONBOARDING_PROGRESS_FILE="$DEV_SUPPORT_DIR/onboarding-progress.json"
-DEFAULT_DEV_CLOUD_PROFILE="$ROOT/../muesli-ios/secrets/gueslimacosdevcloudkitcomgueslidev.provisionprofile"
-DEFAULT_DEV_CLOUD_SIGN_IDENTITY="Apple Development: Pranav Hari Guruvayurappan (59WTZW55XG)"
-RESOLVED_PROVISIONING_PROFILE="${MUESLI_PROVISIONING_PROFILE:-}"
-RESOLVED_SIGN_IDENTITY="${MUESLI_SIGN_IDENTITY:-}"
-RESOLVED_CODESIGN_TIMESTAMP="${MUESLI_CODESIGN_TIMESTAMP:-}"
+RESOLVED_PROVISIONING_PROFILE="${GUESLI_PROVISIONING_PROFILE:-}"
+RESOLVED_SIGN_IDENTITY="${GUESLI_SIGN_IDENTITY:-}"
+RESOLVED_CODESIGN_TIMESTAMP="${GUESLI_CODESIGN_TIMESTAMP:-}"
 BUILD_ENV=(
-  MUESLI_APP_NAME="$DEV_APP_NAME"
-  MUESLI_BUNDLE_ID="$DEV_BUNDLE_ID"
-  MUESLI_SUPPORT_DIR_NAME="$DEV_APP_NAME"
-  MUESLI_DISPLAY_NAME="$DEV_APP_NAME"
-  MUESLI_SPARKLE_FEED_URL=""
+  GUESLI_APP_NAME="$DEV_APP_NAME"
+  GUESLI_BUNDLE_ID="$DEV_BUNDLE_ID"
+  GUESLI_SUPPORT_DIR_NAME="$DEV_APP_NAME"
+  GUESLI_DISPLAY_NAME="$DEV_APP_NAME"
+  GUESLI_SPARKLE_FEED_URL=""
 )
 if [[ -n "$LANE" ]]; then
-  BUILD_ENV+=(MUESLI_EXECUTABLE_NAME="$DEV_APP_NAME")
+  BUILD_ENV+=(GUESLI_EXECUTABLE_NAME="$DEV_APP_NAME")
 fi
 
 use_local_only_entitlements() {
@@ -144,9 +138,9 @@ use_local_only_entitlements() {
   RESOLVED_SIGN_IDENTITY=""
   RESOLVED_CODESIGN_TIMESTAMP=""
   BUILD_ENV+=(
-    MUESLI_ENTITLEMENTS="$ROOT/scripts/MuesliLocalOnly.entitlements"
-    MUESLI_PROVISIONING_PROFILE=""
-    MUESLI_APS_ENVIRONMENT=""
+    GUESLI_ENTITLEMENTS="$ROOT/scripts/GuesliLocalOnly.entitlements"
+    GUESLI_PROVISIONING_PROFILE=""
+    GUESLI_APS_ENVIRONMENT=""
   )
 }
 
@@ -155,37 +149,23 @@ case "$ENTITLEMENTS_MODE" in
     use_local_only_entitlements
     ;;
   cloud)
-    if [[ -z "$RESOLVED_PROVISIONING_PROFILE" && "$DEV_BUNDLE_ID" == "com.guesli.dev" && -f "$DEFAULT_DEV_CLOUD_PROFILE" ]]; then
-      RESOLVED_PROVISIONING_PROFILE="$DEFAULT_DEV_CLOUD_PROFILE"
-      if [[ -z "$RESOLVED_SIGN_IDENTITY" ]]; then
-        RESOLVED_SIGN_IDENTITY="$DEFAULT_DEV_CLOUD_SIGN_IDENTITY"
-      fi
-      if [[ -z "$RESOLVED_CODESIGN_TIMESTAMP" ]]; then
-        RESOLVED_CODESIGN_TIMESTAMP="none"
-      fi
-    fi
     if [[ -z "$RESOLVED_PROVISIONING_PROFILE" ]]; then
-      if [[ "$ENTITLEMENTS_MODE_EXPLICIT" -eq 1 ]]; then
-        echo "Error: cloud-entitled dev builds require MUESLI_PROVISIONING_PROFILE." >&2
-        echo "The profile must match bundle ID '$DEV_BUNDLE_ID' and include the signing identity." >&2
-        echo "Use --local-only for a dev build that does not need iCloud/APNs entitlements." >&2
-        exit 2
-      fi
-      echo "No local CloudKit profile found for $DEV_BUNDLE_ID; building local-only dev app."
-      ENTITLEMENTS_MODE="local-only"
-      use_local_only_entitlements
+      echo "Error: cloud-entitled dev builds require GUESLI_PROVISIONING_PROFILE." >&2
+      echo "The profile must match bundle ID '$DEV_BUNDLE_ID' and include the signing identity." >&2
+      echo "Use --local-only for a dev build that does not need iCloud/APNs entitlements." >&2
+      exit 2
     else
       if [[ -z "$RESOLVED_SIGN_IDENTITY" ]]; then
-        echo "Error: cloud-entitled dev builds require MUESLI_SIGN_IDENTITY." >&2
+        echo "Error: cloud-entitled dev builds require GUESLI_SIGN_IDENTITY." >&2
         echo "Use the Apple Development identity included by the selected provisioning profile." >&2
         exit 2
       fi
       BUILD_ENV+=(
-        MUESLI_PROVISIONING_PROFILE="$RESOLVED_PROVISIONING_PROFILE"
-        MUESLI_SIGN_IDENTITY="$RESOLVED_SIGN_IDENTITY"
+        GUESLI_PROVISIONING_PROFILE="$RESOLVED_PROVISIONING_PROFILE"
+        GUESLI_SIGN_IDENTITY="$RESOLVED_SIGN_IDENTITY"
       )
       if [[ -n "$RESOLVED_CODESIGN_TIMESTAMP" ]]; then
-        BUILD_ENV+=(MUESLI_CODESIGN_TIMESTAMP="$RESOLVED_CODESIGN_TIMESTAMP")
+        BUILD_ENV+=(GUESLI_CODESIGN_TIMESTAMP="$RESOLVED_CODESIGN_TIMESTAMP")
       fi
     fi
     ;;
@@ -239,7 +219,7 @@ echo ""
 echo "=== Dev Test Ready ==="
 echo "  App: $DEV_APP"
 echo "  Data: $DEV_SUPPORT_DIR"
-echo "  DB: $DEV_SUPPORT_DIR/muesli.db"
+echo "  DB: $DEV_SUPPORT_DIR/guesli.db"
 echo ""
 echo "Tips:"
 if [[ -n "$LANE" ]]; then

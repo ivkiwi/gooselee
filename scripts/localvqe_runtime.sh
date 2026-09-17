@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
-[[ -n "${_MUESLI_LOCALVQE_RUNTIME_LOADED:-}" ]] && return 0
-_MUESLI_LOCALVQE_RUNTIME_LOADED=1
+[[ -n "${_GUESLI_LOCALVQE_RUNTIME_LOADED:-}" ]] && return 0
+_GUESLI_LOCALVQE_RUNTIME_LOADED=1
 
-muesli_collect_localvqe_runtime() {
+guesli_collect_localvqe_runtime() {
   local dir="$1"
   local listing=""
   local -a found=()
@@ -20,14 +20,14 @@ muesli_collect_localvqe_runtime() {
   printf '%s\n' "${found[@]+"${found[@]}"}" | sort
 }
 
-muesli_localvqe_runtime_is_complete() {
+guesli_localvqe_runtime_is_complete() {
   local dir="$1"
   local primary=""
   local ggml_umbrella=""
   local listing=""
   local -a libraries=()
 
-  listing="$(muesli_collect_localvqe_runtime "$dir")" || return 1
+  listing="$(guesli_collect_localvqe_runtime "$dir")" || return 1
   while IFS= read -r library; do
     [[ -n "$library" ]] && libraries+=("$library")
   done <<< "$listing"

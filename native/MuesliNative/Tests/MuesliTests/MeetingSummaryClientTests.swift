@@ -222,24 +222,19 @@ struct MeetingSummaryClientTests {
         #expect(result.contains("- Manual decision"))
     }
 
-    @Test("summary user prompt includes meeting context when provided")
-    func userPromptIncludesMeetingContext() {
+    @Test("summary user prompt includes participant metadata when provided")
+    func userPromptIncludesParticipantMetadata() {
         let prompt = MeetingSummaryClient.summaryUserPrompt(
             transcript: "Transcript body",
             meetingTitle: "Customer Call",
             visualContext: """
-            [10:30:00] Google Chrome:
-            App context:
-            App: Google Chrome (example.com/customer)
-
-            OCR visual text:
-            Renewal risk
+            Meeting participant candidates:
+            - Alice Owner <alice@example.com>
             """
         )
 
-        #expect(prompt.contains("Meeting context captured during the meeting:"))
-        #expect(prompt.contains("App context:"))
-        #expect(prompt.contains("OCR visual text:"))
+        #expect(prompt.contains("Meeting metadata:"))
+        #expect(prompt.contains("- Alice Owner <alice@example.com>"))
         #expect(prompt.contains("Raw transcript:\nTranscript body"))
     }
 

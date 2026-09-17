@@ -362,10 +362,7 @@ struct SettingsView: View {
         if !accessibilityGranted {
             return "Grant Accessibility, then toggle again if needed."
         }
-        if !screenRecordingGranted {
-            return "Adds nearby app text for post-processing. Screen Recording enables OCR context."
-        }
-        return "Adds nearby app text and OCR context. Processed on-device."
+        return "Adds nearby focused-app text to dictation cleanup through Accessibility. No screenshots."
     }
 
     @ViewBuilder
@@ -884,8 +881,6 @@ struct SettingsView: View {
                         }
                     }
                 }
-                Divider().background(MuesliTheme.surfaceBorder)
-                screenContextRow("Meeting context")
             }
 
             settingsSection("Meeting Summaries") {

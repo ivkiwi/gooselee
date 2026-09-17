@@ -320,7 +320,6 @@ private enum MeetingStopPhaseTimeouts {
     static let systemSegmentRepair: TimeInterval = 180
     static let transcriptCleanup: TimeInterval = 120
     static let liveTitle: TimeInterval = 5
-    static let screenContextDrain: TimeInterval = 15
     static let manualNotes: TimeInterval = 15
     static let summaryGeneration: TimeInterval = 180
 }
@@ -474,7 +473,6 @@ final class MeetingSession {
     }
     private let captureStartState = OSAllocatedUnfairLock(initialState: CaptureStartState())
     private let systemAudioStartTimeout: TimeInterval
-    private let screenContextCollector = MeetingScreenContextCollector()
     private var diagnostics: MeetingSessionDiagnostics?
 
     /// Current mic power level for waveform visualization.
@@ -975,10 +973,6 @@ final class MeetingSession {
         } else {
             fputs("[meeting] VAD not available, using max-duration fallback only\n", stderr)
         }
-        if config.enableScreenContext && CGPreflightScreenCaptureAccess() {
-            // OCR screenshots are safe when using CoreAudio tap (no SCStream conflict)
-            await screenContextCollector.startPeriodicCapture(useOCR: config.useCoreAudioTap)
-        }
     }
 
     private func startPostProcessingMode(startedAt now: Date) async throws {
@@ -1021,9 +1015,6 @@ final class MeetingSession {
             throw error
         }
         fputs("[meeting] started in post-processing mode; live ASR disabled\n", stderr)
-        if config.enableScreenContext && CGPreflightScreenCaptureAccess() {
-            await screenContextCollector.startPeriodicCapture(useOCR: config.useCoreAudioTap)
-        }
     }
 
     func pause() {
@@ -1046,7 +1037,6 @@ final class MeetingSession {
         let livePartials = livePartialSessions()
         livePartials.mic?.suspend()
         livePartials.system?.suspend()
-        Task { await screenContextCollector.setPaused(true) }
         fputs("[meeting] recording paused\n", stderr)
     }
 
@@ -1063,7 +1053,6 @@ final class MeetingSession {
         let livePartials = livePartialSessions()
         livePartials.mic?.resume()
         livePartials.system?.resume()
-        Task { await screenContextCollector.setPaused(false) }
         fputs("[meeting] recording resumed\n", stderr)
     }
 
@@ -1071,7 +1060,6 @@ final class MeetingSession {
     func discard() {
         cancelPendingCaptureStart()
         stopIntakeRequested.store(true, ordering: .releasing)
-        Task { await screenContextCollector.stopAndDrain() }
         let (rawRecorder, systemRecorder) = chunkRotationQueue.sync { () -> (PCMChunkRecorder?, PCMChunkRecorder?) in
             isRecording = false
             setPausedStateOnQueue(false)
@@ -1410,19 +1398,8 @@ final class MeetingSession {
             id: config.defaultMeetingTemplateID,
             customTemplates: config.customMeetingTemplates
         )
-        let visualContext = await stopPhaseValue(
-            "screen_context_drain",
-            timeout: MeetingStopPhaseTimeouts.screenContextDrain,
-            fallback: ""
-        ) {
-            await self.screenContextCollector.stopAndDrain()
-        }
-        let summaryContext = Self.summaryContext(
-            participants: allParticipantCandidates,
-            visualContext: visualContext
-        )
-        Self.logger.info("visual context drained chars=\(visualContext.count) includedInPrompt=\(!summaryContext.isEmpty) useOCR=\(self.config.useCoreAudioTap)")
-        fputs("[meeting] visual context drained chars=\(visualContext.count) participants=\(allParticipantCandidates.count) observedParticipants=\(observedParticipants.count) includedInPrompt=\(!summaryContext.isEmpty) useOCR=\(config.useCoreAudioTap)\n", stderr)
+        let summaryContext = Self.summaryContext(participants: allParticipantCandidates)
+        fputs("[meeting] summary participant candidates=\(allParticipantCandidates.count) observedParticipants=\(observedParticipants.count) includedInPrompt=\(!summaryContext.isEmpty)\n", stderr)
         onProgress?(.summarizingNotes)
         let formattedNotes: String
         let summaryError: String?
@@ -1667,19 +1644,8 @@ final class MeetingSession {
             id: config.defaultMeetingTemplateID,
             customTemplates: config.customMeetingTemplates
         )
-        let visualContext = await stopPhaseValue(
-            "screen_context_drain",
-            timeout: MeetingStopPhaseTimeouts.screenContextDrain,
-            fallback: ""
-        ) {
-            await self.screenContextCollector.stopAndDrain()
-        }
-        let summaryContext = Self.summaryContext(
-            participants: allParticipantCandidates,
-            visualContext: visualContext
-        )
-        Self.logger.info("visual context drained chars=\(visualContext.count) includedInPrompt=\(!summaryContext.isEmpty) useOCR=\(self.config.useCoreAudioTap)")
-        fputs("[meeting] visual context drained chars=\(visualContext.count) participants=\(allParticipantCandidates.count) observedParticipants=\(observedParticipants.count) includedInPrompt=\(!summaryContext.isEmpty) useOCR=\(config.useCoreAudioTap)\n", stderr)
+        let summaryContext = Self.summaryContext(participants: allParticipantCandidates)
+        fputs("[meeting] summary participant candidates=\(allParticipantCandidates.count) observedParticipants=\(observedParticipants.count) includedInPrompt=\(!summaryContext.isEmpty)\n", stderr)
         onProgress?(.summarizingNotes)
         let formattedNotes: String
         let summaryError: String?
@@ -2015,24 +1981,16 @@ final class MeetingSession {
             : originalTitle
     }
 
-    static func summaryContext(participants: [MeetingParticipant], visualContext: String) -> String {
-        var sections: [String] = []
+    static func summaryContext(participants: [MeetingParticipant]) -> String {
         let participantLabels = participants
             .filter { !$0.isSelf }
             .map(\.summaryLabel)
-        if !participantLabels.isEmpty {
-            sections.append("""
-            Meeting participant candidates:
-            \(participantLabels.map { "- \($0)" }.joined(separator: "\n"))
-            Use these names only as possible participant names. Do not assign a Speaker N label to a person unless the transcript or captured context supports it.
-            """)
-        }
-
-        let trimmedVisualContext = visualContext.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedVisualContext.isEmpty {
-            sections.append(trimmedVisualContext)
-        }
-        return sections.joined(separator: "\n\n---\n\n")
+        guard !participantLabels.isEmpty else { return "" }
+        return """
+        Meeting participant candidates:
+        \(participantLabels.map { "- \($0)" }.joined(separator: "\n"))
+        Use these names only as possible participant names. Do not assign a Speaker N label to a person unless the transcript supports it.
+        """
     }
 
     static func observedParticipants(from observations: [MeetSpeakerObservation]) -> [MeetingParticipant] {

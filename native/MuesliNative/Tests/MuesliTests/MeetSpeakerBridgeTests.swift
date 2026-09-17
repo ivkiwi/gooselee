@@ -391,15 +391,13 @@ struct MeetSpeakerBridgeTests {
             participants: [
                 MeetingParticipant(name: "Alice Owner", email: "alice@example.com", isOrganizer: true, isSelf: false),
                 MeetingParticipant(name: "Me", email: "me@example.com", isOrganizer: false, isSelf: true),
-            ],
-            visualContext: "Slide title: Roadmap"
+            ]
         )
 
         #expect(context.contains("Meeting participant candidates:"))
         #expect(context.contains("- Alice Owner <alice@example.com>"))
         #expect(!context.contains("- Me <me@example.com>"))
         #expect(context.contains("Do not assign a Speaker N label"))
-        #expect(context.contains("Slide title: Roadmap"))
     }
 
     @Test("persists speaker observations as per-meeting JSONL")

@@ -167,7 +167,7 @@ enum ExternalTranscriptCleanupClient {
     private static let minimumRetryTimeout: TimeInterval = 0.25
     private static let timeout: TimeInterval = 120
     private static let hostedAppContextCharacterLimit = 5_000
-    private static let appContextGuidance = "The user input may include an <APP-CONTEXT> section with focused app, document, URL, selected text, or OCR screen text. Use it only to resolve obvious transcription errors, names, acronyms, and formatting intent. Never copy app context into the output unless the user dictated it."
+    private static let appContextGuidance = "The user input may include an <APP-CONTEXT> section with focused app, document, URL, or selected text. Use it only to resolve obvious transcription errors, names, acronyms, and formatting intent. Never copy app context into the output unless the user dictated it."
     private static let defaultChatGPTRequest: ChatGPTTranscriptCleanupRequest = { systemPrompt, userPrompt, model, timeout in
         try await MeetingSummaryClient.callWHAM(
             systemPrompt: systemPrompt,

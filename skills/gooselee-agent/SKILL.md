@@ -1,11 +1,11 @@
 ---
-name: guesli-agent
-description: Use when working with local Guesli meetings, notes, dictations, audio-file transcription, or raw transcripts through the bundled `guesli-cli` CLI. Prefer this skill when a coding agent needs to transcribe local audio, inspect transcripts, summarize meetings with its own model, or write notes back into Guesli without requiring the user's API keys.
+name: gooselee-agent
+description: Work with local GooseLee meetings, notes, dictations, audio-file transcription, and raw transcripts through the bundled `guesli-cli`. Use when an agent needs to transcribe local audio, inspect or summarize meetings, or write improved notes back without requiring the user's API keys.
 ---
 
-# Guesli Agent
+# GooseLee Agent
 
-Use the local `guesli-cli` CLI as the source of truth for meeting and dictation data.
+Use GooseLee's local `guesli-cli` as the source of truth for meeting and dictation data. The CLI and data directory retain their `guesli` names for compatibility.
 
 ## CLI discovery
 
@@ -38,7 +38,4 @@ If discovery is uncertain, run the candidate binary with `info` first and reject
 - Do not mutate `rawTranscript`; only update `formattedNotes`.
 - Prefer the meeting transcript when `notesState` is `missing` or `raw_transcript_fallback`.
 - Use `--db-path` or `--support-dir` only when the default Guesli data location is wrong.
-
-## When to read references
-
-Read `references/cli-contract.md` if you need the exact command tree, field definitions, or failure behavior.
+- Run `guesli-cli spec` instead of relying on a copied command reference when exact commands, fields, models, or failure behavior matter.

@@ -16,7 +16,7 @@ jobs:
       actions: read
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
       - name: Require successful CI gate for this commit
@@ -33,7 +33,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Compute release metadata
         id: meta
@@ -205,7 +205,7 @@ jobs:
           fi
 
       - name: Upload app artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: GooseLee-macos
           path: |
@@ -215,7 +215,7 @@ jobs:
 
       - name: Upload Meet speaker extension artifact
         if: hashFiles('browser-extension/guesli-meet-speaker/content.js') != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: GooseLee-Meet-Speaker-Bridge
           path: |

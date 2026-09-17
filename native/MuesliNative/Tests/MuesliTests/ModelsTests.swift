@@ -549,14 +549,7 @@ struct AppConfigTests {
         #expect(config.transcriptCleanupProvider == TranscriptCleanupProviderOption.local.rawValue)
         #expect(config.enableLiveStreamingPartials == false)
         #expect(config.dictationHotkey == .default)
-        #expect(config.computerUseHotkey == .computerUseDefault)
-        #expect(config.enableComputerUseHotkey == false)
-        #expect(config.computerUseHotkeyDefaultDisabledMigrationApplied == true)
-        #expect(config.enableComputerUsePlanner == true)
-        #expect(config.computerUsePlannerModel.isEmpty)
-        #expect(config.computerUseTimeoutSeconds == 120)
         #expect(config.hotkeyTriggerThresholdMS == HotkeyTriggerTiming.defaultThresholdMilliseconds)
-        #expect(config.computerUseHotkeyTriggerThresholdMS == HotkeyTriggerTiming.defaultThresholdMilliseconds)
         #expect(config.meetingRecordingHotkeyTriggerThresholdMS == HotkeyTriggerTiming.defaultMeetingThresholdMilliseconds)
         #expect(config.pasteShortcut == .commandV)
         #expect(config.showFloatingIndicator == true)
@@ -616,14 +609,8 @@ struct AppConfigTests {
         config.showMeetingDetectionNotification = false
         config.mutedMeetingDetectionAppBundleIDs = ["com.google.Chrome", "com.tinyspeck.slackmacgap"]
         config.preferredMeetingBrowserBundleID = "com.brave.Browser"
-        config.computerUseHotkey = HotkeyConfig(keyCode: 62, label: "Right Ctrl")
-        config.enableComputerUseHotkey = false
-        config.enableComputerUsePlanner = false
-        config.computerUsePlannerModel = "gpt-5.4"
-        config.computerUseTimeoutSeconds = 180
         config.pasteShortcut = .commandShiftV
         config.hotkeyTriggerThresholdMS = 125
-        config.computerUseHotkeyTriggerThresholdMS = 350
         config.meetingRecordingHotkeyTriggerThresholdMS = 900
         config.lmStudioURL = "http://localhost:1234"
         config.lmStudioModel = "local-model"
@@ -679,14 +666,8 @@ struct AppConfigTests {
         #expect(decoded.meetingTranscriptionBackend == config.meetingTranscriptionBackend)
         #expect(decoded.indicatorAnchor == config.indicatorAnchor)
         #expect(decoded.indicatorDockGap == config.indicatorDockGap)
-        #expect(decoded.computerUseHotkey == HotkeyConfig(keyCode: 62, label: "Right Ctrl"))
-        #expect(decoded.enableComputerUseHotkey == false)
-        #expect(decoded.enableComputerUsePlanner == false)
-        #expect(decoded.computerUsePlannerModel == "gpt-5.4")
-        #expect(decoded.computerUseTimeoutSeconds == 180)
         #expect(decoded.pasteShortcut == .commandShiftV)
         #expect(decoded.hotkeyTriggerThresholdMS == 125)
-        #expect(decoded.computerUseHotkeyTriggerThresholdMS == 350)
         #expect(decoded.meetingRecordingHotkeyTriggerThresholdMS == 900)
         #expect(decoded.lmStudioURL == "http://localhost:1234")
         #expect(decoded.lmStudioModel == "local-model")
@@ -722,14 +703,7 @@ struct AppConfigTests {
 
         #expect(json["stt_backend"] != nil)
         #expect(json["stt_model"] != nil)
-        #expect(json["computer_use_hotkey"] != nil)
-        #expect(json["enable_computer_use_hotkey"] != nil)
-        #expect(json["computer_use_hotkey_default_disabled_migration_applied"] != nil)
-        #expect(json["enable_computer_use_planner"] != nil)
-        #expect(json["computer_use_planner_model"] != nil)
-        #expect(json["computer_use_timeout_seconds"] != nil)
         #expect(json["hotkey_trigger_threshold_ms"] != nil)
-        #expect(json["computer_use_hotkey_trigger_threshold_ms"] != nil)
         #expect(json["meeting_recording_hotkey_trigger_threshold_ms"] != nil)
         #expect(json["cohere_language"] == nil)
         #expect(json["cohere_language_dictation"] != nil)
@@ -801,14 +775,7 @@ struct AppConfigTests {
         #expect(config.mutedMeetingDetectionAppBundleIDs.isEmpty)
         #expect(config.preferredMeetingBrowserBundleID.isEmpty)
         #expect(config.customMeetingTemplates.isEmpty)
-        #expect(config.computerUseHotkey == .computerUseDefault)
-        #expect(config.enableComputerUseHotkey == false)
-        #expect(config.computerUseHotkeyDefaultDisabledMigrationApplied == true)
-        #expect(config.enableComputerUsePlanner == true)
-        #expect(config.computerUsePlannerModel.isEmpty)
-        #expect(config.computerUseTimeoutSeconds == 120)
         #expect(config.hotkeyTriggerThresholdMS == HotkeyTriggerTiming.defaultThresholdMilliseconds)
-        #expect(config.computerUseHotkeyTriggerThresholdMS == HotkeyTriggerTiming.defaultThresholdMilliseconds)
         #expect(config.meetingRecordingHotkeyTriggerThresholdMS == HotkeyTriggerTiming.defaultMeetingThresholdMilliseconds)
         #expect(config.meetingHookEnabled == false)
         #expect(config.meetingHookPath.isEmpty)
@@ -960,55 +927,6 @@ struct AppConfigTests {
         #expect(config.hasCompletedOnboarding)
         #expect(config.resolvedOnboardingUseCase == .dictation)
         #expect(!config.resolvedOnboardingUseCase.includesMeetings)
-    }
-
-    @Test("computer use default avoids existing right command dictation hotkey")
-    func computerUseDefaultAvoidsExistingRightCommandDictationHotkey() throws {
-        let json = """
-        {
-          "dictation_hotkey": {
-            "keyCode": 54,
-            "label": "Right Cmd"
-          }
-        }
-        """
-
-        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
-
-        #expect(config.dictationHotkey == HotkeyConfig(keyCode: 54, label: "Right Cmd"))
-        #expect(config.computerUseHotkey == .default)
-        #expect(config.enableComputerUseHotkey == false)
-    }
-
-    @Test("legacy computer use hotkey enabled config is disabled once")
-    func legacyComputerUseHotkeyEnabledConfigIsDisabledOnce() throws {
-        let json = """
-        {
-          "enable_computer_use_hotkey": true,
-          "enable_computer_use_planner": true
-        }
-        """
-
-        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
-
-        #expect(config.enableComputerUseHotkey == false)
-        #expect(config.computerUseHotkeyDefaultDisabledMigrationApplied == true)
-        #expect(config.enableComputerUsePlanner == true)
-    }
-
-    @Test("computer use hotkey remains enabled after migration is applied")
-    func computerUseHotkeyRemainsEnabledAfterMigrationIsApplied() throws {
-        let json = """
-        {
-          "enable_computer_use_hotkey": true,
-          "computer_use_hotkey_default_disabled_migration_applied": true
-        }
-        """
-
-        let config = try JSONDecoder().decode(AppConfig.self, from: Data(json.utf8))
-
-        #expect(config.enableComputerUseHotkey == true)
-        #expect(config.computerUseHotkeyDefaultDisabledMigrationApplied == true)
     }
 
     @Test("unsupported onboarding use case falls back to dictation")
@@ -1790,84 +1708,6 @@ struct HotkeyConfigTests {
         #expect(config.label == "Right Option")
     }
 
-    @Test("computer use default is Right Cmd")
-    func computerUseDefaultConfig() {
-        let config = HotkeyConfig.computerUseDefault
-        #expect(config.keyCode == 54)
-        #expect(config.label == "Right Cmd")
-    }
-
-    @Test("computer use fallback avoids dictation hotkey")
-    func computerUseFallbackAvoidsDictationHotkey() {
-        #expect(HotkeyConfig.computerUseDefault(avoiding: .default) == .computerUseDefault)
-        #expect(HotkeyConfig.computerUseDefault(avoiding: .computerUseDefault) == .default)
-    }
-
-    @Test("hotkey policy blocks active duplicate shortcuts")
-    func hotkeyPolicyBlocksActiveDuplicateShortcuts() {
-        #expect(ShortcutHotkeyPolicy.validateDictationHotkey(
-            .computerUseDefault,
-            computerUseHotkey: .computerUseDefault,
-            isComputerUseEnabled: true
-        ) == .conflict(message: ShortcutHotkeyPolicy.conflictMessage))
-
-        #expect(ShortcutHotkeyPolicy.validateDictationHotkey(
-            .computerUseDefault,
-            computerUseHotkey: .computerUseDefault,
-            isComputerUseEnabled: false
-        ) == .updated)
-
-        #expect(ShortcutHotkeyPolicy.validateComputerUseHotkey(
-            .default,
-            dictationHotkey: .default,
-            isComputerUseEnabled: true
-        ) == .conflict(message: ShortcutHotkeyPolicy.conflictMessage))
-
-        #expect(ShortcutHotkeyPolicy.validateComputerUseHotkey(
-            .default,
-            dictationHotkey: .default,
-            isComputerUseEnabled: false
-        ) == .updated)
-    }
-
-    @Test("hotkey policy moves computer use key when enabling with a stale conflict")
-    func hotkeyPolicyMovesComputerUseKeyWhenEnablingWithStaleConflict() {
-        let resolution = ShortcutHotkeyPolicy.resolvedComputerUseHotkeyWhenEnabling(
-            currentHotkey: .default,
-            dictationHotkey: .default
-        )
-
-        #expect(resolution.hotkey == .computerUseDefault)
-        #expect(resolution.result.didUpdate)
-        #expect(resolution.result.message == "Computer Use Command moved to Right Cmd to avoid matching Push to Talk.")
-    }
-
-    @Test("hotkey policy rejects computer use enable when fallback conflicts with meeting recording")
-    func hotkeyPolicyRejectsComputerUseEnableWhenFallbackConflictsWithMeetingRecording() {
-        let resolution = ShortcutHotkeyPolicy.resolvedComputerUseHotkeyWhenEnabling(
-            currentHotkey: .default,
-            dictationHotkey: .default,
-            meetingRecordingHotkey: .computerUseDefault,
-            isMeetingRecordingEnabled: true
-        )
-
-        #expect(resolution.hotkey == .default)
-        #expect(resolution.result == .conflict(message: ShortcutHotkeyPolicy.conflictMessage))
-    }
-
-    @Test("hotkey policy rejects computer use enable when current shortcut conflicts with meeting recording")
-    func hotkeyPolicyRejectsComputerUseEnableWhenCurrentShortcutConflictsWithMeetingRecording() {
-        let resolution = ShortcutHotkeyPolicy.resolvedComputerUseHotkeyWhenEnabling(
-            currentHotkey: .computerUseDefault,
-            dictationHotkey: .default,
-            meetingRecordingHotkey: .computerUseDefault,
-            isMeetingRecordingEnabled: true
-        )
-
-        #expect(resolution.hotkey == .computerUseDefault)
-        #expect(resolution.result == .conflict(message: ShortcutHotkeyPolicy.conflictMessage))
-    }
-
     @Test("combination conflicts ignore unsupported modifier flags")
     func combinationConflictsIgnoreUnsupportedModifierFlags() {
         let visible = HotkeyConfig.combination(modifiers: [.command, .shift], keyCode: 15)
@@ -1883,9 +1723,7 @@ struct HotkeyConfigTests {
     func meetingRecordingWarnsForCommonGlobalAppShortcuts() {
         let result = ShortcutHotkeyPolicy.validateMeetingRecordingHotkey(
             .meetingRecordingDefault,
-            dictationHotkey: .default,
-            computerUseHotkey: .computerUseDefault,
-            isComputerUseEnabled: false
+            dictationHotkey: .default
         )
 
         #expect(result.didUpdate)
@@ -1897,9 +1735,7 @@ struct HotkeyConfigTests {
         let uncommon = HotkeyConfig.combination(modifiers: [.command, .option, .control], keyCode: 46)
         let result = ShortcutHotkeyPolicy.validateMeetingRecordingHotkey(
             uncommon,
-            dictationHotkey: .default,
-            computerUseHotkey: .computerUseDefault,
-            isComputerUseEnabled: false
+            dictationHotkey: .default
         )
 
         #expect(result == .updated)
@@ -1921,7 +1757,6 @@ struct HotkeyConfigTests {
     @Test("display label uses keyboard symbols")
     func displayLabelUsesKeyboardSymbols() {
         #expect(HotkeyConfig.default.displayLabel == "Right ⌥")
-        #expect(HotkeyConfig.computerUseDefault.displayLabel == "Right ⌘")
         #expect(HotkeyConfig.meetingRecordingDefault.displayLabel == "⌘⇧R")
         #expect(HotkeyConfig(keyCode: 62, label: "Right Ctrl").displayLabel == "Right ⌃")
         #expect(HotkeyConfig(keyCode: 63, label: "Fn").displayLabel == "fn")

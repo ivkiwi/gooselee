@@ -207,13 +207,8 @@ final class ConfigStore {
         }
 
         importValue("dictation_hotkey", \.dictationHotkey)
-        importValue("computer_use_hotkey", \.computerUseHotkey)
-        importValue("enable_computer_use_hotkey", \.enableComputerUseHotkey)
         importValue("meeting_recording_hotkey", \.meetingRecordingHotkey)
         importValue("enable_meeting_recording_hotkey", \.enableMeetingRecordingHotkey)
-        importValue("enable_computer_use_planner", \.enableComputerUsePlanner)
-        importNonEmptyStringIfCurrentEmpty("computer_use_planner_model", \.computerUsePlannerModel)
-        importValue("computer_use_timeout_seconds", \.computerUseTimeoutSeconds)
 
         if config.dictationInputDeviceUID == nil, legacy.dictationInputDeviceUID != nil {
             config.dictationInputDeviceUID = legacy.dictationInputDeviceUID
@@ -250,7 +245,6 @@ final class ConfigStore {
         importValue("enable_double_tap_dictation", \.enableDoubleTapDictation)
         importValue("paste_shortcut", \.pasteShortcut)
         importValue("hotkey_trigger_threshold_ms", \.hotkeyTriggerThresholdMS)
-        importValue("computer_use_hotkey_trigger_threshold_ms", \.computerUseHotkeyTriggerThresholdMS)
         importValue("meeting_recording_hotkey_trigger_threshold_ms", \.meetingRecordingHotkeyTriggerThresholdMS)
         importValue("launch_at_login", \.launchAtLogin)
         importValue("open_dashboard_on_launch", \.openDashboardOnLaunch)
@@ -301,12 +295,6 @@ final class ConfigStore {
         importValue("recording_color_hex", \.recordingColorHex)
         importValue("menu_bar_icon", \.menuBarIcon)
         importValue("show_next_meeting_in_menu_bar", \.showNextMeetingInMenuBar)
-        importValue("marauders_map_unlocked", \.maraudersMapUnlocked)
-        importValue("marauders_map_audio_clip", \.maraudersMapAudioClip)
-        if config.maraudersMapCustomAudioPath == nil, legacy.maraudersMapCustomAudioPath != nil {
-            config.maraudersMapCustomAudioPath = legacy.maraudersMapCustomAudioPath
-            importedFields.append("marauders_map_custom_audio_path")
-        }
 
         config.hiddenCalendarEventIDs = mergedStrings(
             current: config.hiddenCalendarEventIDs,

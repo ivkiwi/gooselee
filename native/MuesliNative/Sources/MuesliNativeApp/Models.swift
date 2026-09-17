@@ -1006,7 +1006,6 @@ struct HotkeyConfig: Codable, Equatable {
     }
 
     static let `default` = HotkeyConfig()
-    static let computerUseDefault = HotkeyConfig(keyCode: 54, label: "Right Cmd")
     static let meetingRecordingDefault = HotkeyConfig(
         keyCode: UInt16.max,
         label: "⌘⇧R",
@@ -1014,9 +1013,6 @@ struct HotkeyConfig: Codable, Equatable {
         combinationKeyCode: 15
     )
 
-    static func computerUseDefault(avoiding dictationHotkey: HotkeyConfig) -> HotkeyConfig {
-        dictationHotkey.keyCode == computerUseDefault.keyCode ? .default : .computerUseDefault
-    }
 }
 
 enum OnboardingUseCase: String, Codable, CaseIterable {
@@ -1097,14 +1093,8 @@ struct AppConfig: Codable {
     static let defaultChatGPTMeetingCleanupModel = "gpt-5.6-terra"
 
     var dictationHotkey: HotkeyConfig = .default
-    var computerUseHotkey: HotkeyConfig = .computerUseDefault
-    var enableComputerUseHotkey: Bool = false
     var meetingRecordingHotkey: HotkeyConfig = .meetingRecordingDefault
     var enableMeetingRecordingHotkey: Bool = false
-    var computerUseHotkeyDefaultDisabledMigrationApplied: Bool = true
-    var enableComputerUsePlanner: Bool = true
-    var computerUsePlannerModel: String = ""
-    var computerUseTimeoutSeconds: Int = 120
     var sttBackend: String = BackendOption.gigaAMV3Russian.backend
     var sttModel: String = BackendOption.gigaAMV3Russian.model
     var dictationInputDeviceUID: String? = nil
@@ -1136,7 +1126,6 @@ struct AppConfig: Codable {
     var enableDoubleTapDictation: Bool = true
     var pasteShortcut: PasteShortcut = .commandV
     var hotkeyTriggerThresholdMS: Int = HotkeyTriggerTiming.defaultThresholdMilliseconds
-    var computerUseHotkeyTriggerThresholdMS: Int = HotkeyTriggerTiming.defaultThresholdMilliseconds
     var meetingRecordingHotkeyTriggerThresholdMS: Int = HotkeyTriggerTiming.defaultMeetingThresholdMilliseconds
     var launchAtLogin: Bool = false
     var openDashboardOnLaunch: Bool = true
@@ -1180,9 +1169,6 @@ struct AppConfig: Codable {
     var recordingColorHex: String = "1e1e2e"   // Catppuccin Mocha base, without #
     var menuBarIcon: String = "muesli"
     var showNextMeetingInMenuBar: Bool = true
-    var maraudersMapUnlocked: Bool = false
-    var maraudersMapAudioClip: String = "bbc_world_news"
-    var maraudersMapCustomAudioPath: String?
     var hiddenCalendarEventIDs: [String] = []
     var hiddenCalendarEventSourceHints: [String: String] = [:]
     var disabledCalendarIDs: [String] = []
@@ -1213,14 +1199,8 @@ struct AppConfig: Codable {
 
     enum CodingKeys: String, CodingKey {
         case dictationHotkey = "dictation_hotkey"
-        case computerUseHotkey = "computer_use_hotkey"
-        case enableComputerUseHotkey = "enable_computer_use_hotkey"
         case meetingRecordingHotkey = "meeting_recording_hotkey"
         case enableMeetingRecordingHotkey = "enable_meeting_recording_hotkey"
-        case computerUseHotkeyDefaultDisabledMigrationApplied = "computer_use_hotkey_default_disabled_migration_applied"
-        case enableComputerUsePlanner = "enable_computer_use_planner"
-        case computerUsePlannerModel = "computer_use_planner_model"
-        case computerUseTimeoutSeconds = "computer_use_timeout_seconds"
         case sttBackend = "stt_backend"
         case sttModel = "stt_model"
         case dictationInputDeviceUID = "dictation_input_device_uid"
@@ -1252,7 +1232,6 @@ struct AppConfig: Codable {
         case enableDoubleTapDictation = "enable_double_tap_dictation"
         case pasteShortcut = "paste_shortcut"
         case hotkeyTriggerThresholdMS = "hotkey_trigger_threshold_ms"
-        case computerUseHotkeyTriggerThresholdMS = "computer_use_hotkey_trigger_threshold_ms"
         case meetingRecordingHotkeyTriggerThresholdMS = "meeting_recording_hotkey_trigger_threshold_ms"
         case launchAtLogin = "launch_at_login"
         case openDashboardOnLaunch = "open_dashboard_on_launch"
@@ -1294,9 +1273,6 @@ struct AppConfig: Codable {
         case recordingColorHex = "recording_color_hex"
         case menuBarIcon = "menu_bar_icon"
         case showNextMeetingInMenuBar = "show_next_meeting_in_menu_bar"
-        case maraudersMapUnlocked = "marauders_map_unlocked"
-        case maraudersMapAudioClip = "marauders_map_audio_clip"
-        case maraudersMapCustomAudioPath = "marauders_map_custom_audio_path"
         case hiddenCalendarEventIDs = "hidden_calendar_event_ids"
         case hiddenCalendarEventSourceHints = "hidden_calendar_event_source_hints"
         case disabledCalendarIDs = "disabled_calendar_ids"
@@ -1332,20 +1308,8 @@ struct AppConfig: Codable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let defaults = AppConfig()
         dictationHotkey = (try? c.decode(HotkeyConfig.self, forKey: .dictationHotkey)) ?? defaults.dictationHotkey
-        computerUseHotkey = (try? c.decode(HotkeyConfig.self, forKey: .computerUseHotkey))
-            ?? HotkeyConfig.computerUseDefault(avoiding: dictationHotkey)
-        let hasAppliedComputerUseHotkeyDefaultMigration = c.contains(.computerUseHotkeyDefaultDisabledMigrationApplied)
-        enableComputerUseHotkey = hasAppliedComputerUseHotkeyDefaultMigration
-            ? ((try? c.decode(Bool.self, forKey: .enableComputerUseHotkey)) ?? defaults.enableComputerUseHotkey)
-            : false
-        computerUseHotkeyDefaultDisabledMigrationApplied = true
         meetingRecordingHotkey = (try? c.decode(HotkeyConfig.self, forKey: .meetingRecordingHotkey)) ?? defaults.meetingRecordingHotkey
         enableMeetingRecordingHotkey = (try? c.decode(Bool.self, forKey: .enableMeetingRecordingHotkey)) ?? defaults.enableMeetingRecordingHotkey
-        enableComputerUsePlanner = (try? c.decode(Bool.self, forKey: .enableComputerUsePlanner)) ?? defaults.enableComputerUsePlanner
-        computerUsePlannerModel = SummaryModelPreset.migratedFromGPT55(
-            (try? c.decode(String.self, forKey: .computerUsePlannerModel)) ?? defaults.computerUsePlannerModel
-        )
-        computerUseTimeoutSeconds = (try? c.decode(Int.self, forKey: .computerUseTimeoutSeconds)) ?? defaults.computerUseTimeoutSeconds
         sttBackend = (try? c.decode(String.self, forKey: .sttBackend)) ?? defaults.sttBackend
         sttModel = (try? c.decode(String.self, forKey: .sttModel)) ?? defaults.sttModel
         dictationInputDeviceUID = try? c.decode(String.self, forKey: .dictationInputDeviceUID)
@@ -1404,9 +1368,6 @@ struct AppConfig: Codable {
         pasteShortcut = (try? c.decode(PasteShortcut.self, forKey: .pasteShortcut)) ?? defaults.pasteShortcut
         hotkeyTriggerThresholdMS = HotkeyTriggerTiming.clampedMilliseconds(
             (try? c.decode(Int.self, forKey: .hotkeyTriggerThresholdMS)) ?? defaults.hotkeyTriggerThresholdMS
-        )
-        computerUseHotkeyTriggerThresholdMS = HotkeyTriggerTiming.clampedMilliseconds(
-            (try? c.decode(Int.self, forKey: .computerUseHotkeyTriggerThresholdMS)) ?? hotkeyTriggerThresholdMS
         )
         meetingRecordingHotkeyTriggerThresholdMS = HotkeyTriggerTiming.clampedMilliseconds(
             (try? c.decode(Int.self, forKey: .meetingRecordingHotkeyTriggerThresholdMS))
@@ -1472,9 +1433,6 @@ struct AppConfig: Codable {
         recordingColorHex = (try? c.decode(String.self, forKey: .recordingColorHex)) ?? defaults.recordingColorHex
         menuBarIcon = (try? c.decode(String.self, forKey: .menuBarIcon)) ?? defaults.menuBarIcon
         showNextMeetingInMenuBar = (try? c.decode(Bool.self, forKey: .showNextMeetingInMenuBar)) ?? defaults.showNextMeetingInMenuBar
-        maraudersMapUnlocked = (try? c.decode(Bool.self, forKey: .maraudersMapUnlocked)) ?? defaults.maraudersMapUnlocked
-        maraudersMapAudioClip = (try? c.decode(String.self, forKey: .maraudersMapAudioClip)) ?? defaults.maraudersMapAudioClip
-        maraudersMapCustomAudioPath = try? c.decode(String.self, forKey: .maraudersMapCustomAudioPath)
         hiddenCalendarEventIDs = (try? c.decode([String].self, forKey: .hiddenCalendarEventIDs)) ?? defaults.hiddenCalendarEventIDs
         hiddenCalendarEventSourceHints = (try? c.decode(
             [String: String].self,

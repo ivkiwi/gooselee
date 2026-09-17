@@ -58,8 +58,6 @@ struct LegacyInstallationPreservationTests {
         config.customTranscriptCleanupPrompts = [cleanupPrompt]
         config.activeTranscriptCleanupPromptId = cleanupPrompt.id
         config.customWords = [CustomWord(word: "PostHog", replacement: "PostHog")]
-        config.enableComputerUsePlanner = true
-        config.enableComputerUseHotkey = true
         config.iCloudSyncEnabled = true
         config.meetingRecordingSavePolicy = .always
         store.save(config)
@@ -79,8 +77,6 @@ struct LegacyInstallationPreservationTests {
         #expect(secondLoad.activeTranscriptCleanupPromptId == cleanupPrompt.id)
         #expect(secondLoad.enablePostProcessor)
         #expect(secondLoad.enableMeetingTranscriptCleanup)
-        #expect(secondLoad.enableComputerUsePlanner)
-        #expect(secondLoad.enableComputerUseHotkey)
         #expect(secondLoad.iCloudSyncEnabled)
         #expect(secondLoad.meetingRecordingSavePolicy == .always)
         #expect(try Data(contentsOf: credentialURL) == credentialData)

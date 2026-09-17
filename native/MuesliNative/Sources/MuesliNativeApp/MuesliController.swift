@@ -3483,8 +3483,6 @@ public final class MuesliController: NSObject {
     func updateDictationHotkey(_ hotkey: HotkeyConfig) -> ShortcutHotkeyUpdateResult {
         let result = ShortcutHotkeyPolicy.validateDictationHotkey(
             hotkey,
-            computerUseHotkey: config.computerUseHotkey,
-            isComputerUseEnabled: false,
             meetingRecordingHotkey: config.meetingRecordingHotkey,
             isMeetingRecordingEnabled: config.enableMeetingRecordingHotkey
         )
@@ -3501,9 +3499,7 @@ public final class MuesliController: NSObject {
     func updateMeetingRecordingHotkey(_ hotkey: HotkeyConfig) -> ShortcutHotkeyUpdateResult {
         let result = ShortcutHotkeyPolicy.validateMeetingRecordingHotkey(
             hotkey,
-            dictationHotkey: config.dictationHotkey,
-            computerUseHotkey: config.computerUseHotkey,
-            isComputerUseEnabled: false
+            dictationHotkey: config.dictationHotkey
         )
         guard result.didUpdate else {
             fputs("[hotkeys] rejected meeting recording hotkey due to conflict\n", stderr)
@@ -3519,9 +3515,7 @@ public final class MuesliController: NSObject {
         if enabled {
             let result = ShortcutHotkeyPolicy.validateMeetingRecordingHotkey(
                 config.meetingRecordingHotkey,
-                dictationHotkey: config.dictationHotkey,
-                computerUseHotkey: config.computerUseHotkey,
-                isComputerUseEnabled: false
+                dictationHotkey: config.dictationHotkey
             )
             guard result.didUpdate else { return result }
             updateConfig { $0.enableMeetingRecordingHotkey = true }
@@ -7738,9 +7732,7 @@ public final class MuesliController: NSObject {
         }
         let validation = ShortcutHotkeyPolicy.validateMeetingRecordingHotkey(
             config.meetingRecordingHotkey,
-            dictationHotkey: config.dictationHotkey,
-            computerUseHotkey: config.computerUseHotkey,
-            isComputerUseEnabled: false
+            dictationHotkey: config.dictationHotkey
         )
         guard validation.didUpdate else {
             meetingRecordingHotkeyMonitor.stop()

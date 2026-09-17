@@ -1134,7 +1134,7 @@ struct AppConfig: Codable {
     var showScheduledMeetingNotifications: Bool = true
     var scheduledMeetingNotificationLeadTime: ScheduledMeetingNotificationLeadTime = .atStart
     var meetingJoinDefaultAction: MeetingJoinDefaultAction = .fallback
-    var showMeetingDetectionNotification: Bool = true
+    var showMeetingDetectionNotification: Bool = false
     var mutedMeetingDetectionAppBundleIDs: [String] = []
     var meetingRecordingSavePolicy: MeetingRecordingSavePolicy = .never
     var meetingRecordingFolderPath: String = ""

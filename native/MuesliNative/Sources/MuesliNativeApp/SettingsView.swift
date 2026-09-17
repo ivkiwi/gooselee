@@ -790,16 +790,6 @@ struct SettingsView: View {
                         }
                     }
                 }
-                Divider().background(MuesliTheme.surfaceBorder)
-                settingsRow("Processing", controlWidth: meetingControlWidth) {
-                    settingsMenu(
-                        selection: appState.config.resolvedMeetingProcessingMode.label,
-                        options: MeetingProcessingMode.allCases.map(\.label)
-                    ) { label in
-                        guard let mode = MeetingProcessingMode.allCases.first(where: { $0.label == label }) else { return }
-                        controller.updateConfig { $0.meetingProcessingMode = mode.rawValue }
-                    }
-                }
                 if appState.selectedMeetingTranscriptionBackend.backend == BackendOption.cohereTranscribe.backend {
                     Divider().background(MuesliTheme.surfaceBorder)
                     settingsRow("Cohere language") {
@@ -1013,12 +1003,6 @@ struct SettingsView: View {
             }
 
             settingsSection("Recording") {
-                settingsRow("Auto-record calendar meetings") {
-                    settingsSwitch(isOn: appState.config.autoRecordMeetings) { newValue in
-                        controller.updateConfig { $0.autoRecordMeetings = newValue }
-                    }
-                }
-                Divider().background(MuesliTheme.surfaceBorder)
                 settingsRow("Save meeting recording") {
                     settingsMenu(
                         selection: recordingSaveLabel(for: appState.config.meetingRecordingSavePolicy),
@@ -1046,41 +1030,6 @@ struct SettingsView: View {
                     meetingRecordingFolderPicker
                 }
                 settingsDescription("Retranscription uses a temporary WAV copy and removes it afterward.")
-            }
-
-            settingsSection("Auto Export") {
-                settingsRow("Auto-export meetings") {
-                    settingsSwitch(isOn: appState.config.autoExportMarkdownEnabled) { newValue in
-                        controller.updateConfig { $0.autoExportMarkdownEnabled = newValue }
-                    }
-                }
-                if appState.config.autoExportMarkdownEnabled {
-                    Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow("Destination folder") {
-                        autoExportFolderPicker
-                    }
-                    Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow("Content") {
-                        settingsMenu(
-                            selection: appState.config.resolvedAutoExportMarkdownContent.displayName,
-                            options: MeetingExportContent.allCases.map(\.displayName)
-                        ) { label in
-                            guard let content = MeetingExportContent.allCases.first(where: { $0.displayName == label }) else { return }
-                            controller.updateConfig { $0.autoExportMarkdownContent = content.rawValue }
-                        }
-                    }
-                    Divider().background(MuesliTheme.surfaceBorder)
-                    settingsRow("File format") {
-                        settingsMenu(
-                            selection: appState.config.resolvedAutoExportFileFormat.displayName,
-                            options: MeetingAutoExportFileFormat.allCases.map(\.displayName)
-                        ) { label in
-                            guard let format = MeetingAutoExportFileFormat.allCases.first(where: { $0.displayName == label }) else { return }
-                            controller.updateConfig { $0.autoExportFileFormat = format.rawValue }
-                        }
-                    }
-                }
-                settingsDescription("Automatically saves each completed meeting to the chosen folder.")
             }
 
             settingsSection("Meeting Notifications") {
@@ -1131,19 +1080,6 @@ struct SettingsView: View {
                 }
                 settingsDescription("Primary button for notifications and Coming Up.")
 
-                Divider().background(MuesliTheme.surfaceBorder)
-
-                settingsRow("Auto-detected meetings") {
-                    settingsSwitch(isOn: appState.config.showMeetingDetectionNotification) { newValue in
-                        controller.updateConfig { $0.showMeetingDetectionNotification = newValue }
-                    }
-                }
-                settingsDescription("Show notifications when a call is detected from browser, camera, microphone, or app audio activity.")
-
-                if appState.config.showMeetingDetectionNotification {
-                    Divider().background(MuesliTheme.surfaceBorder)
-                    mutedMeetingDetectionAppsControl
-                }
             }
 
             settingsSection("Calendars") {
@@ -1171,6 +1107,66 @@ struct SettingsView: View {
             }
 
             settingsSection("Advanced") {
+                settingsRow("Live meeting transcription", controlWidth: meetingControlWidth) {
+                    settingsSwitch(isOn: appState.config.resolvedMeetingProcessingMode == .live) { enabled in
+                        controller.updateConfig {
+                            $0.meetingProcessingMode = enabled
+                                ? MeetingProcessingMode.live.rawValue
+                                : MeetingProcessingMode.post.rawValue
+                        }
+                    }
+                }
+                settingsDescription("Experimental. The default records first and transcribes after the meeting for lower overhead and more reliable final notes.")
+                Divider().background(MuesliTheme.surfaceBorder)
+                settingsRow("Auto-record calendar meetings") {
+                    settingsSwitch(isOn: appState.config.autoRecordMeetings) { newValue in
+                        controller.updateConfig { $0.autoRecordMeetings = newValue }
+                    }
+                }
+                Divider().background(MuesliTheme.surfaceBorder)
+                settingsRow("Auto-detected meeting prompts") {
+                    settingsSwitch(isOn: appState.config.showMeetingDetectionNotification) { newValue in
+                        controller.updateConfig { $0.showMeetingDetectionNotification = newValue }
+                    }
+                }
+                settingsDescription("Detect calls from browser, camera, microphone, or app audio activity. Calendar reminders work independently.")
+                if appState.config.showMeetingDetectionNotification {
+                    Divider().background(MuesliTheme.surfaceBorder)
+                    mutedMeetingDetectionAppsControl
+                }
+                Divider().background(MuesliTheme.surfaceBorder)
+                settingsRow("Auto-export meetings") {
+                    settingsSwitch(isOn: appState.config.autoExportMarkdownEnabled) { newValue in
+                        controller.updateConfig { $0.autoExportMarkdownEnabled = newValue }
+                    }
+                }
+                if appState.config.autoExportMarkdownEnabled {
+                    Divider().background(MuesliTheme.surfaceBorder)
+                    settingsRow("Export folder") {
+                        autoExportFolderPicker
+                    }
+                    Divider().background(MuesliTheme.surfaceBorder)
+                    settingsRow("Export content") {
+                        settingsMenu(
+                            selection: appState.config.resolvedAutoExportMarkdownContent.displayName,
+                            options: MeetingExportContent.allCases.map(\.displayName)
+                        ) { label in
+                            guard let content = MeetingExportContent.allCases.first(where: { $0.displayName == label }) else { return }
+                            controller.updateConfig { $0.autoExportMarkdownContent = content.rawValue }
+                        }
+                    }
+                    Divider().background(MuesliTheme.surfaceBorder)
+                    settingsRow("Export format") {
+                        settingsMenu(
+                            selection: appState.config.resolvedAutoExportFileFormat.displayName,
+                            options: MeetingAutoExportFileFormat.allCases.map(\.displayName)
+                        ) { label in
+                            guard let format = MeetingAutoExportFileFormat.allCases.first(where: { $0.displayName == label }) else { return }
+                            controller.updateConfig { $0.autoExportFileFormat = format.rawValue }
+                        }
+                    }
+                }
+                Divider().background(MuesliTheme.surfaceBorder)
                 settingsRow("Google Meet speaker bridge", controlWidth: meetingControlWidth) {
                     settingsSwitch(isOn: appState.config.enableMeetSpeakerBridge) { newValue in
                         controller.setMeetSpeakerBridgeEnabled(newValue)

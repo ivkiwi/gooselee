@@ -630,7 +630,6 @@ public final class MuesliController: NSObject {
             $0.backend == loadedConfig.meetingSummaryBackend
         }) ?? .chatGPT
         self.indicator = FloatingIndicatorController(configStore: configStore)
-        ComputerUseCursorOverlay.shared.attachIndicator(self.indicator)
         super.init()
         Task { [weak self] in
             guard let self else { return }
@@ -691,13 +690,6 @@ public final class MuesliController: NSObject {
         hotkeyMonitor.onToggleStop = { [weak self] in self?.handleToggleStop() }
         hotkeyMonitor.doubleTapEnabled = config.enableDoubleTapDictation
         configureHotkeyMonitorTiming()
-        computerUseHotkeyMonitor.onPrepare = { [weak self] in self?.handleComputerUsePrepare() }
-        computerUseHotkeyMonitor.onStart = { [weak self] in self?.handleComputerUseStart() }
-        computerUseHotkeyMonitor.onStop = { [weak self] in self?.handleComputerUseStop() }
-        computerUseHotkeyMonitor.onCancel = { [weak self] in self?.handleComputerUseCancel() }
-        computerUseHotkeyMonitor.onToggleStart = { [weak self] in self?.handleComputerUseToggleStart() }
-        computerUseHotkeyMonitor.onToggleStop = { [weak self] in self?.handleComputerUseToggleStop() }
-        computerUseHotkeyMonitor.doubleTapEnabled = config.enableDoubleTapDictation
 
         meetingRecordingHotkeyMonitor.onStart = { [weak self] in
             DispatchQueue.main.async { self?.toggleMeetingRecording() }
@@ -3523,7 +3515,7 @@ public final class MuesliController: NSObject {
         let result = ShortcutHotkeyPolicy.validateDictationHotkey(
             hotkey,
             computerUseHotkey: config.computerUseHotkey,
-            isComputerUseEnabled: config.enableComputerUseHotkey,
+            isComputerUseEnabled: false,
             meetingRecordingHotkey: config.meetingRecordingHotkey,
             isMeetingRecordingEnabled: config.enableMeetingRecordingHotkey
         )
@@ -3587,7 +3579,7 @@ public final class MuesliController: NSObject {
             hotkey,
             dictationHotkey: config.dictationHotkey,
             computerUseHotkey: config.computerUseHotkey,
-            isComputerUseEnabled: config.enableComputerUseHotkey
+            isComputerUseEnabled: false
         )
         guard result.didUpdate else {
             fputs("[hotkeys] rejected meeting recording hotkey due to conflict\n", stderr)
@@ -3605,7 +3597,7 @@ public final class MuesliController: NSObject {
                 config.meetingRecordingHotkey,
                 dictationHotkey: config.dictationHotkey,
                 computerUseHotkey: config.computerUseHotkey,
-                isComputerUseEnabled: config.enableComputerUseHotkey
+                isComputerUseEnabled: false
             )
             guard result.didUpdate else { return result }
             updateConfig { $0.enableMeetingRecordingHotkey = true }
@@ -7823,12 +7815,7 @@ public final class MuesliController: NSObject {
     }
 
     private func configureComputerUseHotkeyMonitor() {
-        guard config.enableComputerUseHotkey else {
-            computerUseHotkeyMonitor.stop()
-            return
-        }
-        computerUseHotkeyMonitor.configure(config.computerUseHotkey)
-        startComputerUseHotkeyMonitorIfNeeded()
+        computerUseHotkeyMonitor.stop()
     }
 
     private func configureHotkeyMonitorTiming() {
@@ -7838,28 +7825,7 @@ public final class MuesliController: NSObject {
     }
 
     private func startComputerUseHotkeyMonitorIfNeeded() {
-        guard config.enableComputerUseHotkey else {
-            computerUseHotkeyMonitor.stop()
-            return
-        }
-        guard config.resolvedOnboardingUseCase.includesDictation else {
-            computerUseHotkeyMonitor.stop()
-            return
-        }
-        guard !ShortcutHotkeyPolicy.hotkeysConflict(config.computerUseHotkey, config.dictationHotkey) else {
-            computerUseHotkeyMonitor.stop()
-            fputs("[cua] computer use hotkey disabled because it matches dictation hotkey\n", stderr)
-            return
-        }
-        guard !config.enableMeetingRecordingHotkey
-            || !ShortcutHotkeyPolicy.hotkeysConflict(config.computerUseHotkey, config.meetingRecordingHotkey) else {
-            computerUseHotkeyMonitor.stop()
-            fputs("[cua] computer use hotkey disabled because it matches meeting recording hotkey\n", stderr)
-            return
-        }
-        computerUseHotkeyMonitor.doubleTapEnabled = config.enableDoubleTapDictation
-        computerUseHotkeyMonitor.configure(config.computerUseHotkey)
-        computerUseHotkeyMonitor.start()
+        computerUseHotkeyMonitor.stop()
     }
 
     private func startMeetingRecordingHotkeyMonitorIfNeeded() {
@@ -7871,7 +7837,7 @@ public final class MuesliController: NSObject {
             config.meetingRecordingHotkey,
             dictationHotkey: config.dictationHotkey,
             computerUseHotkey: config.computerUseHotkey,
-            isComputerUseEnabled: config.enableComputerUseHotkey
+            isComputerUseEnabled: false
         )
         guard validation.didUpdate else {
             meetingRecordingHotkeyMonitor.stop()

@@ -296,6 +296,8 @@ enum ExternalTranscriptCleanupClient {
                 return .backendFailed(provider, statusCode, message)
             case .emptyResponse:
                 return .emptyResponse(provider)
+            case let .incompleteResponse(_, reason):
+                return .backendFailed(provider, nil, "Incomplete response: \(reason)")
             case let .requestFailed(_, underlying):
                 return .backendFailed(provider, nil, underlying.localizedDescription)
             }
@@ -315,6 +317,8 @@ enum ExternalTranscriptCleanupClient {
             case let .requestFailed(_, underlying):
                 return isTimeout(underlying)
             case .emptyResponse:
+                return false
+            case .incompleteResponse:
                 return false
             }
         }

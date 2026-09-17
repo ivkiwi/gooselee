@@ -5,6 +5,7 @@ import os
 enum MeetingSummaryError: LocalizedError {
     case backendFailed(backend: String, statusCode: Int?, message: String)
     case emptyResponse(backend: String)
+    case incompleteResponse(backend: String, reason: String)
     case requestFailed(backend: String, underlying: Error)
 
     var errorDescription: String? {
@@ -14,6 +15,8 @@ enum MeetingSummaryError: LocalizedError {
             return "\(backend) could not generate meeting notes.\(statusText) \(message) The selected model may be unavailable or retired."
         case let .emptyResponse(backend):
             return "\(backend) returned an empty response while generating meeting notes. The selected model may be unavailable or incompatible."
+        case let .incompleteResponse(backend, reason):
+            return "\(backend) stopped before the meeting notes were complete (\(reason)). The partial response was not saved."
         case let .requestFailed(backend, underlying):
             return "\(backend) could not be reached while generating meeting notes. \(underlying.localizedDescription)"
         }
@@ -49,6 +52,8 @@ enum MeetingSummaryRetryPolicy {
             return true
         case .emptyResponse:
             return true
+        case .incompleteResponse:
+            return false
         case .backendFailed(_, let statusCode, _):
             guard let statusCode else { return false }
             return isTransientHTTPStatus(statusCode)
@@ -126,6 +131,7 @@ enum MeetingSummaryRetryPolicy {
         switch error {
         case .requestFailed(let backend, _),
              .emptyResponse(let backend),
+             .incompleteResponse(let backend, _),
              .backendFailed(let backend, _, _):
             return backend
         }
@@ -733,14 +739,14 @@ enum MeetingSummaryClient {
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             try validateHTTPResponse(response, data: data, backend: "OpenAI")
-            guard
-                let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                let text = extractOpenAIText(from: json),
-                !text.isEmpty
-            else {
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 if let message = extractErrorMessage(from: data) {
                     throw MeetingSummaryError.backendFailed(backend: "OpenAI", statusCode: nil, message: message)
                 }
+                throw MeetingSummaryError.emptyResponse(backend: "OpenAI")
+            }
+            try validateCompletedSummaryResponse(json, backend: "OpenAI")
+            guard let text = extractOpenAIText(from: json), !text.isEmpty else {
                 throw MeetingSummaryError.emptyResponse(backend: "OpenAI")
             }
             return text
@@ -863,14 +869,14 @@ enum MeetingSummaryClient {
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             try validateHTTPResponse(response, data: data, backend: "OpenRouter")
-            guard
-                let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                let text = extractOpenRouterText(from: json),
-                !text.isEmpty
-            else {
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 if let message = extractErrorMessage(from: data) {
                     throw MeetingSummaryError.backendFailed(backend: "OpenRouter", statusCode: nil, message: message)
                 }
+                throw MeetingSummaryError.emptyResponse(backend: "OpenRouter")
+            }
+            try validateCompletedSummaryResponse(json, backend: "OpenRouter")
+            guard let text = extractOpenRouterText(from: json), !text.isEmpty else {
                 throw MeetingSummaryError.emptyResponse(backend: "OpenRouter")
             }
             return text
@@ -962,15 +968,18 @@ enum MeetingSummaryClient {
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             try validateHTTPResponse(response, data: data, backend: "Ollama")
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                if let message = extractErrorMessage(from: data) {
+                    throw MeetingSummaryError.backendFailed(backend: "Ollama", statusCode: nil, message: message)
+                }
+                throw MeetingSummaryError.emptyResponse(backend: "Ollama")
+            }
+            try validateCompletedSummaryResponse(json, backend: "Ollama")
             guard
-                let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                 let message = json["message"] as? [String: Any],
                 let text = message["content"] as? String,
                 !text.isEmpty
             else {
-                if let message = extractErrorMessage(from: data) {
-                    throw MeetingSummaryError.backendFailed(backend: "Ollama", statusCode: nil, message: message)
-                }
                 throw MeetingSummaryError.emptyResponse(backend: "Ollama")
             }
             return text
@@ -1163,14 +1172,14 @@ enum MeetingSummaryClient {
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             try validateHTTPResponse(response, data: data, backend: backend)
-            guard
-                let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                let text = extractOpenRouterText(from: json),
-                !text.isEmpty
-            else {
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 if let message = extractErrorMessage(from: data) {
                     throw MeetingSummaryError.backendFailed(backend: backend, statusCode: nil, message: message)
                 }
+                throw MeetingSummaryError.emptyResponse(backend: backend)
+            }
+            try validateCompletedSummaryResponse(json, backend: backend)
+            guard let text = extractOpenRouterText(from: json), !text.isEmpty else {
                 throw MeetingSummaryError.emptyResponse(backend: backend)
             }
             return text
@@ -1223,14 +1232,14 @@ enum MeetingSummaryClient {
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
             try validateHTTPResponse(response, data: data, backend: backend)
-            guard
-                let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                let text = extractAnthropicText(from: json),
-                !text.isEmpty
-            else {
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 if let message = extractErrorMessage(from: data) {
                     throw MeetingSummaryError.backendFailed(backend: backend, statusCode: nil, message: message)
                 }
+                throw MeetingSummaryError.emptyResponse(backend: backend)
+            }
+            try validateCompletedSummaryResponse(json, backend: backend)
+            guard let text = extractAnthropicText(from: json), !text.isEmpty else {
                 throw MeetingSummaryError.emptyResponse(backend: backend)
             }
             return text
@@ -1328,12 +1337,17 @@ enum MeetingSummaryClient {
 
         // Parse SSE stream: collect text deltas from response.output_text.delta events
         var fullText = ""
+        var incompleteReason: String?
         for try await line in bytes.lines {
             guard line.hasPrefix("data: ") else { continue }
             let jsonStr = String(line.dropFirst(6))
             if jsonStr == "[DONE]" { break }
             guard let data = jsonStr.data(using: .utf8),
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+
+            if incompleteReason == nil {
+                incompleteReason = incompleteResponseReason(from: json)
+            }
 
             // Check for output_text.done with full text
             if let outputText = json["output_text"] as? String, !outputText.isEmpty {
@@ -1347,6 +1361,12 @@ enum MeetingSummaryClient {
             }
         }
 
+        if let incompleteReason {
+            throw MeetingSummaryError.incompleteResponse(
+                backend: "ChatGPT",
+                reason: incompleteReason
+            )
+        }
         DiagnosticsLog.write("[summary] ChatGPT WHAM: collected \(fullText.count) chars")
         return fullText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -1365,6 +1385,50 @@ enum MeetingSummaryClient {
             }
         }
         return nil
+    }
+
+    static func incompleteResponseReason(from payload: [String: Any]) -> String? {
+        let response = payload["response"] as? [String: Any] ?? payload
+        if let type = payload["type"] as? String,
+           type == "response.incomplete" || type == "response.failed" {
+            let details = response["incomplete_details"] as? [String: Any]
+            return (details?["reason"] as? String) ?? type
+        }
+        if let status = (response["status"] as? String)?.lowercased(),
+           status == "incomplete" || status == "failed" || status == "cancelled" {
+            let details = response["incomplete_details"] as? [String: Any]
+            return (details?["reason"] as? String) ?? "status=\(status)"
+        }
+
+        if let finishReason = (response["choices"] as? [[String: Any]])?.first?["finish_reason"] as? String {
+            let normalized = finishReason.lowercased()
+            if normalized != "stop" && normalized != "tool_calls" {
+                return "finish_reason=\(finishReason)"
+            }
+        }
+
+        if let stopReason = response["stop_reason"] as? String,
+           stopReason.lowercased() == "max_tokens" {
+            return "stop_reason=\(stopReason)"
+        }
+
+        if response["done"] as? Bool == false {
+            return "provider did not finish generation"
+        }
+        if let doneReason = response["done_reason"] as? String,
+           doneReason.lowercased() == "length" {
+            return "done_reason=\(doneReason)"
+        }
+        return nil
+    }
+
+    private static func validateCompletedSummaryResponse(
+        _ payload: [String: Any],
+        backend: String
+    ) throws {
+        if let reason = incompleteResponseReason(from: payload) {
+            throw MeetingSummaryError.incompleteResponse(backend: backend, reason: reason)
+        }
     }
 
     private static func validateHTTPResponse(_ response: URLResponse, data: Data, backend: String) throws {

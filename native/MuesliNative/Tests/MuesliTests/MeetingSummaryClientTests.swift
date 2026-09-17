@@ -299,6 +299,39 @@ struct MeetingSummaryClientTests {
         #expect(error.localizedDescription.contains("unavailable or incompatible"))
     }
 
+    @Test("incomplete provider responses are rejected instead of accepted as summaries")
+    func incompleteProviderResponsesAreDetected() {
+        #expect(MeetingSummaryClient.incompleteResponseReason(from: [
+            "status": "incomplete",
+            "incomplete_details": ["reason": "max_output_tokens"],
+            "output_text": "Partial notes",
+        ]) == "max_output_tokens")
+        #expect(MeetingSummaryClient.incompleteResponseReason(from: [
+            "choices": [[
+                "finish_reason": "length",
+                "message": ["content": "Partial notes"],
+            ]],
+        ]) == "finish_reason=length")
+        #expect(MeetingSummaryClient.incompleteResponseReason(from: [
+            "stop_reason": "max_tokens",
+            "content": [["type": "text", "text": "Partial notes"]],
+        ]) == "stop_reason=max_tokens")
+        #expect(MeetingSummaryClient.incompleteResponseReason(from: [
+            "done": true,
+            "done_reason": "stop",
+        ]) == nil)
+        #expect(MeetingSummaryClient.incompleteResponseReason(from: [
+            "choices": [["finish_reason": "stop"]],
+        ]) == nil)
+
+        let error = MeetingSummaryError.incompleteResponse(
+            backend: "OpenRouter",
+            reason: "finish_reason=length"
+        )
+        #expect(error.localizedDescription.contains("partial response was not saved"))
+        #expect(!MeetingSummaryRetryPolicy.shouldRetry(error))
+    }
+
     @Test("summary retries transient failures until success")
     func summaryRetriesTransientFailuresUntilSuccess() async throws {
         var attempts = 0

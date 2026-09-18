@@ -5,6 +5,10 @@ enum MenuBarIconRenderer {
     static let gooseSize = NSSize(width: 24, height: 18)
     static let gooseUsesTemplateTint = false
 
+    static func shouldApplyMonochromeTint(to image: NSImage) -> Bool {
+        image.isTemplate
+    }
+
     static let options: [(id: String, label: String)] = [
         ("guesli", "Goose"),
         ("mic.fill", "Microphone"),

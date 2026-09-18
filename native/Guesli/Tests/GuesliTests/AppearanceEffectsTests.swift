@@ -55,6 +55,17 @@ struct MenuBarIconRendererTests {
         #expect(MenuBarIconRenderer.gooseSize == NSSize(width: 24, height: 18))
     }
 
+    @Test("monochrome tint applies only to template images")
+    func monochromeTintFollowsTemplateFlag() {
+        let colored = NSImage(size: NSSize(width: 24, height: 18))
+        colored.isTemplate = false
+        #expect(MenuBarIconRenderer.shouldApplyMonochromeTint(to: colored) == false)
+
+        let template = NSImage(size: NSSize(width: 18, height: 18))
+        template.isTemplate = true
+        #expect(MenuBarIconRenderer.shouldApplyMonochromeTint(to: template) == true)
+    }
+
     @Test("make(choice:) returns a non-zero size image")
     func makeHasSize() {
         let image = MenuBarIconRenderer.make(choice: "mic.fill")

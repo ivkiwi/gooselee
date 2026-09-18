@@ -131,12 +131,12 @@ struct IndicatorFrameSizeTests {
         // We test that the config round-trips correctly (the visual test is manual)
     }
 
-    @Test("default indicator center is right-middle of the screen")
+    @Test("default indicator center uses the medium capsule at right-middle")
     @MainActor
     func defaultIndicatorCenterUsesScreenMidpoint() {
         let visibleFrame = NSRect(x: 100, y: 50, width: 1200, height: 800)
         let center = FloatingIndicatorController.defaultIndicatorCenter(in: visibleFrame)
-        #expect(center.x == 1270)
+        #expect(center.x == 1266)
         #expect(center.y == 450)
     }
 
@@ -156,8 +156,18 @@ struct IndicatorFrameSizeTests {
         )
         #expect(
             FloatingIndicatorController.defaultIndicatorCenter(in: visibleFrame) ==
-            CGPoint(x: 1270, y: 450)
+            CGPoint(x: 1266, y: 450)
         )
+    }
+
+    @Test("indicator size presets scale the idle capsule and goose")
+    func indicatorSizePresets() {
+        #expect(IndicatorSize.small.idleSize == NSSize(width: 44, height: 28))
+        #expect(IndicatorSize.medium.idleSize == NSSize(width: 52, height: 34))
+        #expect(IndicatorSize.large.idleSize == NSSize(width: 60, height: 40))
+        #expect(IndicatorSize.small.iconSize < IndicatorSize.medium.iconSize)
+        #expect(IndicatorSize.medium.iconSize < IndicatorSize.large.iconSize)
+        #expect(IndicatorSize.medium.hoverSize.height > IndicatorSize.medium.idleSize.height)
     }
 
     @Test("anchor centers respect fixed screen insets")
@@ -242,6 +252,76 @@ struct IndicatorFrameSizeTests {
                 screenFrame: NSRect(x: 0, y: 0, width: 1920, height: 1243)
             ) == NSRect(x: 1687, y: 882, width: 220, height: 36)
         )
+    }
+
+    @Test("Dock start and end keep one reference center across states")
+    @MainActor
+    func dockEndpointsUseIdleReferenceSize() {
+        let idle = NSSize(width: 44, height: 28)
+        let recording = NSSize(width: 76, height: 22)
+
+        #expect(
+            FloatingIndicatorController.dockAnchorReferenceSize(
+                .dockStart,
+                currentSize: recording,
+                idleSize: idle
+            ) == idle
+        )
+        #expect(
+            FloatingIndicatorController.dockAnchorReferenceSize(
+                .dockEnd,
+                currentSize: recording,
+                idleSize: idle
+            ) == idle
+        )
+        #expect(
+            FloatingIndicatorController.dockAnchorReferenceSize(
+                .dockInner,
+                currentSize: recording,
+                idleSize: idle
+            ) == recording
+        )
+    }
+
+    @Test("Dock alignment uses the visible Dock strip instead of the icon list")
+    @MainActor
+    func dockAlignmentUsesVisibleStrip() {
+        let aligned = FloatingIndicatorController.dockAlignmentFrame(
+            NSRect(x: 1860, y: 344, width: 50, height: 517),
+            screenFrame: NSRect(x: 0, y: 0, width: 1920, height: 1243),
+            visibleFrame: NSRect(x: 0, y: 0, width: 1864, height: 1205)
+        )
+
+        #expect(aligned.midX == 1892)
+        #expect(aligned.minY == 344)
+        #expect(aligned.height == 517)
+    }
+
+    @Test("Dock endpoint remains centered when the pill barely crosses the screen edge")
+    @MainActor
+    func dockEndpointAllowsSmallCrossAxisOverflow() {
+        let dock = NSRect(x: 1860, y: 344, width: 50, height: 517)
+        let bounds = NSRect(x: 0, y: 0, width: 1920, height: 1243)
+        let center = CGPoint(x: 1892, y: 907)
+
+        let frame = FloatingIndicatorController.dockAlignedFrame(
+            center: center,
+            size: NSSize(width: 76, height: 22),
+            anchor: .dockStart,
+            dockFrame: dock,
+            bounds: bounds
+        )
+        #expect(frame.midX == center.x)
+        #expect(frame.maxX == 1930)
+
+        let wideFrame = FloatingIndicatorController.dockAlignedFrame(
+            center: center,
+            size: NSSize(width: 220, height: 36),
+            anchor: .dockStart,
+            dockFrame: dock,
+            bounds: bounds
+        )
+        #expect(wideFrame.maxX == bounds.maxX)
     }
 
     @Test("transcribing pill widens for status labels")

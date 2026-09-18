@@ -160,6 +160,7 @@ final class FloatingIndicatorController: NSObject {
     private var state: DictationState = .idle
     private var isHovered = false
     private var hoverExitWorkItem: DispatchWorkItem?
+    private var dockFrameCache: (screenFrame: NSRect, visibleFrame: NSRect, dockFrame: NSRect)?
     private let configStore: ConfigStore
     private var isMeetingRecording = false
     private var isMeetingRecordingPaused = false
@@ -213,6 +214,30 @@ final class FloatingIndicatorController: NSObject {
 
     var currentFrame: NSRect? {
         panel?.frame
+    }
+
+    private func positioningScreen() -> NSScreen? {
+        if let panelFrame = panel?.frame,
+           let currentScreen = NSScreen.screens.first(where: { $0.frame.intersects(panelFrame) }) {
+            return currentScreen
+        }
+        return NSScreen.main ?? NSScreen.screens.first
+    }
+
+    private func stableDockFrame(on screen: NSScreen) -> NSRect? {
+        if let cached = dockFrameCache,
+           cached.screenFrame == screen.frame,
+           cached.visibleFrame == screen.visibleFrame {
+            return cached.dockFrame
+        }
+        guard let rawDockFrame = Self.dockFrame(on: screen) else { return nil }
+        let dockFrame = Self.dockAlignmentFrame(
+            rawDockFrame,
+            screenFrame: screen.frame,
+            visibleFrame: screen.visibleFrame
+        )
+        dockFrameCache = (screen.frame, screen.visibleFrame, dockFrame)
+        return dockFrame
     }
 
     func handleClick(at point: CGPoint? = nil) {
@@ -522,7 +547,7 @@ final class FloatingIndicatorController: NSObject {
         let config = configStore.load()
         if panel == nil { createPanel(config: config) }
         guard let panel, let contentView, let iconLabel, let textLabel else { return }
-        guard let targetScreen = NSScreen.main else { return }
+        guard let targetScreen = positioningScreen() else { return }
         let screen = Self.positioningBounds(for: config.indicatorAnchor, on: targetScreen)
 
         let warningFont = NSFont.systemFont(ofSize: 11, weight: .medium)
@@ -595,7 +620,7 @@ final class FloatingIndicatorController: NSObject {
         let config = configStore.load()
         if panel == nil { createPanel(config: config) }
         guard let panel, let contentView, let textLabel else { return }
-        guard let targetScreen = NSScreen.main else { return }
+        guard let targetScreen = positioningScreen() else { return }
         let screen = Self.positioningBounds(for: config.indicatorAnchor, on: targetScreen)
 
         isShowingLoading = true
@@ -951,7 +976,8 @@ final class FloatingIndicatorController: NSObject {
         tintLayer?.backgroundColor = NSColor.colorWith(hexString: tintHex, alpha: tintAlpha).cgColor
         applyTintLayerGeometry(size: frameSize, radius: radius)
 
-        let iconSize = NSSize(width: 18, height: 18)
+        let iconDimension = state == .idle ? config.indicatorSize.iconSize : 18
+        let iconSize = NSSize(width: iconDimension, height: iconDimension)
 
         switch state {
         case .idle:
@@ -1132,8 +1158,24 @@ final class FloatingIndicatorController: NSObject {
         CATransaction.commit()
     }
 
-    static func defaultIndicatorCenter(in visibleFrame: NSRect, idleSize: NSSize = NSSize(width: 44, height: 28)) -> CGPoint {
+    static func defaultIndicatorCenter(
+        in visibleFrame: NSRect,
+        idleSize: NSSize = IndicatorSize.medium.idleSize
+    ) -> CGPoint {
         anchorCenter(.midTrailing, in: visibleFrame, size: idleSize)
+    }
+
+    static func dockAnchorReferenceSize(
+        _ anchor: IndicatorAnchor,
+        currentSize: NSSize,
+        idleSize: NSSize
+    ) -> NSSize {
+        switch anchor {
+        case .dockStart, .dockEnd:
+            return idleSize
+        default:
+            return currentSize
+        }
     }
 
     static func anchorCenter(_ anchor: IndicatorAnchor, in visibleFrame: NSRect, size: NSSize) -> CGPoint {
@@ -1208,6 +1250,36 @@ final class FloatingIndicatorController: NSObject {
                 : dockFrame.minY - gap - size.height / 2
             return CGPoint(x: dockFrame.midX, y: y)
         }
+    }
+
+    static func dockAlignmentFrame(
+        _ dockFrame: NSRect,
+        screenFrame: NSRect,
+        visibleFrame: NSRect
+    ) -> NSRect {
+        var alignedFrame = dockFrame
+        if dockFrame.height > dockFrame.width {
+            let alignedCenterX: CGFloat
+            if dockFrame.midX < screenFrame.midX {
+                let dockEdge = visibleFrame.minX > screenFrame.minX
+                    ? visibleFrame.minX
+                    : dockFrame.maxX
+                alignedCenterX = (screenFrame.minX + dockEdge) / 2
+            } else {
+                let dockEdge = visibleFrame.maxX < screenFrame.maxX
+                    ? visibleFrame.maxX
+                    : dockFrame.minX
+                alignedCenterX = (dockEdge + screenFrame.maxX) / 2
+            }
+            alignedFrame.origin.x = alignedCenterX - dockFrame.width / 2
+        } else {
+            let dockEdge = visibleFrame.minY > screenFrame.minY
+                ? visibleFrame.minY
+                : dockFrame.maxY
+            let alignedCenterY = (screenFrame.minY + dockEdge) / 2
+            alignedFrame.origin.y = alignedCenterY - dockFrame.height / 2
+        }
+        return alignedFrame
     }
 
     private static func dockFrame(on screen: NSScreen) -> NSRect? {
@@ -1287,6 +1359,58 @@ final class FloatingIndicatorController: NSObject {
         )
     }
 
+    static func dockAlignedFrame(
+        center: CGPoint,
+        size: NSSize,
+        anchor: IndicatorAnchor,
+        dockFrame: NSRect,
+        bounds: NSRect,
+        alignmentTolerance: CGFloat = 16
+    ) -> NSRect {
+        let proposedX = center.x - size.width / 2
+        let proposedY = center.y - size.height / 2
+        let verticalDock = dockFrame.height > dockFrame.width
+
+        let x: CGFloat
+        let y: CGFloat
+        if anchor == .dockStart || anchor == .dockEnd {
+            if verticalDock {
+                x = clampAllowingSmallOverflow(
+                    proposedX,
+                    length: size.width,
+                    bounds: bounds.minX...bounds.maxX,
+                    tolerance: alignmentTolerance
+                )
+                y = min(max(proposedY, bounds.minY), bounds.maxY - size.height)
+            } else {
+                x = min(max(proposedX, bounds.minX), bounds.maxX - size.width)
+                y = clampAllowingSmallOverflow(
+                    proposedY,
+                    length: size.height,
+                    bounds: bounds.minY...bounds.maxY,
+                    tolerance: alignmentTolerance
+                )
+            }
+        } else {
+            x = min(max(proposedX, bounds.minX), bounds.maxX - size.width)
+            y = min(max(proposedY, bounds.minY), bounds.maxY - size.height)
+        }
+        return NSRect(x: x, y: y, width: size.width, height: size.height)
+    }
+
+    private static func clampAllowingSmallOverflow(
+        _ origin: CGFloat,
+        length: CGFloat,
+        bounds: ClosedRange<CGFloat>,
+        tolerance: CGFloat
+    ) -> CGFloat {
+        let underflow = bounds.lowerBound - origin
+        let overflow = origin + length - bounds.upperBound
+        if underflow > 0, underflow <= tolerance { return origin }
+        if overflow > 0, overflow <= tolerance { return origin }
+        return min(max(origin, bounds.lowerBound), bounds.upperBound - length)
+    }
+
     static func isUsableIndicatorCenter(
         _ center: CGPoint,
         in visibleFrame: NSRect,
@@ -1297,15 +1421,16 @@ final class FloatingIndicatorController: NSObject {
     }
 
     private func frameForState(_ state: DictationState, config: AppConfig) -> NSRect {
-        guard let targetScreen = NSScreen.main else {
+        guard let targetScreen = positioningScreen() else {
             return NSRect(x: 0, y: 0, width: 64, height: 28)
         }
         let screen = targetScreen.visibleFrame
-        let idleSize = NSSize(width: 44, height: 28)
+        let idleSize = config.indicatorSize.idleSize
+        let expandsIdleOnHover = state == .idle && isHovered
         let size: NSSize
         switch state {
         case .idle:
-            size = isHovered ? NSSize(width: 220, height: 36) : idleSize
+            size = expandsIdleOnHover ? config.indicatorSize.hoverSize : idleSize
         case .preparing: size = NSSize(width: 76, height: 22)
         case .recording: size = NSSize(width: 76, height: 22)
         case .transcribing:
@@ -1316,10 +1441,26 @@ final class FloatingIndicatorController: NSObject {
         // transitions resize around the current position rather than jumping
         // for custom placement. Preset anchors always resolve from config so
         // changing the setting snaps immediately to the chosen anchor.
-        let dockFrame = config.indicatorAnchor == .custom || config.indicatorAnchor.isDockPosition
-            ? Self.dockFrame(on: targetScreen)
-            : nil
-        let anchorSize = state == .idle && isHovered ? idleSize : size
+        let dockFrame: NSRect?
+        if config.indicatorAnchor.isDockPosition {
+            dockFrame = stableDockFrame(on: targetScreen)
+        } else if config.indicatorAnchor == .custom {
+            dockFrame = Self.dockFrame(on: targetScreen)
+        } else {
+            dockFrame = nil
+        }
+        let anchorSize: NSSize
+        if expandsIdleOnHover {
+            anchorSize = idleSize
+        } else if config.indicatorAnchor.isDockPosition {
+            anchorSize = Self.dockAnchorReferenceSize(
+                config.indicatorAnchor,
+                currentSize: size,
+                idleSize: idleSize
+            )
+        } else {
+            anchorSize = size
+        }
         let center: CGPoint
         switch config.indicatorAnchor {
         case .custom:
@@ -1344,14 +1485,22 @@ final class FloatingIndicatorController: NSObject {
         }
 
         let bounds = Self.positioningBounds(for: config.indicatorAnchor, on: targetScreen)
-        let baseFrame = NSRect(
+        let baseFrame = dockFrame.map {
+            Self.dockAlignedFrame(
+                center: center,
+                size: anchorSize,
+                anchor: config.indicatorAnchor,
+                dockFrame: $0,
+                bounds: bounds
+            )
+        } ?? NSRect(
             x: min(max(center.x - anchorSize.width / 2, bounds.minX), bounds.maxX - anchorSize.width),
             y: min(max(center.y - anchorSize.height / 2, bounds.minY), bounds.maxY - anchorSize.height),
             width: anchorSize.width,
             height: anchorSize.height
         )
         if state == .idle,
-           isHovered,
+           expandsIdleOnHover,
            let dockFrame,
            config.indicatorAnchor.isDockPosition
                 || baseFrame.insetBy(dx: -64, dy: -64).intersects(dockFrame) {
@@ -1360,6 +1509,15 @@ final class FloatingIndicatorController: NSObject {
                 expandedSize: size,
                 dockFrame: dockFrame,
                 screenFrame: bounds
+            )
+        }
+        if let dockFrame {
+            return Self.dockAlignedFrame(
+                center: center,
+                size: size,
+                anchor: config.indicatorAnchor,
+                dockFrame: dockFrame,
+                bounds: bounds
             )
         }
         let x = min(max(center.x - size.width / 2, bounds.minX), bounds.maxX - size.width)

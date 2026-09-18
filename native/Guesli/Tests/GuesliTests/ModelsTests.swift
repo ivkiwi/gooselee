@@ -417,6 +417,7 @@ struct AppConfigTests {
         #expect(config.pasteShortcut == .commandV)
         #expect(config.showFloatingIndicator == true)
         #expect(config.indicatorAnchor == .midTrailing)
+        #expect(config.indicatorSize == .medium)
         #expect(config.indicatorDockGap == 20)
         #expect(config.hasCompletedOnboarding == false)
         #expect(config.resolvedOnboardingUseCase == .dictation)
@@ -479,6 +480,7 @@ struct AppConfigTests {
         config.transcriptCleanupProvider = TranscriptCleanupProviderOption.chatGPT.rawValue
         config.enableLiveStreamingPartials = true
         config.upcomingMeetingsDayCount = UpcomingMeetingsWindow.today.dayCount
+        config.indicatorSize = .large
         config.hiddenCalendarEventSourceHints = [
             "ek-event-1": UnifiedCalendarEvent.CalendarSource.eventKit.rawValue,
             "google-event-1": UnifiedCalendarEvent.CalendarSource.googleCalendar.rawValue,
@@ -516,6 +518,7 @@ struct AppConfigTests {
         #expect(decoded.preferredMeetingBrowserBundleID == "com.brave.Browser")
         #expect(decoded.meetingTranscriptionBackend == config.meetingTranscriptionBackend)
         #expect(decoded.indicatorAnchor == config.indicatorAnchor)
+        #expect(decoded.indicatorSize == .large)
         #expect(decoded.indicatorDockGap == config.indicatorDockGap)
         #expect(decoded.pasteShortcut == .commandShiftV)
         #expect(decoded.hotkeyTriggerThresholdMS == 125)

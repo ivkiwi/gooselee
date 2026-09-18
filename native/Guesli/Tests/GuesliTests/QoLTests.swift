@@ -245,13 +245,26 @@ struct IndicatorFrameSizeTests {
             ) == CGPoint(x: 1885, y: 900)
         )
         #expect(
-            FloatingIndicatorController.dockHoverFrame(
+            FloatingIndicatorController.dockInwardExpandedFrame(
                 baseFrame: NSRect(x: 1863, y: 886, width: 44, height: 28),
                 expandedSize: NSSize(width: 220, height: 36),
                 dockFrame: NSRect(x: 1860, y: 325, width: 50, height: 555),
                 screenFrame: NSRect(x: 0, y: 0, width: 1920, height: 1243)
             ) == NSRect(x: 1687, y: 882, width: 220, height: 36)
         )
+    }
+
+    @Test("Dock endpoint recording pill expands inward without crossing the screen edge")
+    @MainActor
+    func dockEndpointRecordingPillExpandsInward() {
+        let frame = FloatingIndicatorController.dockInwardExpandedFrame(
+            baseFrame: NSRect(x: 1866, y: 886, width: 52, height: 34),
+            expandedSize: NSSize(width: 76, height: 22),
+            dockFrame: NSRect(x: 1867, y: 344, width: 50, height: 517),
+            screenFrame: NSRect(x: 0, y: 0, width: 1920, height: 1243)
+        )
+
+        #expect(frame == NSRect(x: 1842, y: 892, width: 76, height: 22))
     }
 
     @Test("Dock start and end keep one reference center across states")

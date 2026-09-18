@@ -1338,7 +1338,7 @@ final class FloatingIndicatorController: NSObject {
         return fallback
     }
 
-    static func dockHoverFrame(
+    static func dockInwardExpandedFrame(
         baseFrame: NSRect,
         expandedSize: NSSize,
         dockFrame: NSRect,
@@ -1504,7 +1504,18 @@ final class FloatingIndicatorController: NSObject {
            let dockFrame,
            config.indicatorAnchor.isDockPosition
                 || baseFrame.insetBy(dx: -64, dy: -64).intersects(dockFrame) {
-            return Self.dockHoverFrame(
+            return Self.dockInwardExpandedFrame(
+                baseFrame: baseFrame,
+                expandedSize: size,
+                dockFrame: dockFrame,
+                screenFrame: bounds
+            )
+        }
+        if state != .idle,
+           config.indicatorAnchor == .dockStart || config.indicatorAnchor == .dockEnd,
+           let dockFrame,
+           size != anchorSize {
+            return Self.dockInwardExpandedFrame(
                 baseFrame: baseFrame,
                 expandedSize: size,
                 dockFrame: dockFrame,

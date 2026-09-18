@@ -49,6 +49,12 @@ struct MenuBarIconRendererTests {
         #expect(image?.isTemplate == true)
     }
 
+    @Test("bundled goose preserves its colors and wide proportions")
+    func goosePreservesColorAndWidth() {
+        #expect(MenuBarIconRenderer.gooseUsesTemplateTint == false)
+        #expect(MenuBarIconRenderer.gooseSize == NSSize(width: 24, height: 18))
+    }
+
     @Test("make(choice:) returns a non-zero size image")
     func makeHasSize() {
         let image = MenuBarIconRenderer.make(choice: "mic.fill")

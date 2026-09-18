@@ -2,6 +2,9 @@ import AppKit
 
 enum MenuBarIconRenderer {
 
+    static let gooseSize = NSSize(width: 24, height: 18)
+    static let gooseUsesTemplateTint = false
+
     static let options: [(id: String, label: String)] = [
         ("guesli", "Goose"),
         ("mic.fill", "Microphone"),
@@ -22,10 +25,10 @@ enum MenuBarIconRenderer {
     /// anything else renders an SF Symbol.
     static func make(choice: String = "guesli") -> NSImage? {
         if choice == "guesli" {
-            if let url = Bundle.main.url(forResource: "menu_goose_template", withExtension: "png"),
+            if let url = Bundle.main.url(forResource: "menu_goose_color", withExtension: "png"),
                let image = NSImage(contentsOf: url) {
-                image.isTemplate = true
-                image.size = NSSize(width: 18, height: 18)
+                image.isTemplate = gooseUsesTemplateTint
+                image.size = gooseSize
                 return image
             }
         }

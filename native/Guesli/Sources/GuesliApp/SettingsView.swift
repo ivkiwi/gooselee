@@ -1220,6 +1220,17 @@ struct SettingsView: View {
                         controller.refreshIndicatorVisibility()
                     }
                 }
+                Divider().background(GuesliTheme.surfaceBorder)
+                settingsRow("Indicator size") {
+                    settingsMenu(
+                        selection: appState.config.indicatorSize.label,
+                        options: IndicatorSize.allCases.map(\.label)
+                    ) { label in
+                        guard let size = IndicatorSize.allCases.first(where: { $0.label == label }) else { return }
+                        controller.updateConfig { $0.indicatorSize = size }
+                        controller.refreshIndicatorVisibility()
+                    }
+                }
                 if appState.config.indicatorAnchor.isDockPosition {
                     Divider().background(GuesliTheme.surfaceBorder)
                     settingsRow("Dock gap") {

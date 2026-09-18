@@ -131,12 +131,12 @@ struct IndicatorFrameSizeTests {
         // We test that the config round-trips correctly (the visual test is manual)
     }
 
-    @Test("default indicator center is right-middle of the screen")
+    @Test("default indicator center uses the medium capsule at right-middle")
     @MainActor
     func defaultIndicatorCenterUsesScreenMidpoint() {
         let visibleFrame = NSRect(x: 100, y: 50, width: 1200, height: 800)
         let center = FloatingIndicatorController.defaultIndicatorCenter(in: visibleFrame)
-        #expect(center.x == 1270)
+        #expect(center.x == 1266)
         #expect(center.y == 450)
     }
 
@@ -156,8 +156,18 @@ struct IndicatorFrameSizeTests {
         )
         #expect(
             FloatingIndicatorController.defaultIndicatorCenter(in: visibleFrame) ==
-            CGPoint(x: 1270, y: 450)
+            CGPoint(x: 1266, y: 450)
         )
+    }
+
+    @Test("indicator size presets scale the idle capsule and goose")
+    func indicatorSizePresets() {
+        #expect(IndicatorSize.small.idleSize == NSSize(width: 44, height: 28))
+        #expect(IndicatorSize.medium.idleSize == NSSize(width: 52, height: 34))
+        #expect(IndicatorSize.large.idleSize == NSSize(width: 60, height: 40))
+        #expect(IndicatorSize.small.iconSize < IndicatorSize.medium.iconSize)
+        #expect(IndicatorSize.medium.iconSize < IndicatorSize.large.iconSize)
+        #expect(IndicatorSize.medium.hoverSize.height > IndicatorSize.medium.idleSize.height)
     }
 
     @Test("anchor centers respect fixed screen insets")
@@ -244,15 +254,6 @@ struct IndicatorFrameSizeTests {
         )
     }
 
-    @Test("Dock anchors stay compact on hover")
-    @MainActor
-    func dockAnchorsDoNotExpandOnHover() {
-        #expect(!FloatingIndicatorController.shouldExpandIdleOnHover(anchor: .dockStart))
-        #expect(!FloatingIndicatorController.shouldExpandIdleOnHover(anchor: .dockEnd))
-        #expect(!FloatingIndicatorController.shouldExpandIdleOnHover(anchor: .dockInner))
-        #expect(FloatingIndicatorController.shouldExpandIdleOnHover(anchor: .midTrailing))
-    }
-
     @Test("Dock start and end keep one reference center across states")
     @MainActor
     func dockEndpointsUseIdleReferenceSize() {
@@ -282,12 +283,26 @@ struct IndicatorFrameSizeTests {
         )
     }
 
+    @Test("Dock alignment uses the visible Dock strip instead of the icon list")
+    @MainActor
+    func dockAlignmentUsesVisibleStrip() {
+        let aligned = FloatingIndicatorController.dockAlignmentFrame(
+            NSRect(x: 1860, y: 344, width: 50, height: 517),
+            screenFrame: NSRect(x: 0, y: 0, width: 1920, height: 1243),
+            visibleFrame: NSRect(x: 0, y: 0, width: 1864, height: 1205)
+        )
+
+        #expect(aligned.midX == 1892)
+        #expect(aligned.minY == 344)
+        #expect(aligned.height == 517)
+    }
+
     @Test("Dock endpoint remains centered when the pill barely crosses the screen edge")
     @MainActor
     func dockEndpointAllowsSmallCrossAxisOverflow() {
         let dock = NSRect(x: 1860, y: 344, width: 50, height: 517)
         let bounds = NSRect(x: 0, y: 0, width: 1920, height: 1243)
-        let center = CGPoint(x: dock.midX, y: 907)
+        let center = CGPoint(x: 1892, y: 907)
 
         let frame = FloatingIndicatorController.dockAlignedFrame(
             center: center,
@@ -296,8 +311,8 @@ struct IndicatorFrameSizeTests {
             dockFrame: dock,
             bounds: bounds
         )
-        #expect(frame.midX == dock.midX)
-        #expect(frame.maxX == 1923)
+        #expect(frame.midX == center.x)
+        #expect(frame.maxX == 1930)
 
         let wideFrame = FloatingIndicatorController.dockAlignedFrame(
             center: center,

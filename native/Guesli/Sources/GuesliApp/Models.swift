@@ -768,6 +768,44 @@ enum IndicatorAnchor: String, Codable, CaseIterable {
     }
 }
 
+enum IndicatorSize: String, Codable, CaseIterable {
+    case small
+    case medium
+    case large
+
+    var label: String {
+        switch self {
+        case .small: return "Small"
+        case .medium: return "Medium"
+        case .large: return "Large"
+        }
+    }
+
+    var idleSize: NSSize {
+        switch self {
+        case .small: return NSSize(width: 44, height: 28)
+        case .medium: return NSSize(width: 52, height: 34)
+        case .large: return NSSize(width: 60, height: 40)
+        }
+    }
+
+    var hoverSize: NSSize {
+        switch self {
+        case .small: return NSSize(width: 220, height: 36)
+        case .medium: return NSSize(width: 236, height: 42)
+        case .large: return NSSize(width: 252, height: 48)
+        }
+    }
+
+    var iconSize: CGFloat {
+        switch self {
+        case .small: return 18
+        case .medium: return 22
+        case .large: return 26
+        }
+    }
+}
+
 struct HotkeyConfig: Codable, Equatable {
     var keyCode: UInt16 = 61
     var label: String = "Right Option"
@@ -979,6 +1017,7 @@ struct AppConfig: Codable {
     var openDashboardOnLaunch: Bool = true
     var showFloatingIndicator: Bool = true
     var indicatorAnchor: IndicatorAnchor = .midTrailing
+    var indicatorSize: IndicatorSize = .medium
     var indicatorDockGap: Int = 20
     var dashboardWindowFrame: WindowFrame? = nil
     var indicatorOrigin: CGPointCodable? = nil
@@ -1077,6 +1116,7 @@ struct AppConfig: Codable {
         case openDashboardOnLaunch = "open_dashboard_on_launch"
         case showFloatingIndicator = "show_floating_indicator"
         case indicatorAnchor = "indicator_anchor"
+        case indicatorSize = "indicator_size"
         case indicatorDockGap = "indicator_dock_gap"
         case dashboardWindowFrame = "dashboard_window_frame"
         case indicatorOrigin = "indicator_origin"
@@ -1203,6 +1243,7 @@ struct AppConfig: Codable {
         showFloatingIndicator = (try? c.decode(Bool.self, forKey: .showFloatingIndicator)) ?? defaults.showFloatingIndicator
         indicatorAnchor = (try? c.decode(IndicatorAnchor.self, forKey: .indicatorAnchor))
             ?? ((try? c.decodeIfPresent(CGPointCodable.self, forKey: .indicatorOrigin)) != nil ? .custom : .midTrailing)
+        indicatorSize = (try? c.decode(IndicatorSize.self, forKey: .indicatorSize)) ?? defaults.indicatorSize
         indicatorDockGap = min(max((try? c.decode(Int.self, forKey: .indicatorDockGap)) ?? defaults.indicatorDockGap, 0), 200)
         dashboardWindowFrame = try? c.decode(WindowFrame.self, forKey: .dashboardWindowFrame)
         indicatorOrigin = try? c.decode(CGPointCodable.self, forKey: .indicatorOrigin)

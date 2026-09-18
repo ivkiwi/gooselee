@@ -230,7 +230,12 @@ final class FloatingIndicatorController: NSObject {
            cached.visibleFrame == screen.visibleFrame {
             return cached.dockFrame
         }
-        guard let dockFrame = Self.dockFrame(on: screen) else { return nil }
+        guard let rawDockFrame = Self.dockFrame(on: screen) else { return nil }
+        let dockFrame = Self.dockAlignmentFrame(
+            rawDockFrame,
+            screenFrame: screen.frame,
+            visibleFrame: screen.visibleFrame
+        )
         dockFrameCache = (screen.frame, screen.visibleFrame, dockFrame)
         return dockFrame
     }
@@ -971,7 +976,8 @@ final class FloatingIndicatorController: NSObject {
         tintLayer?.backgroundColor = NSColor.colorWith(hexString: tintHex, alpha: tintAlpha).cgColor
         applyTintLayerGeometry(size: frameSize, radius: radius)
 
-        let iconSize = NSSize(width: 18, height: 18)
+        let iconDimension = state == .idle ? config.indicatorSize.iconSize : 18
+        let iconSize = NSSize(width: iconDimension, height: iconDimension)
 
         switch state {
         case .idle:
@@ -981,7 +987,7 @@ final class FloatingIndicatorController: NSObject {
             micIconView?.isHidden = false
             if let mic = micIconView {
                 mic.alphaValue = 1
-                if isHovered && frameSize.width > 44 {
+                if isHovered {
                     mic.frame = NSRect(x: 12, y: (frameSize.height - iconSize.height) / 2,
                                       width: iconSize.width, height: iconSize.height)
                 } else {
@@ -1152,12 +1158,11 @@ final class FloatingIndicatorController: NSObject {
         CATransaction.commit()
     }
 
-    static func defaultIndicatorCenter(in visibleFrame: NSRect, idleSize: NSSize = NSSize(width: 44, height: 28)) -> CGPoint {
+    static func defaultIndicatorCenter(
+        in visibleFrame: NSRect,
+        idleSize: NSSize = IndicatorSize.medium.idleSize
+    ) -> CGPoint {
         anchorCenter(.midTrailing, in: visibleFrame, size: idleSize)
-    }
-
-    static func shouldExpandIdleOnHover(anchor: IndicatorAnchor) -> Bool {
-        !anchor.isDockPosition
     }
 
     static func dockAnchorReferenceSize(
@@ -1247,6 +1252,36 @@ final class FloatingIndicatorController: NSObject {
         }
     }
 
+    static func dockAlignmentFrame(
+        _ dockFrame: NSRect,
+        screenFrame: NSRect,
+        visibleFrame: NSRect
+    ) -> NSRect {
+        var alignedFrame = dockFrame
+        if dockFrame.height > dockFrame.width {
+            let alignedCenterX: CGFloat
+            if dockFrame.midX < screenFrame.midX {
+                let dockEdge = visibleFrame.minX > screenFrame.minX
+                    ? visibleFrame.minX
+                    : dockFrame.maxX
+                alignedCenterX = (screenFrame.minX + dockEdge) / 2
+            } else {
+                let dockEdge = visibleFrame.maxX < screenFrame.maxX
+                    ? visibleFrame.maxX
+                    : dockFrame.minX
+                alignedCenterX = (dockEdge + screenFrame.maxX) / 2
+            }
+            alignedFrame.origin.x = alignedCenterX - dockFrame.width / 2
+        } else {
+            let dockEdge = visibleFrame.minY > screenFrame.minY
+                ? visibleFrame.minY
+                : dockFrame.maxY
+            let alignedCenterY = (screenFrame.minY + dockEdge) / 2
+            alignedFrame.origin.y = alignedCenterY - dockFrame.height / 2
+        }
+        return alignedFrame
+    }
+
     private static func dockFrame(on screen: NSScreen) -> NSRect? {
         guard let dockPID = NSRunningApplication
             .runningApplications(withBundleIdentifier: "com.apple.dock")
@@ -1330,7 +1365,7 @@ final class FloatingIndicatorController: NSObject {
         anchor: IndicatorAnchor,
         dockFrame: NSRect,
         bounds: NSRect,
-        alignmentTolerance: CGFloat = 8
+        alignmentTolerance: CGFloat = 16
     ) -> NSRect {
         let proposedX = center.x - size.width / 2
         let proposedY = center.y - size.height / 2
@@ -1390,14 +1425,12 @@ final class FloatingIndicatorController: NSObject {
             return NSRect(x: 0, y: 0, width: 64, height: 28)
         }
         let screen = targetScreen.visibleFrame
-        let idleSize = NSSize(width: 44, height: 28)
-        let expandsIdleOnHover = state == .idle
-            && isHovered
-            && Self.shouldExpandIdleOnHover(anchor: config.indicatorAnchor)
+        let idleSize = config.indicatorSize.idleSize
+        let expandsIdleOnHover = state == .idle && isHovered
         let size: NSSize
         switch state {
         case .idle:
-            size = expandsIdleOnHover ? NSSize(width: 220, height: 36) : idleSize
+            size = expandsIdleOnHover ? config.indicatorSize.hoverSize : idleSize
         case .preparing: size = NSSize(width: 76, height: 22)
         case .recording: size = NSSize(width: 76, height: 22)
         case .transcribing:
@@ -1416,9 +1449,18 @@ final class FloatingIndicatorController: NSObject {
         } else {
             dockFrame = nil
         }
-        let anchorSize = config.indicatorAnchor.isDockPosition
-            ? Self.dockAnchorReferenceSize(config.indicatorAnchor, currentSize: size, idleSize: idleSize)
-            : (expandsIdleOnHover ? idleSize : size)
+        let anchorSize: NSSize
+        if expandsIdleOnHover {
+            anchorSize = idleSize
+        } else if config.indicatorAnchor.isDockPosition {
+            anchorSize = Self.dockAnchorReferenceSize(
+                config.indicatorAnchor,
+                currentSize: size,
+                idleSize: idleSize
+            )
+        } else {
+            anchorSize = size
+        }
         let center: CGPoint
         switch config.indicatorAnchor {
         case .custom:
@@ -1486,13 +1528,11 @@ final class FloatingIndicatorController: NSObject {
     private func styleForState(_ state: DictationState, config: AppConfig) -> (background: NSColor, border: NSColor, icon: String, title: String, iconColor: NSColor, textColor: NSColor, alpha: CGFloat) {
         switch state {
         case .idle:
-            let showsHoverDetails = isHovered
-                && Self.shouldExpandIdleOnHover(anchor: config.indicatorAnchor)
             return (
                 .clear,
                 .colorWith(hex: 0xFFFFFF, alpha: isHovered ? 0.14 : 0.22),
                 "",
-                showsHoverDetails ? "Hold \(config.dictationHotkey.label) to dictate" : "",
+                isHovered ? "Hold \(config.dictationHotkey.label) to dictate" : "",
                 .colorWith(hex: 0xFFFFFF, alpha: 0.75),
                 .colorWith(hex: 0xFFFFFF, alpha: 0.75),
                 isHovered ? 1.0 : 0.85

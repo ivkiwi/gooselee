@@ -16,8 +16,8 @@ GooseLee's meeting-first, Russian-first scope.
 
 ## Development safety
 
-- Use `./scripts/dev-test.sh` for local development. Named lanes `A`, `B`, and
-  `C` exist only when isolated app identities are needed.
+- Do not build, install, or launch dev apps or named dev lanes. Validate changes
+  with the Swift test suite, then use the canonical local production build below.
 - Never touch `~/Library/Application Support/Guesli/` during builds or tests.
 - Do not reset macOS permissions unless the task explicitly requires it.
 - Do not take `CGWindowListCreateImage` screenshots while meeting recording uses
@@ -43,12 +43,16 @@ The maintainer machine has no Apple Developer ID certificate. Its canonical
 local production build is:
 
 ```bash
-GUESLI_SKIP_SIGN=1 GUESLI_SIGN_IDENTITY="Guesli Dev" ./scripts/build_native_app.sh
+GUESLI_SKIP_SIGN=1 GUESLI_SIGN_IDENTITY="Guesli Dev" \
+GUESLI_BUILD_LOCALVQE=1 GUESLI_REQUIRE_LOCALVQE=1 ./scripts/build_native_app.sh
 ```
 
-Both variables are required. The stable self-signed identity preserves macOS
+Both signing variables are required. The stable self-signed identity preserves macOS
 TCC grants; ad-hoc signing can silently reset Accessibility, Input Monitoring,
 Screen Recording, and Microphone permissions.
+
+Keep LocalVQE required so a missing native runtime fails the build instead of
+silently changing the installed app's meeting AEC to DTLN.
 
 A production build is complete only after verifying the installed app has
 `Authority=Guesli Dev`, passes `codesign --verify --deep --strict`, runs under a

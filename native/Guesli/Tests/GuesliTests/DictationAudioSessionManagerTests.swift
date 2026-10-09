@@ -5,6 +5,187 @@ import Testing
 
 @Suite("DictationAudioSessionManager", .guesliHermeticSupport)
 struct DictationAudioSessionManagerTests {
+    @Test("a blocked microphone start reports failure before the recorder returns")
+    func blockedStartReportsFailureBeforeReturning() throws {
+        let harness = Harness(routeKind: .headphoneLike, startupTimeout: 0.05)
+        let entered = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let failed = DispatchSemaphore(value: 0)
+        let events = TestLockedBox<[DictationAudioSessionEvent]>([])
+        harness.recorder.onStart = {
+            entered.signal()
+            release.wait()
+        }
+        harness.manager.onEvent = { event in
+            events.withLock { $0.append(event) }
+            if case .failed = event { failed.signal() }
+        }
+        defer {
+            release.signal()
+            harness.wait()
+        }
+
+        harness.manager.beginRecording(mode: "toggle", duckingEnabled: false, mediaPauseEnabled: false)
+        try #require(entered.wait(timeout: .now() + 1) == .success)
+        try #require(failed.wait(timeout: .now() + 1) == .success)
+        #expect(harness.manager.currentSessionID == nil)
+        harness.recorder.onFirstCapturedAudioBuffer?(Date())
+        harness.recorder.onFirstSpeechDetected?(Date())
+        release.signal()
+        harness.wait()
+        #expect(harness.manager.currentState == .idle)
+        #expect(harness.recorder.cancelCalls == 1)
+        #expect(events.withLock { $0.filter { if case .failed = $0 { return true }; return false }.count } == 1)
+        #expect(!events.withLock { $0.contains { if case .streamActive = $0 { return true }; return false } })
+        #expect(!events.withLock { $0.contains { if case .speechDetected = $0 { return true }; return false } })
+    }
+
+    @Test("retry after a stalled start waits for teardown and ignores old audio")
+    func retryAfterStalledStartIgnoresOldAudio() throws {
+        let harness = Harness(routeKind: .headphoneLike, startupTimeout: 0.1)
+        let entered = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let failed = DispatchSemaphore(value: 0)
+        let events = TestLockedBox<[DictationAudioSessionEvent]>([])
+        harness.recorder.onStart = {
+            if harness.recorder.startCalls == 1 {
+                entered.signal()
+                release.wait()
+            }
+            harness.recorder.onFirstCapturedAudioBuffer?(Date())
+        }
+        harness.manager.onEvent = { event in
+            events.withLock { $0.append(event) }
+            if case .failed = event { failed.signal() }
+        }
+        defer { release.signal(); harness.wait() }
+        harness.manager.beginRecording(mode: "old", duckingEnabled: false, mediaPauseEnabled: false)
+        try #require(entered.wait(timeout: .now() + 1) == .success)
+        try #require(failed.wait(timeout: .now() + 1) == .success)
+        harness.manager.beginRecording(mode: "retry", duckingEnabled: false, mediaPauseEnabled: false)
+        let newSessionID = try #require(harness.manager.currentSessionID)
+        release.signal()
+        harness.wait()
+        #expect(harness.recorder.cancelCalls == 1)
+        #expect(harness.recorder.startCalls == 2)
+        #expect(harness.manager.currentState == .streamActive(newSessionID))
+        #expect(events.withLock { $0.filter { if case .failed = $0 { return true }; return false }.count } == 1)
+        #expect(events.withLock { $0.filter { if case .streamActive(let id, _) = $0 { return id != newSessionID }; return false }.isEmpty })
+    }
+
+    @Test("a late start error does not report the startup failure twice")
+    func lateStartErrorDoesNotDuplicateFailure() throws {
+        let harness = Harness(routeKind: .headphoneLike, startupTimeout: 0.05)
+        let entered = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let failed = DispatchSemaphore(value: 0)
+        let failureCount = TestLockedBox(0)
+        harness.recorder.onStart = {
+            entered.signal()
+            release.wait()
+            throw NSError(domain: "startup-test", code: 1)
+        }
+        harness.manager.onEvent = { event in
+            if case .failed = event {
+                failureCount.withLock { $0 += 1 }
+                failed.signal()
+            }
+        }
+        defer { release.signal(); harness.wait() }
+        harness.manager.beginRecording(mode: "toggle", duckingEnabled: false, mediaPauseEnabled: false)
+        try #require(entered.wait(timeout: .now() + 1) == .success)
+        try #require(failed.wait(timeout: .now() + 1) == .success)
+        release.signal()
+        harness.wait()
+        #expect(failureCount.withLock { $0 } == 1)
+        #expect(harness.manager.currentState == .idle)
+    }
+
+    @Test("first audio disarms the watchdog even while start is blocked")
+    func firstAudioDisarmsWatchdogBeforeStartReturns() throws {
+        let harness = Harness(routeKind: .headphoneLike, startupTimeout: 0.05)
+        let entered = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let failed = DispatchSemaphore(value: 0)
+        harness.recorder.onStart = {
+            harness.recorder.onFirstCapturedAudioBuffer?(Date())
+            entered.signal()
+            release.wait()
+        }
+        harness.manager.onEvent = { if case .failed = $0 { failed.signal() } }
+        defer { release.signal(); harness.wait() }
+        harness.manager.beginRecording(mode: "toggle", duckingEnabled: false, mediaPauseEnabled: false)
+        try #require(entered.wait(timeout: .now() + 1) == .success)
+        #expect(failed.wait(timeout: .now() + 0.15) == .timedOut)
+        #expect(harness.manager.currentSessionID != nil)
+    }
+
+    @Test("duplicate activation does not rearm the watchdog after first audio")
+    func duplicateActivationDoesNotRearmWatchdog() {
+        let harness = Harness(routeKind: .headphoneLike, startupTimeout: 0.05)
+        harness.manager.beginRecording(mode: "prepare", duckingEnabled: false, mediaPauseEnabled: false)
+        harness.wait()
+        harness.recorder.onFirstCapturedAudioBuffer?(Date())
+        harness.wait()
+        harness.manager.beginRecording(mode: "start", duckingEnabled: false, mediaPauseEnabled: false)
+        Thread.sleep(forTimeInterval: 0.15)
+        harness.wait()
+        #expect(harness.manager.currentSessionID != nil)
+        #expect(harness.recorder.startCalls == 1)
+        #expect(!harness.events.contains { if case .failed = $0 { return true }; return false })
+    }
+
+    @Test("stop and cancel disarm the pending watchdog", arguments: [false, true])
+    func endingSessionDisarmsWatchdog(cancel: Bool) {
+        let harness = Harness(routeKind: .headphoneLike, startupTimeout: 0.05)
+        harness.manager.beginRecording(mode: "toggle", duckingEnabled: false, mediaPauseEnabled: false)
+        harness.wait()
+        if cancel { harness.manager.cancel(reason: "test") } else { harness.manager.stop() }
+        harness.wait()
+        Thread.sleep(forTimeInterval: 0.15)
+        harness.wait()
+        #expect(harness.manager.currentSessionID == nil)
+        #expect(!harness.events.contains { if case .failed = $0 { return true }; return false })
+    }
+
+    @Test("late audio from an old recording cannot disarm a new startup watchdog")
+    func oldAudioDoesNotDisarmNewWatchdog() throws {
+        let harness = Harness(routeKind: .headphoneLike, startupTimeout: 0.1)
+        harness.manager.beginRecording(mode: "old", duckingEnabled: false, mediaPauseEnabled: false)
+        harness.wait()
+        let oldFirstAudio = try #require(harness.recorder.onFirstCapturedAudioBuffer)
+        let oldSpeech = try #require(harness.recorder.onFirstSpeechDetected)
+        harness.manager.cancel(reason: "retry")
+        harness.wait()
+        harness.manager.beginRecording(mode: "new", duckingEnabled: false, mediaPauseEnabled: false)
+        harness.wait()
+        let newSessionID = try #require(harness.manager.currentSessionID)
+        oldFirstAudio(Date())
+        oldSpeech(Date())
+        Thread.sleep(forTimeInterval: 0.2)
+        harness.wait()
+        #expect(harness.manager.currentSessionID == nil)
+        #expect(harness.events.contains { if case .failed(let id, _) = $0 { return id == newSessionID }; return false })
+        #expect(!harness.events.contains { if case .streamActive = $0 { return true }; return false })
+        #expect(!harness.events.contains { if case .speechDetected = $0 { return true }; return false })
+    }
+
+    @Test("a new arm failure is reported after a previous successful recording")
+    func newArmFailureAfterSuccessfulRecordingIsReported() {
+        let harness = Harness(routeKind: .speakerLike)
+        harness.manager.beginRecording(mode: "old", duckingEnabled: false, mediaPauseEnabled: false)
+        harness.wait()
+        harness.recorder.onFirstCapturedAudioBuffer?(Date())
+        harness.wait()
+        harness.manager.stop()
+        harness.wait()
+        harness.recorder.activateError = NSError(domain: "startup-test", code: 2)
+        harness.manager.arm(source: "new")
+        harness.wait()
+        #expect(harness.events.filter { if case .failed = $0 { return true }; return false }.count == 1)
+        #expect(harness.manager.currentSessionID == nil)
+    }
+
     @Test("arm activates warm engine without starting capture")
     func armActivatesWarmEngineWithoutStartingCapture() {
         let harness = Harness(routeKind: .speakerLike)
@@ -681,6 +862,7 @@ private final class Harness {
     let managerQueue = DispatchQueue(label: "test.dictation-session.manager")
     let eventQueue = DispatchQueue(label: "test.dictation-session.events")
     var events: [DictationAudioSessionEvent] = []
+    let startupTimeout: TimeInterval
     lazy var manager: DictationAudioSessionManager = {
         let manager = DictationAudioSessionManager(
             recorder: recorder,
@@ -688,7 +870,8 @@ private final class Harness {
             mediaPlaybackController: media,
             routingController: route,
             queue: managerQueue,
-            eventQueue: eventQueue
+            eventQueue: eventQueue,
+            startupTimeout: startupTimeout
         )
         manager.onEvent = { [weak self] event in
             self?.events.append(event)
@@ -696,7 +879,8 @@ private final class Harness {
         return manager
     }()
 
-    init(routeKind: AudioOutputRouteKind, preferredInputDeviceID: AudioObjectID? = nil) {
+    init(routeKind: AudioOutputRouteKind, preferredInputDeviceID: AudioObjectID? = nil, startupTimeout: TimeInterval = 3) {
+        self.startupTimeout = startupTimeout
         self.route = FakeDictationRoute(
             routeKind: routeKind,
             preferredInputDeviceID: preferredInputDeviceID
@@ -731,6 +915,7 @@ private final class FakeDictationRecorder: DictationAudioRecording {
     var activeRecordingID: UUID?
     var warmUpDelay: TimeInterval = 0
     var activateError: Error?
+    var onStart: (() throws -> Void)?
 
     func prepare() throws {
         prepareCalls += 1
@@ -765,6 +950,7 @@ private final class FakeDictationRecorder: DictationAudioRecording {
         startCalls += 1
         let id = UUID()
         activeRecordingID = id
+        try onStart?()
         return id
     }
 

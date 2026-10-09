@@ -1,4 +1,5 @@
 import Testing
+import AppKit
 import Foundation
 import GuesliCore
 @testable import GuesliApp
@@ -368,8 +369,110 @@ struct IndicatorFrameSizeTests {
     }
 }
 
-@Suite("Floating indicator pointer interaction")
+@Suite("Floating indicator pointer interaction", .serialized, .guesliHermeticSupport)
 struct FloatingIndicatorPointerInteractionTests {
+    @MainActor
+    @Test("idle tracking keeps its entered/exited state across resize")
+    func trackingAreaSurvivesResize() throws {
+        let (indicator, panel, _) = try makeHoverIndicator()
+        defer { indicator.close() }
+        let view = try #require(panel.contentView)
+        view.updateTrackingAreas()
+        let area = try #require(view.trackingAreas.first)
+        view.frame.size.width += 80
+        view.updateTrackingAreas()
+        #expect(view.trackingAreas.count == 1)
+        #expect(view.trackingAreas.first === area)
+    }
+
+    @MainActor
+    @Test("animation completion collapses hover when the exit event is missing")
+    func missingExitCollapsesAfterExpansion() async throws {
+        var pointer = NSPoint.zero
+        let (indicator, panel, config) = try makeHoverIndicator(pointerLocation: { pointer })
+        defer { indicator.close() }
+        pointer = NSPoint(x: panel.frame.midX, y: panel.frame.midY)
+        indicator.setHovered(true)
+        pointer = NSPoint(x: -100_000, y: -100_000)
+        try await Task.sleep(nanoseconds: 600_000_000)
+        #expect(indicator.controlHitTestSizeForTesting == config.indicatorSize.idleSize)
+    }
+
+    @MainActor
+    @Test("closing an expanded or pressed indicator clears hover and drag state")
+    func closeClearsPointerState() async throws {
+        var pointer = NSPoint.zero
+        let (indicator, panel, config) = try makeHoverIndicator(pointerLocation: { pointer })
+        defer { indicator.close() }
+        pointer = NSPoint(x: panel.frame.midX, y: panel.frame.midY)
+        indicator.setHovered(true)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(indicator.controlHitTestSizeForTesting == config.indicatorSize.hoverSize)
+        indicator.close()
+        indicator.setState(.idle, config: config)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(indicator.controlHitTestSizeForTesting == config.indicatorSize.idleSize)
+        indicator.collapseForDrag()
+        indicator.close()
+        indicator.setState(.idle, config: config)
+        indicator.setHovered(true)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(indicator.controlHitTestSizeForTesting == config.indicatorSize.hoverSize)
+    }
+
+    @MainActor
+    @Test("a click without dragging releases the hover lock")
+    func clickWithoutDragReleasesHoverLock() async throws {
+        var pointer = NSPoint.zero
+        let (indicator, panel, config) = try makeHoverIndicator(pointerLocation: { pointer })
+        defer { indicator.close() }
+        let view = try #require(panel.contentView)
+        pointer = NSPoint(x: panel.frame.midX, y: panel.frame.midY)
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            let event = try #require(NSEvent.mouseEvent(
+                with: type, location: NSPoint(x: panel.frame.width / 2, y: panel.frame.height / 2),
+                modifierFlags: [], timestamp: 0, windowNumber: panel.windowNumber,
+                context: nil, eventNumber: 0, clickCount: 1, pressure: 0
+            ))
+            if type == .leftMouseDown { view.mouseDown(with: event) } else { view.mouseUp(with: event) }
+        }
+        indicator.setHovered(true)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(indicator.controlHitTestSizeForTesting == config.indicatorSize.hoverSize)
+    }
+
+    @MainActor
+    @Test("a stationary hover does not poll the pointer")
+    func stationaryHoverDoesNotPoll() async throws {
+        var pointer = NSPoint.zero
+        var reads = 0
+        let (indicator, panel, config) = try makeHoverIndicator(pointerLocation: { reads += 1; return pointer })
+        defer { indicator.close() }
+        pointer = NSPoint(x: panel.frame.midX, y: panel.frame.midY)
+        indicator.setHovered(true)
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(indicator.controlHitTestSizeForTesting == config.indicatorSize.hoverSize)
+        let readsAfterExpansion = reads
+        try await Task.sleep(nanoseconds: 300_000_000)
+        #expect(reads == readsAfterExpansion)
+    }
+
+    @MainActor
+    private func makeHoverIndicator(
+        pointerLocation: @escaping () -> NSPoint = { NSPoint(x: -100_000, y: -100_000) }
+    ) throws -> (FloatingIndicatorController, NSPanel, AppConfig) {
+        let store = ConfigStore()
+        var config = store.load()
+        config.showFloatingIndicator = true
+        store.save(config)
+        let previousWindows = NSApplication.shared.windows
+        let indicator = FloatingIndicatorController(configStore: store, pointerLocation: pointerLocation)
+        indicator.setState(.idle, config: config)
+        let panel = try #require(NSApplication.shared.windows.first {
+            $0 is NSPanel && !previousWindows.contains($0)
+        } as? NSPanel)
+        return (indicator, panel, config)
+    }
     @MainActor
     @Test("clicking the stop control stops the meeting")
     func stopControlStopsMeeting() throws {

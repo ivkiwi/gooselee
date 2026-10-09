@@ -2620,7 +2620,6 @@ final class MeetingSession {
             let healthSnapshot = self.micHealthTracker.noteRawMicSamples(rawSamples)
             self.onMicHealthChanged?(healthSnapshot)
             self.micRecoveryCoordinator.process(healthSnapshot)
-            self.retainedRecordingWriter?.appendMic(rawSamples)
 
             let floatSamples = rawSamples.map { Float($0) / 32767.0 }
 
@@ -2708,6 +2707,8 @@ final class MeetingSession {
         let cleanedInt16 = cleanedFloat.map { sample -> Int16 in
             Int16(max(-1.0, min(1.0, sample)) * 32767)
         }
+        // Retain cleaned mic, including delayed AEC output and pause/stop tails.
+        retainedRecordingWriter?.appendMic(cleanedInt16)
         rawMicChunkRecorder?.append(cleanedInt16)
         livePartialSessions().mic?.enqueue(cleanedFloat)
         chunkTimingTracker.append(sampleCount: cleanedInt16.count)

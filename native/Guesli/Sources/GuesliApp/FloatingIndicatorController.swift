@@ -92,6 +92,8 @@ private final class HoverIndicatorView: NSView {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
+        // AppKit updates .inVisibleRect without losing entered/exited state.
+        if owner?.usesIdleHoverTracking == true, trackingAreaRef != nil { return }
         if let trackingAreaRef {
             removeTrackingArea(trackingAreaRef)
         }
@@ -133,8 +135,8 @@ private final class HoverIndicatorView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        owner?.isDragging = false
         if didDrag {
-            owner?.isDragging = false
             owner?.savePosition()
         } else if event.modifierFlags.contains(.option) {
             owner?.handleOptionClick()
@@ -162,6 +164,7 @@ final class FloatingIndicatorController: NSObject {
     private var hoverExitWorkItem: DispatchWorkItem?
     private var dockFrameCache: (screenFrame: NSRect, visibleFrame: NSRect, dockFrame: NSRect)?
     private let configStore: ConfigStore
+    private let pointerLocation: () -> NSPoint
     private var isMeetingRecording = false
     private var isMeetingRecordingPaused = false
     private var glassView: NSVisualEffectView?
@@ -205,8 +208,9 @@ final class FloatingIndicatorController: NSObject {
         case waiting
     }
 
-    init(configStore: ConfigStore) {
+    init(configStore: ConfigStore, pointerLocation: @escaping () -> NSPoint = { NSEvent.mouseLocation }) {
         self.configStore = configStore
+        self.pointerLocation = pointerLocation
         super.init()
     }
 
@@ -410,6 +414,7 @@ final class FloatingIndicatorController: NSObject {
             recordingWaveformMode = .level
         }
         if state != .idle {
+            hoverExitWorkItem?.cancel()
             isHovered = false
         }
         if !config.showFloatingIndicator && state == .idle {
@@ -496,6 +501,9 @@ final class FloatingIndicatorController: NSObject {
 
             // Apply glass state last so it can override iconLabel visibility set above.
             applyGlassState(state, frameSize: targetFrame.size)
+        } completionHandler: { [weak self] in
+            guard let self, self.panel === panel else { return }
+            self.reconcileIdleHover()
         }
 
         // Manage SF Symbol effects — stop everything first, then start for the new state.
@@ -755,6 +763,16 @@ final class FloatingIndicatorController: NSObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.14, execute: workItem)
     }
 
+    fileprivate var usesIdleHoverTracking: Bool {
+        state == .idle && !isShowingLoading
+    }
+
+    private func reconcileIdleHover() {
+        guard usesIdleHoverTracking, isHovered, !isDragging,
+              panel?.isVisible == true, !pointerIsInsidePanel() else { return }
+        setHovered(false)
+    }
+
     func closeIfIdle() {
         if state == .idle, !isShowingLoading { close() }
     }
@@ -763,6 +781,8 @@ final class FloatingIndicatorController: NSObject {
         stopWaveformAnimation()
         hoverExitWorkItem?.cancel()
         hoverExitWorkItem = nil
+        isHovered = false
+        isDragging = false
         panel?.close()
         panel = nil
         meetingTranscriptPanel.close()
@@ -1668,7 +1688,7 @@ final class FloatingIndicatorController: NSObject {
 
     private func pointerIsInsidePanel() -> Bool {
         guard let panel else { return false }
-        return panel.frame.contains(NSEvent.mouseLocation)
+        return panel.frame.contains(pointerLocation())
     }
 }
 

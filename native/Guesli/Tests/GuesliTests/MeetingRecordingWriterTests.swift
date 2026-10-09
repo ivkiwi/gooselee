@@ -6,6 +6,55 @@ import Testing
 
 @Suite("MeetingRecordingWriter", .guesliHermeticSupport)
 struct MeetingRecordingWriterTests {
+    @Test("retained mic uses cleaned audio and flushes before recording finalization")
+    func sessionRetainsCleanedMicBeforeFinalization() throws {
+        let sourceURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .appendingPathComponent("Sources/GuesliApp/MeetingSession.swift")
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        #expect(source.components(separatedBy: "retainedRecordingWriter?.appendMic(").count == 2)
+        let funnel = try #require(source.range(of: "private func appendCleanedMicSamplesOnQueue"))
+        let append = try #require(source.range(of: "retainedRecordingWriter?.appendMic(cleanedInt16)"))
+        let recorder = try #require(source.range(of: "rawMicChunkRecorder?.append(cleanedInt16)"))
+        #expect(funnel.lowerBound < append.lowerBound && append.lowerBound < recorder.lowerBound)
+        for (start, finish) in [
+            ("func pause()", "retainedRecordingWriter?.markPauseBoundary()"),
+            ("func stop() async throws", "retainedRecordingWriter?.stop()")
+        ] {
+            let body = source[(try #require(source.range(of: start))).upperBound...]
+            let flush = try #require(body.range(of: "appendFlushedStreamingMicOnQueue()"))
+            let finalization = try #require(body.range(of: finish))
+            #expect(flush.lowerBound < finalization.lowerBound)
+        }
+    }
+
+    @Test("retained audio mixes cleaned mic including delayed reference and pause/stop tails")
+    func writerConsumesBufferedAECOutput() throws {
+        let writer = try MeetingRecordingWriter()
+        defer { writer.cancel() }
+        let aec = MeetingNeuralAec(preloadedProcessor: SubtractingRecordingAecProcessor())
+        func appendCleaned(_ samples: [Float]) {
+            writer.appendMic(samples.map { Int16(max(-1, min(1, $0)) * 32767) })
+        }
+        for pauseAfter in [true, false] {
+            #expect(aec.processStreamingMic(Array(repeating: 0.375, count: 6)).isEmpty)
+            writer.appendSystem(Array(repeating: 8191, count: 6))
+            aec.feedSystemSamples(Array(repeating: 0.25, count: 6))
+            let cleaned = aec.processStreamingMic([])
+            #expect(cleaned == Array(repeating: Float(0.125), count: 4))
+            appendCleaned(cleaned)
+            let tail = aec.flushStreamingMic()
+            #expect(tail == Array(repeating: Float(0.125), count: 2))
+            appendCleaned(tail)
+            if pauseAfter {
+                writer.markPauseBoundary()
+                aec.resetForStreaming()
+            }
+        }
+        let url = try #require(writer.stop())
+        defer { try? FileManager.default.removeItem(at: url) }
+        #expect(try readMonoPCM16WAVSamples(from: url) == Array(repeating: Int16(6143), count: 12))
+    }
 
     @Test("streaming writer merges mic and system samples incrementally")
     func writerMergesIncrementally() throws {
@@ -525,6 +574,16 @@ struct MeetingRecordingWriterTests {
     private func audioDuration(from url: URL) throws -> TimeInterval {
         let file = try AVAudioFile(forReading: url)
         return Double(file.length) / file.processingFormat.sampleRate
+    }
+}
+
+private final class SubtractingRecordingAecProcessor: MeetingAecProcessor {
+    let name = "localvqe"
+    let frameSize = 4
+    let sampleRate = 16_000
+    func reset() {}
+    func processFrame(mic: [Float], reference: [Float]) throws -> [Float] {
+        zip(mic, reference).map { $0 - $1 }
     }
 }
 

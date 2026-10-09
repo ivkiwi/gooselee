@@ -8141,12 +8141,15 @@ public final class GuesliController: NSObject {
         switch event {
         case .armed:
             break
-        case .acquiringAudio:
+        case .acquiringAudio(let sessionID):
+            guard dictationAudioSessionManager.currentSessionID == sessionID else { break }
             markDictationLatency("acquiring_audio")
             activateDictationPreparingIndicator()
-        case .streamActive(_, let capturedAt):
+        case .streamActive(let sessionID, let capturedAt):
+            guard dictationAudioSessionManager.currentSessionID == sessionID else { break }
             handleDictationStreamActive(capturedAt: capturedAt)
-        case .speechDetected(_, let capturedAt):
+        case .speechDetected(let sessionID, let capturedAt):
+            guard dictationAudioSessionManager.currentSessionID == sessionID else { break }
             handleDictationSpeechDetected(capturedAt: capturedAt)
         case .noAudioTimeout:
             statusBarController?.setStatus("Mic waiting for speech")
@@ -8178,7 +8181,9 @@ public final class GuesliController: NSObject {
             SoundController.playDictationInsert(enabled: shouldPlayDictationLifecycleSounds)
         case .cancelled:
             break
-        case .failed(_, let error):
+        case .failed(let eventSessionID, let error):
+            if let currentSessionID = dictationAudioSessionManager.currentSessionID,
+               currentSessionID != eventSessionID { break }
             fputs("[guesli-native] recorder start failed: \(error)\n", stderr)
             if !isDictationTestMode {
                 recordDiagnosticIncident(
@@ -8194,6 +8199,8 @@ public final class GuesliController: NSObject {
             pendingDictationStopStartedAt = nil
             pendingReleaseSoundSessionID = nil
             clearCapturedDictationSessionContext()
+            hotkeyMonitor.cancelToggleMode()
+            indicator.setToggleDictation(false, config: config)
             setState(.idle)
             meetingMonitor.resumeAfterCooldown()
             meetingMonitor.refreshState()

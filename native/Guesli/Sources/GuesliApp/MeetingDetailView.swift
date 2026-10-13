@@ -396,6 +396,7 @@ struct MeetingDetailView: View {
                     if isProcessing {
                         MeetingProcessingDraftSection(
                             appState: appState,
+                            controller: controller,
                             meetingID: meeting.id,
                             transcriptPrefix: meeting.rawTranscript
                         )

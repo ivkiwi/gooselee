@@ -1581,7 +1581,7 @@ final class FloatingIndicatorController: NSObject {
                 .clear,
                 .colorWith(hex: 0xFFFFFF, alpha: isHovered ? 0.14 : 0.22),
                 "",
-                isHovered ? String(localized: "Hold \(config.dictationHotkey.label) to dictate") : "",
+                isHovered ? String(localized: "Hold \(config.dictationHotkey.localizedLabel) to dictate") : "",
                 .colorWith(hex: 0xFFFFFF, alpha: 0.75),
                 .colorWith(hex: 0xFFFFFF, alpha: 0.75),
                 isHovered ? 1.0 : 0.85

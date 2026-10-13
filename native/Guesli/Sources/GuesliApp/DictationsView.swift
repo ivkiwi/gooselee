@@ -174,7 +174,7 @@ struct DictationsView: View {
     private var emptyStateInstruction: String {
         appState.config.resolvedOnboardingUseCase.includesVoiceNotes
             ? String(localized: "Click Record Voice Note to capture your first note")
-            : String(localized: "Hold \(appState.config.dictationHotkey.label) to start dictating")
+            : String(localized: "Hold \(appState.config.dictationHotkey.localizedLabel) to start dictating")
     }
 
     private var voiceNoteButton: some View {

@@ -516,8 +516,8 @@ struct OnboardingView: View {
         let markdown: String
         if isSelectedModelReadyForDictationTest {
             markdown = selectedUseCase.includesVoiceNotes
-                ? String(localized: "Hold **\(selectedHotkey.label)** to record a voice note, then release.\nYour words should appear below.")
-                : String(localized: "Hold **\(selectedHotkey.label)** and say something, then release.\nYour words should appear below.")
+                ? String(localized: "Hold **\(selectedHotkey.localizedLabel)** to record a voice note, then release.\nYour words should appear below.")
+                : String(localized: "Hold **\(selectedHotkey.localizedLabel)** and say something, then release.\nYour words should appear below.")
         } else {
             markdown = dictationTestPreparationSubtitleMarkdown
         }
@@ -1205,7 +1205,7 @@ struct OnboardingView: View {
 
             VStack(spacing: GuesliTheme.spacing16) {
                 // Current hotkey display
-                Text(selectedHotkey.label)
+                Text(selectedHotkey.localizedLabel)
                     .font(.system(size: 24, weight: .semibold, design: .rounded))
                     .foregroundStyle(GuesliTheme.textPrimary)
                     .padding(.horizontal, GuesliTheme.spacing32)
@@ -1359,7 +1359,7 @@ struct OnboardingView: View {
                         HStack(spacing: 8) {
                             ProgressView()
                                 .controlSize(.small)
-                            Text("Listening... release \(selectedHotkey.label) when done")
+                            Text("Listening... release \(selectedHotkey.localizedLabel) when done")
                                 .font(GuesliTheme.caption())
                                 .foregroundStyle(GuesliTheme.textSecondary)
                         }
@@ -1367,7 +1367,7 @@ struct OnboardingView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "keyboard")
                                 .font(.system(size: 14))
-                            Text("Hold \(selectedHotkey.label) to start")
+                            Text("Hold \(selectedHotkey.localizedLabel) to start")
                                 .font(GuesliTheme.body())
                         }
                         .foregroundStyle(GuesliTheme.textTertiary)

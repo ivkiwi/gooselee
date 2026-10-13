@@ -725,7 +725,8 @@ struct MeetingDetailView: View {
                             templateMenuItem(
                                 title: template.name,
                                 systemImage: resolved.icon,
-                                isSelected: pendingTemplateID == template.id
+                                isSelected: pendingTemplateID == template.id,
+                                verbatim: true
                             )
                         }
                     }
@@ -1020,11 +1021,15 @@ struct MeetingDetailView: View {
         }
     }
 
-    private func templateMenuItem(title: String, systemImage: String, isSelected: Bool) -> some View {
+    private func templateMenuItem(title: String, systemImage: String, isSelected: Bool, verbatim: Bool = false) -> some View {
         HStack(spacing: 8) {
             Image(systemName: isSelected ? "checkmark" : systemImage)
                 .frame(width: 12)
-            Text(LocalizedStringKey(title))
+            if verbatim {
+                Text(verbatim: title)
+            } else {
+                Text(LocalizedStringKey(title))
+            }
         }
     }
 
@@ -1263,7 +1268,7 @@ struct MeetingDetailView: View {
                 if !appState.folders.isEmpty {
                     ForEach(appState.folders) { folder in
                         let isActive = meeting.folderID == folder.id
-                        folderPopoverRow(icon: "folder", label: folder.name, isActive: isActive) {
+                        folderPopoverRow(icon: "folder", label: folder.name, isActive: isActive, verbatim: true) {
                             controller.moveMeeting(id: meeting.id, toFolder: isActive ? nil : folder.id)
                             showFolderPopover = false
                         }
@@ -1293,14 +1298,19 @@ struct MeetingDetailView: View {
     }
 
     @ViewBuilder
-    private func folderPopoverRow(icon: String, label: String, isActive: Bool = false, action: @escaping () -> Void) -> some View {
+    private func folderPopoverRow(icon: String, label: String, isActive: Bool = false, verbatim: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
                     .font(.system(size: 11))
                     .frame(width: 16)
-                Text(LocalizedStringKey(label))
-                    .font(GuesliTheme.callout())
+                if verbatim {
+                    Text(verbatim: label)
+                        .font(GuesliTheme.callout())
+                } else {
+                    Text(LocalizedStringKey(label))
+                        .font(GuesliTheme.callout())
+                }
                 Spacer()
                 if isActive {
                     Image(systemName: "checkmark")

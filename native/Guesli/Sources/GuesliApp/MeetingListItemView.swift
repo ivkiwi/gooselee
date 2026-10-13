@@ -197,7 +197,8 @@ struct MeetingListItemView: View {
                     folderPopoverRow(
                         icon: hasChildren ? "folder.fill" : "folder",
                         label: folderBreadcrumb(folder),
-                        isActive: record.folderID == folder.id
+                        isActive: record.folderID == folder.id,
+                        verbatim: true
                     ) {
                         onMove(folder.id)
                         showFolderPopover = false
@@ -229,14 +230,19 @@ struct MeetingListItemView: View {
     }
 
     @ViewBuilder
-    private func folderPopoverRow(icon: String, label: String, isActive: Bool = false, action: @escaping () -> Void) -> some View {
+    private func folderPopoverRow(icon: String, label: String, isActive: Bool = false, verbatim: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
                     .font(.system(size: 11))
                     .frame(width: 16)
-                Text(LocalizedStringKey(label))
-                    .font(GuesliTheme.callout())
+                if verbatim {
+                    Text(verbatim: label)
+                        .font(GuesliTheme.callout())
+                } else {
+                    Text(LocalizedStringKey(label))
+                        .font(GuesliTheme.callout())
+                }
                 Spacer()
                 if isActive {
                     Image(systemName: "checkmark")

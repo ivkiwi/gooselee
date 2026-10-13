@@ -123,6 +123,8 @@ struct MeetingDetailView: View {
                         summaryFailureBanner(message: summaryError, meeting: meeting)
                     }
 
+                    MeetingQuickActionsView(appState: appState, meeting: meeting)
+                        .padding(GuesliTheme.spacing16)
                     content(for: meeting)
                 }
                 .background(GuesliTheme.backgroundBase)

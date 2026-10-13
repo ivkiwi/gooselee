@@ -33,6 +33,7 @@ final class FloatingMeetingTranscriptModel {
     var partialOthers = ""
     var isPaused = false
     var didCopy = false
+    var appState: AppState?
 
     var hasContent: Bool {
         !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -83,6 +84,10 @@ final class FloatingMeetingTranscriptPanelController {
 
     var isVisible: Bool { panel?.isVisible == true }
     var containsMouseLocation: Bool { panel?.frame.contains(NSEvent.mouseLocation) == true }
+
+    func configureQuickActions(appState: AppState) {
+        model.appState = appState
+    }
 
     func update(transcript: String, partialYou: String, partialOthers: String) {
         model.transcript = transcript
@@ -177,6 +182,13 @@ private struct FloatingMeetingTranscriptPanelView: View {
             .frame(height: 42)
 
             Divider().background(GuesliTheme.surfaceBorder)
+
+            if let appState = model.appState {
+                MeetingQuickActionsView(appState: appState, compact: true)
+                    .padding(.horizontal, GuesliTheme.spacing16)
+                    .padding(.vertical, GuesliTheme.spacing8)
+                Divider().background(GuesliTheme.surfaceBorder)
+            }
 
             LiveTranscriptView(
                 transcript: model.transcript,

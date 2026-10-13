@@ -683,6 +683,9 @@ enum MeetingSummaryClient {
     }
 
     static func summaryInstructions(for template: MeetingTemplateSnapshot, existingNotes: String? = nil, manualNotes: String? = nil) -> String {
+        if template.id == MeetingFollowUpEmail.template.id {
+            return template.prompt
+        }
         let notePreservationInstructions: String
         let hasManualNotes = !(manualNotes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
         if let existingNotes,

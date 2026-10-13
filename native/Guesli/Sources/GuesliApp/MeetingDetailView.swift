@@ -741,6 +741,10 @@ struct MeetingDetailView: View {
 
             retranscribeAction(for: meeting)
 
+            if meeting.status == .completed && meeting.notesState == .structuredNotes {
+                MeetingFollowUpEmailButton(meeting: meeting, controller: controller, isBackendConfigured: hasApiKey)
+            }
+
             Button(action: {
                 controller.copyToClipboard(activeCopyText(for: meeting))
             }) {

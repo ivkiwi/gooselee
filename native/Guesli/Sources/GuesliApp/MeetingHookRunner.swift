@@ -113,10 +113,12 @@ final class MeetingHookRunner: MeetingHookDispatching {
         process.standardOutput = FileHandle.nullDevice
         let standardErrorPipe = Pipe()
         let standardErrorBuffer = BoundedOutputBuffer(capacity: Self.maxLoggedStandardErrorBytes)
+        let standardErrorClosed = DispatchSemaphore(value: 0)
         standardErrorPipe.fileHandleForReading.readabilityHandler = { handle in
             let chunk = handle.availableData
             if chunk.isEmpty {
                 handle.readabilityHandler = nil
+                standardErrorClosed.signal()
                 return
             }
             standardErrorBuffer.append(chunk)
@@ -149,23 +151,20 @@ final class MeetingHookRunner: MeetingHookDispatching {
         } catch {
             writeLog("stdin write failed: id=\(event.id) path=\(trimmedPath) error=\(error.localizedDescription)")
             closeInputPipe(inputPipe, event: event, path: trimmedPath)
-            standardErrorPipe.fileHandleForReading.readabilityHandler = nil
             terminate(process: process, semaphore: terminationSemaphore)
-            drainStandardError(from: standardErrorPipe, into: standardErrorBuffer)
+            finishStandardError(standardErrorPipe, closed: standardErrorClosed)
             return
         }
         closeInputPipe(inputPipe, event: event, path: trimmedPath)
 
         if terminationSemaphore.wait(timeout: .now() + .seconds(timeoutSeconds)) == .timedOut {
-            standardErrorPipe.fileHandleForReading.readabilityHandler = nil
             terminate(process: process, semaphore: terminationSemaphore)
-            drainStandardError(from: standardErrorPipe, into: standardErrorBuffer)
+            finishStandardError(standardErrorPipe, closed: standardErrorClosed)
             writeLog("timed out: id=\(event.id) path=\(trimmedPath) timeout=\(timeoutSeconds)s\(standardErrorSuffix(from: standardErrorBuffer))")
             return
         }
 
-        standardErrorPipe.fileHandleForReading.readabilityHandler = nil
-        drainStandardError(from: standardErrorPipe, into: standardErrorBuffer)
+        finishStandardError(standardErrorPipe, closed: standardErrorClosed)
 
         if terminationStatus == 0 {
             writeLog("completed: id=\(event.id) path=\(trimmedPath) exit=0")
@@ -191,11 +190,11 @@ final class MeetingHookRunner: MeetingHookDispatching {
         }
     }
 
-    private func drainStandardError(from pipe: Pipe, into buffer: BoundedOutputBuffer) {
+    /// Waits briefly for stderr EOF: a hook's background child can inherit the pipe and keep it open forever.
+    private func finishStandardError(_ pipe: Pipe, closed: DispatchSemaphore) {
+        _ = closed.wait(timeout: .now() + .seconds(1))
+        pipe.fileHandleForReading.readabilityHandler = nil
         do {
-            if let trailingData = try pipe.fileHandleForReading.readToEnd(), !trailingData.isEmpty {
-                buffer.append(trailingData)
-            }
             try pipe.fileHandleForReading.close()
         } catch {
             writeLog("stderr capture failed: error=\(error.localizedDescription)")

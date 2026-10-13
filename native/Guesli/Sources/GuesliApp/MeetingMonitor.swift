@@ -469,13 +469,13 @@ private actor MeetingDetectionService {
 
     func markPromptAutoDismissed(_ candidate: MeetingCandidate) {
         promptState.markAutoDismissed(candidate)
-        log("prompt_auto_dismissed id=\(candidate.id)")
+        log("prompt_auto_dismissed id=\(DiagnosticRedaction.opaqueID(candidate.id))")
         scheduleEvaluation(.promptStateChanged)
     }
 
     func markPromptUserDismissed(_ candidate: MeetingCandidate) {
         promptState.markUserDismissed(candidate)
-        log("prompt_suppressed id=\(candidate.id) reason=user_dismissed")
+        log("prompt_suppressed id=\(DiagnosticRedaction.opaqueID(candidate.id)) reason=user_dismissed")
         scheduleEvaluation(.promptStateChanged)
     }
 
@@ -486,7 +486,7 @@ private actor MeetingDetectionService {
 
     func markRecordingStarted(_ candidate: MeetingCandidate?) {
         if let candidate {
-            log("recording_started id=\(candidate.id)")
+            log("recording_started id=\(DiagnosticRedaction.opaqueID(candidate.id))")
         } else {
             log("recording_started")
         }
@@ -631,7 +631,7 @@ private actor MeetingDetectionService {
         switch decision.action {
         case .show:
             guard let candidate = decision.candidate else { return }
-            log("prompt_shown id=\(candidate.id) platform=\(candidate.platform.displayName) app=\(candidate.appName)")
+            log("prompt_shown id=\(DiagnosticRedaction.opaqueID(candidate.id)) platform=\(candidate.platform.displayName) app=\(candidate.appName)")
             emitPromptUpdate(.show(candidate))
         case .hide:
             emitPromptUpdate(.hide)
@@ -688,7 +688,7 @@ private actor MeetingDetectionService {
         guard candidate?.id != lastLoggedCandidateID else { return }
         lastLoggedCandidateID = candidate?.id
         if let candidate {
-            log("candidate_detected id=\(candidate.id) platform=\(candidate.platform.displayName) app=\(candidate.appName)")
+            log("candidate_detected id=\(DiagnosticRedaction.opaqueID(candidate.id)) platform=\(candidate.platform.displayName) app=\(candidate.appName)")
         }
     }
 
@@ -702,15 +702,15 @@ private actor MeetingDetectionService {
         lastSuppressionLogKey = key
         switch decision.reason {
         case .autoDismissedSuppression:
-            log("prompt_suppressed id=\(candidate.id) reason=auto_dismissed")
+            log("prompt_suppressed id=\(DiagnosticRedaction.opaqueID(candidate.id)) reason=auto_dismissed")
         case .userDismissedSuppression:
-            log("prompt_suppressed id=\(candidate.id) reason=user_dismissed")
+            log("prompt_suppressed id=\(DiagnosticRedaction.opaqueID(candidate.id)) reason=user_dismissed")
         case .recordingStartedSuppression:
-            log("prompt_suppressed id=\(candidate.id) reason=recording_started")
+            log("prompt_suppressed id=\(DiagnosticRedaction.opaqueID(candidate.id)) reason=recording_started")
         case .calendarNotificationVisible:
-            log("prompt_suppressed id=\(candidate.id) reason=calendar_notification_visible")
+            log("prompt_suppressed id=\(DiagnosticRedaction.opaqueID(candidate.id)) reason=calendar_notification_visible")
         case .recording:
-            log("prompt_suppressed id=\(candidate.id) reason=recording")
+            log("prompt_suppressed id=\(DiagnosticRedaction.opaqueID(candidate.id)) reason=recording")
         default:
             break
         }

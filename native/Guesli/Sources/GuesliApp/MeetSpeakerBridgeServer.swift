@@ -55,9 +55,9 @@ enum MeetSpeakerBridgeActivation {
             || source.suppressionID?.hasPrefix("googleMeet:") == true {
             return true
         }
-        guard let normalizedURL = source.normalizedURL,
-              let url = URL(string: normalizedURL) else { return false }
-        return url.host?.lowercased() == "meet.google.com"
+        // Stabilized candidates carry a meeting-session ID and a scheme-less URL like meet.google.com/abc-defg-hij.
+        guard let normalizedURL = source.normalizedURL else { return false }
+        return MeetingURLNormalizer.normalize(normalizedURL)?.platform == .googleMeet
     }
 
     static func shouldRun(
@@ -80,7 +80,8 @@ final class MeetSpeakerBridgeServer {
 
     private var listener: NWListener?
     private var pairingToken = ""
-    var onObservation: ((MeetSpeakerObservation) -> Void)?
+    /// Returns true when the observation belongs to the room being recorded (or about to be).
+    var onObservation: ((MeetSpeakerObservation) -> Bool)?
 
     func start(pairingToken: String) {
         let pairingToken = pairingToken.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -139,10 +140,12 @@ final class MeetSpeakerBridgeServer {
         guard !observations.isEmpty else {
             return Self.http(status: "400 Bad Request")
         }
-        for observation in observations {
-            onObservation?(observation)
+        var confirmsRoom = false
+        for observation in observations where onObservation?(observation) == true {
+            confirmsRoom = true
         }
-        return Self.http(status: "204 No Content")
+        // The extension reads 204 as "this room is being recorded", so another room gets a refusal.
+        return Self.http(status: confirmsRoom ? "204 No Content" : "409 Conflict")
     }
 
     private func receiveRequest(on connection: NWConnection, buffer: Data = Data()) {
@@ -345,6 +348,8 @@ final class MeetSpeakerBridgeServer {
                 return Int(trimmed.dropFirst("content-length:".count).trimmingCharacters(in: .whitespacesAndNewlines))
             }
             .first ?? 0
+        // Runs before authorization: range-check before adding, so a huge value cannot overflow and crash the app.
+        guard contentLength >= 0, contentLength <= Int.max - headerLength else { return Int.max }
         return headerLength + contentLength
     }
 

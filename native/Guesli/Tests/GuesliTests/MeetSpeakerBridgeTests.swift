@@ -105,6 +105,15 @@ struct MeetSpeakerBridgeTests {
         #expect(MeetSpeakerBridgeServer.isOversizedHTTPRequestBuffer(requestData))
     }
 
+    @Test("rejects overflowing or negative Content-Length without crashing", arguments: [
+        "9223372036854775807", "-1",
+    ])
+    func rejectsOutOfRangeContentLength(contentLength: String) {
+        let data = Data("POST /v1/meet-speaker HTTP/1.1\r\nContent-Length: \(contentLength)\r\n\r\n".utf8)
+
+        #expect(MeetSpeakerBridgeServer.isOversizedHTTPRequestBuffer(data))
+    }
+
     @Test("accepts Chrome private network preflight without body")
     func acceptsChromePrivateNetworkPreflightWithoutBody() throws {
         let request = "OPTIONS /v1/meet-speaker HTTP/1.1\r\n"
@@ -174,6 +183,21 @@ struct MeetSpeakerBridgeTests {
             source: meetSource,
             isMeetingActive: false
         ))
+    }
+
+    @Test("bridge recognizes a stabilized Meet session with a scheme-less URL")
+    func bridgeRecognizesStabilizedMeetSession() {
+        let candidate = MeetingCandidate(
+            id: "meeting-session:browser:com.google.Chrome:1800000000",
+            platform: .googleMeet,
+            appName: "Chrome",
+            url: "meet.google.com/abc-defg-hij",
+            evidence: [.browserURL, .micActive],
+            startedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            meetingTitle: nil
+        )
+
+        #expect(MeetSpeakerBridgeActivation.isGoogleMeetSource(MeetingAutoStopSource(candidate: candidate)))
     }
 
     @Test("maps observed Meet speaker names to diarization clusters")
@@ -568,6 +592,25 @@ struct MeetSpeakerBridgeTests {
         #expect(MeetingSession.observedParticipants(from: stored).map(\.name) == ["Alice Owner", "Bob Reviewer"])
     }
 #endif
+
+    @Test("only the recorded room is confirmed to the extension")
+    func onlyRecordedRoomIsConfirmed() throws {
+        let recordedRoom = try #require(MeetingAutoStopSource(
+            meetingURL: URL(string: "https://meet.google.com/abc-defg-hij")!
+        ))
+        func route(_ url: String, recording: Bool) -> MeetSpeakerObservationRoute {
+            MeetSpeakerObservationRouting.route(
+                matchesActiveSource: MeetSpeakerObservationRouting.matches(meetingURL: url, activeSource: recordedRoom),
+                isTemporallyRelevant: true,
+                hasActiveRecordingSession: recording,
+                canBufferForPendingMeeting: false
+            )
+        }
+
+        #expect(route("https://meet.google.com/abc-defg-hij", recording: true).confirmsRecordingRoom)
+        #expect(!route("https://meet.google.com/zzz-yyyy-xxx", recording: true).confirmsRecordingRoom)
+        #expect(!route("https://meet.google.com/abc-defg-hij", recording: false).confirmsRecordingRoom)
+    }
 
     @Test("bridge routing drops observations when no meeting is active")
     func bridgeRoutingDropsObservationsWhenNoMeetingIsActive() throws {

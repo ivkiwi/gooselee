@@ -181,6 +181,11 @@ enum MeetSpeakerObservationRoute: Equatable {
     case dropNoActiveMeeting
     case dropSourceMismatch
     case dropStale
+
+    /// The observation came from the room of the active or starting recording.
+    var confirmsRecordingRoom: Bool {
+        self != .dropSourceMismatch && self != .dropNoActiveMeeting
+    }
 }
 
 enum MeetSpeakerObservationRouting {
@@ -802,8 +807,9 @@ public final class GuesliController: NSObject {
         preferencesWindowController = PreferencesWindowController(controller: self)
         historyWindowController = RecentHistoryWindowController(store: dictationStore, controller: self)
         meetSpeakerBridge.onObservation = { [weak self] observation in
-            Task { @MainActor [weak self] in
-                self?.handleMeetSpeakerObservation(observation)
+            // The bridge listener runs on the main queue and needs the routing decision for its response.
+            MainActor.assumeIsolated {
+                self?.handleMeetSpeakerObservation(observation) ?? false
             }
         }
         refreshUI()
@@ -2548,15 +2554,16 @@ public final class GuesliController: NSObject {
         return appState.upcomingCalendarEvents.first(where: { $0.id == eventID })?.participants ?? []
     }
 
-    private func handleMeetSpeakerObservation(_ observation: MeetSpeakerObservation) {
+    private func handleMeetSpeakerObservation(_ observation: MeetSpeakerObservation) -> Bool {
         prunePendingMeetSpeakerObservations()
         meetSpeakerBridgeStats.recordReceived(observation)
-        switch MeetSpeakerObservationRouting.route(
+        let route = MeetSpeakerObservationRouting.route(
             matchesActiveSource: meetSpeakerObservationMatchesActiveSource(observation),
             isTemporallyRelevant: meetSpeakerObservationIsTemporallyRelevant(observation),
             hasActiveRecordingSession: activeMeetingSession?.isRecording == true,
             canBufferForPendingMeeting: canBufferMeetSpeakerObservationForPendingMeeting
-        ) {
+        )
+        switch route {
         case .recordToActiveMeeting:
             if let activeMeetingID {
                 persistMeetSpeakerObservation(observation, meetingID: activeMeetingID)
@@ -2576,6 +2583,7 @@ public final class GuesliController: NSObject {
         case .dropStale:
             meetSpeakerBridgeStats.droppedStale += 1
         }
+        return route.confirmsRecordingRoom
     }
 
     func setMeetSpeakerBridgeEnabled(_ enabled: Bool) {
@@ -2804,20 +2812,20 @@ public final class GuesliController: NSObject {
                     if let meetingID = self.activeMeetingID {
                         self.scheduleCalendarAutoRecordConfirmation(meetingID: meetingID)
                     }
-                    DiagnosticsLog.write("[calendar] auto-record started key=\(key) title=\(event.title) source=\(event.source.rawValue)")
+                    DiagnosticsLog.write("[calendar] auto-record started key=\(key) source=\(event.source.rawValue)")
                     self.showAutoRecordStartedNotification(event, notificationKey: key)
                 } else {
                     self.cancelCalendarAutoRecordConfirmation()
                     self.autoRecordedCalendarEventIDs.remove(key)
-                    DiagnosticsLog.write("[calendar] auto-record failed key=\(key) title=\(event.title) source=\(event.source.rawValue)")
+                    DiagnosticsLog.write("[calendar] auto-record failed key=\(key) source=\(event.source.rawValue)")
                 }
             }
         )
         if didScheduleStart {
-            DiagnosticsLog.write("[calendar] auto-record starting key=\(key) title=\(event.title) source=\(event.source.rawValue)")
+            DiagnosticsLog.write("[calendar] auto-record starting key=\(key) source=\(event.source.rawValue)")
         } else {
             cancelCalendarAutoRecordConfirmation()
-            DiagnosticsLog.write("[calendar] auto-record failed key=\(key) title=\(event.title) source=\(event.source.rawValue)")
+            DiagnosticsLog.write("[calendar] auto-record failed key=\(key) source=\(event.source.rawValue)")
             autoRecordedCalendarEventIDs.remove(key)
         }
         return didScheduleStart
@@ -3010,7 +3018,7 @@ public final class GuesliController: NSObject {
 
             // Show "starts in X min" notification now
             let didShow = handleUpcomingMeeting(upcomingEvent, notificationKey: key)
-            DiagnosticsLog.write("[calendar] notification \(didShow ? "shown" : "failed") key=\(key) title=\(event.title) trigger=\(reason)")
+            DiagnosticsLog.write("[calendar] notification \(didShow ? "shown" : "failed") key=\(key) trigger=\(reason)")
 
             // Schedule a second "Meeting starting now" notification at event start time for pre-start prompts.
             let delay = event.startDate.timeIntervalSinceNow
@@ -3057,7 +3065,7 @@ public final class GuesliController: NSObject {
               config.showScheduledMeetingNotifications,
               !isMeetingRecording(),
               !isStartingMeetingRecording else {
-            DiagnosticsLog.write("[calendar] starting-now skipped title=\(title) has_url=\(meetingURL != nil)")
+            DiagnosticsLog.write("[calendar] starting-now skipped has_url=\(meetingURL != nil)")
             return false
         }
         isShowingCalendarNotification = true
@@ -3107,7 +3115,7 @@ public final class GuesliController: NSObject {
                 self?.showPendingMeetingCompletionNotificationIfPossible()
             }
         )
-        DiagnosticsLog.write("[calendar] starting-now \(didShow ? "shown" : "failed") title=\(title)")
+        DiagnosticsLog.write("[calendar] starting-now \(didShow ? "shown" : "failed")")
         return didShow
     }
 
@@ -3129,7 +3137,7 @@ public final class GuesliController: NSObject {
                 self?.showPendingMeetingCompletionNotificationIfPossible()
             }
         )
-        DiagnosticsLog.write("[calendar] auto-record notification \(didShow ? "shown" : "failed") key=\(notificationKey) title=\(event.title)")
+        DiagnosticsLog.write("[calendar] auto-record notification \(didShow ? "shown" : "failed") key=\(notificationKey)")
     }
 
     func addCustomWord(_ word: CustomWord) {
@@ -5141,7 +5149,7 @@ public final class GuesliController: NSObject {
             }
             scheduleICloudSyncAfterLocalChange()
             syncAppState()
-            fputs("[guesli-native] created meeting from calendar event: \(event.title) (folder=\(folderID.map(String.init) ?? "none"))\n", stderr)
+            fputs("[guesli-native] created meeting from calendar event (folder=\(folderID.map(String.init) ?? "none"))\n", stderr)
         } catch {
             fputs("[guesli-native] failed to create meeting from calendar event: \(error)\n", stderr)
         }

@@ -979,9 +979,9 @@ final class CoreAudioSystemRecorder: SystemAudioCapturing, SystemAudioDiagnostic
         var errorDescription: String? {
             switch self {
             case .fileCreationFailed:
-                return "Could not create output file"
+                return String(localized: "Could not create output file")
             case .noDefaultOutputDevice:
-                return "No default audio output device found"
+                return String(localized: "No default audio output device found")
             case .tapCreationFailed(let s):
                 return "Process tap creation failed (status: \(s))"
             case .aggregateDeviceCreationFailed(let s):

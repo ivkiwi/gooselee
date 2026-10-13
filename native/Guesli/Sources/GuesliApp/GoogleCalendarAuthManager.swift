@@ -15,14 +15,14 @@ enum GoogleCalendarAuthError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notAuthenticated: return "Not signed in to Google Calendar"
-        case .notAvailable: return "Google Calendar credentials not configured"
-        case .callbackTimeout: return "Sign-in timed out — no response from browser"
-        case .callbackMissingCode: return "OAuth callback missing authorization code"
-        case .callbackStateMismatch: return "OAuth state mismatch — possible CSRF attack"
-        case .tokenExchangeFailed(let msg): return "Token exchange failed: \(msg)"
-        case .refreshFailed(let msg): return "Token refresh failed: \(msg)"
-        case .portInUse: return "Callback port 1456 is already in use"
+        case .notAuthenticated: return String(localized: "Not signed in to Google Calendar")
+        case .notAvailable: return String(localized: "Google Calendar credentials not configured")
+        case .callbackTimeout: return String(localized: "Sign-in timed out — no response from browser")
+        case .callbackMissingCode: return String(localized: "OAuth callback missing authorization code")
+        case .callbackStateMismatch: return String(localized: "OAuth state mismatch — possible CSRF attack")
+        case .tokenExchangeFailed(let msg): return String(localized: "Token exchange failed: \(msg)")
+        case .refreshFailed(let msg): return String(localized: "Token refresh failed: \(msg)")
+        case .portInUse: return String(localized: "Callback port 1456 is already in use")
         }
     }
 }

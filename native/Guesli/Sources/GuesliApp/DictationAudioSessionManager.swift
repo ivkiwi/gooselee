@@ -99,9 +99,9 @@ final class DictationAudioSessionManager: @unchecked Sendable {
         var errorDescription: String? {
             switch self {
             case .noAudioBuffer:
-                return "Microphone capture did not deliver audio."
+                return String(localized: "Microphone capture did not deliver audio.")
             case .microphoneStartStalled:
-                return "The microphone did not start, so nothing was recorded. Please try again."
+                return String(localized: "The microphone did not start, so nothing was recorded. Please try again.")
             case .staleSession(let mode):
                 return "Stale dictation session was ignored for \(mode)."
             }

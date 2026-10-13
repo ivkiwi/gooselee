@@ -1,0 +1,7 @@
+// Meeting prompt panel (MeetingNotificationController.swift, MeetingJoinDefaultAction.swift)
+// Split-button labels must fit 86pt at 11pt medium; measured: 78.8 / 67.6 / 80.3.
+"Join & Record" = "Вход и запись";
+"Join Only" = "Только вход";
+"Record Only" = "Только запись";
+"Start Recording" = "Начать запись";
+"Dismiss" = "Скрыть";

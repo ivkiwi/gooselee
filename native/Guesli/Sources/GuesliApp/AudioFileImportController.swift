@@ -34,8 +34,8 @@ enum AudioFileImportController {
         await withCheckedContinuation { continuation in
             DispatchQueue.main.async {
                 let panel = NSOpenPanel()
-                panel.title = "Import Audio File for Transcription"
-                panel.message = "Choose an audio file (m4a, mp4, wav, mp3)"
+                panel.title = String(localized: "Import Audio File for Transcription")
+                panel.message = String(localized: "Choose an audio file (m4a, mp4, wav, mp3)")
                 panel.allowedContentTypes = allowedTypes
                 panel.allowsMultipleSelection = false
                 panel.canChooseDirectories = false
@@ -70,13 +70,13 @@ enum AudioFileImportController {
         var errorDescription: String? {
             switch self {
             case .unsupportedFormat:
-                return "This audio file format is not supported."
+                return String(localized: "This audio file format is not supported.")
             case .conversionFailed(let detail):
-                return "Could not convert the audio file. \(detail)"
+                return String(localized: "Could not convert the audio file. \(detail)")
             case .noAudioTracks:
-                return "The selected file does not contain any audio tracks."
+                return String(localized: "The selected file does not contain any audio tracks.")
             case .readError(let detail):
-                return "Could not read the audio file. \(detail)"
+                return String(localized: "Could not read the audio file. \(detail)")
             }
         }
     }

@@ -107,7 +107,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenuItem = NSMenuItem()
         let appMenu = NSMenu()
         let settingsItem = NSMenuItem(
-            title: "Settings…",
+            title: String(localized: "Settings…"),
             action: #selector(AppDelegate.openPreferences(_:)),
             keyEquivalent: ","
         )
@@ -115,25 +115,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(settingsItem)
         appMenu.addItem(.separator())
         appMenu.addItem(
-            withTitle: "Hide \(AppIdentity.displayName)",
+            withTitle: String(localized: "Hide \(AppIdentity.displayName)"),
             action: #selector(NSApplication.hide(_:)),
             keyEquivalent: "h"
         )
         let hideOthersItem = NSMenuItem(
-            title: "Hide Others",
+            title: String(localized: "Hide Others"),
             action: #selector(NSApplication.hideOtherApplications(_:)),
             keyEquivalent: "h"
         )
         hideOthersItem.keyEquivalentModifierMask = [.command, .option]
         appMenu.addItem(hideOthersItem)
         appMenu.addItem(
-            withTitle: "Show All",
+            withTitle: String(localized: "Show All"),
             action: #selector(NSApplication.unhideAllApplications(_:)),
             keyEquivalent: ""
         )
         appMenu.addItem(.separator())
         appMenu.addItem(
-            withTitle: "Quit \(AppIdentity.displayName)",
+            withTitle: String(localized: "Quit \(AppIdentity.displayName)"),
             action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"
         )
@@ -141,23 +141,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainMenu.addItem(appMenuItem)
 
         let editMenuItem = NSMenuItem()
-        let editMenu = NSMenu(title: "Edit")
+        let editMenu = NSMenu(title: String(localized: "Edit"))
         editMenu.addItem(withTitle: String(localized: "Undo"), action: Selector(("undo:")), keyEquivalent: "z")
 
-        let redo = NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "z")
+        let redo = NSMenuItem(title: String(localized: "Redo"), action: Selector(("redo:")), keyEquivalent: "z")
         redo.keyEquivalentModifierMask = [.command, .shift]
         editMenu.addItem(redo)
 
         editMenu.addItem(.separator())
-        editMenu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: String(localized: "Cut"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
         editMenu.addItem(withTitle: String(localized: "Copy"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
         editMenu.addItem(withTitle: String(localized: "Paste"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
         editMenu.addItem(withTitle: String(localized: "Delete"), action: #selector(NSText.delete(_:)), keyEquivalent: "")
         editMenu.addItem(.separator())
-        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editMenu.addItem(withTitle: String(localized: "Select All"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         editMenu.addItem(.separator())
         let findItem = NSMenuItem(
-            title: "Find",
+            title: String(localized: "Find"),
             action: #selector(AppDelegate.focusSearch(_:)),
             keyEquivalent: "f"
         )
@@ -167,17 +167,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editMenuItem.submenu = editMenu
         mainMenu.addItem(editMenuItem)
 
-        let viewMenuItem = NSMenuItem(title: "View", action: nil, keyEquivalent: "")
-        let viewMenu = NSMenu(title: "View")
+        let viewMenuItem = NSMenuItem(title: String(localized: "View"), action: nil, keyEquivalent: "")
+        let viewMenu = NSMenu(title: String(localized: "View"))
         let dictationsItem = NSMenuItem(
-            title: "Dictations",
+            title: String(localized: "Dictations"),
             action: #selector(AppDelegate.showDictations(_:)),
             keyEquivalent: "1"
         )
         dictationsItem.target = self
         viewMenu.addItem(dictationsItem)
         let meetingsItem = NSMenuItem(
-            title: "Meetings",
+            title: String(localized: "Meetings"),
             action: #selector(AppDelegate.showMeetings(_:)),
             keyEquivalent: "2"
         )
@@ -186,27 +186,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
 
-        let windowMenuItem = NSMenuItem(title: "Window", action: nil, keyEquivalent: "")
-        let windowMenu = NSMenu(title: "Window")
+        let windowMenuItem = NSMenuItem(title: String(localized: "Window"), action: nil, keyEquivalent: "")
+        let windowMenu = NSMenu(title: String(localized: "Window"))
         windowMenu.addItem(
-            withTitle: "Minimize",
+            withTitle: String(localized: "Minimize"),
             action: #selector(NSWindow.performMiniaturize(_:)),
             keyEquivalent: "m"
         )
         windowMenu.addItem(
-            withTitle: "Zoom",
+            withTitle: String(localized: "Zoom"),
             action: #selector(NSWindow.performZoom(_:)),
             keyEquivalent: ""
         )
         windowMenu.addItem(.separator())
         windowMenu.addItem(
-            withTitle: "Close Window",
+            withTitle: String(localized: "Close Window"),
             action: #selector(NSWindow.performClose(_:)),
             keyEquivalent: "w"
         )
         windowMenu.addItem(.separator())
         windowMenu.addItem(
-            withTitle: "Bring All to Front",
+            withTitle: String(localized: "Bring All to Front"),
             action: #selector(NSApplication.arrangeInFront(_:)),
             keyEquivalent: ""
         )
@@ -340,10 +340,10 @@ final class SparkleUpdateDelegate: NSObject, SPUUpdaterDelegate, SPUStandardUser
         lastPresentedAt = Date()
 
         let alert = NSAlert()
-        alert.messageText = "Update did not finish"
+        alert.messageText = String(localized: "Update did not finish")
         alert.informativeText = UpdateFailureGuidance.message
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Open Download Page")
+        alert.addButton(withTitle: String(localized: "Open Download Page"))
         alert.addButton(withTitle: String(localized: "OK"))
 
         if alert.runModal() == .alertFirstButtonReturn,
@@ -385,11 +385,11 @@ enum UpdateFailureGuidance {
     static let downloadPageURLString = "https://github.com/ivkiwi/gooselee/releases"
 
     static var message: String {
-        """
+        String(localized: """
         Please quit \(AppIdentity.displayName), reopen it from Applications, and try the update once more.
 
         If this keeps happening, download the latest DMG and replace \(AppIdentity.displayName) manually. This can happen when the local updater cannot finish preparing or replacing the app.
-        """
+        """)
     }
 
     static func isNoUpdateError(_ error: NSError) -> Bool {

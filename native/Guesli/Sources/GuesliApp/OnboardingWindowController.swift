@@ -51,7 +51,7 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
             backing: .buffered,
             defer: false
         )
-        window.title = "Welcome to Guesli"
+        window.title = String(localized: "Welcome to Guesli")
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.titlebarAppearsTransparent = true

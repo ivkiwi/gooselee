@@ -1,0 +1,150 @@
+// GuesliController.swift
+
+// Dictation backend readiness (indicator)
+"Warming up %@..." = "Прогрев %@...";
+"%@ unavailable" = "%@ недоступна";
+"AI cleanup failed" = "Ошибка ИИ-очистки";
+
+// Error descriptions
+"The updated meeting notes could not be saved." = "Не удалось сохранить обновлённые заметки.";
+"The updated meeting notes could not be saved. %@" = "Не удалось сохранить обновлённые заметки. %@";
+"That template no longer exists. Choose another template and try again." = "Шаблон удалён. Выберите другой и повторите.";
+"Meeting re-transcription could not continue because Guesli is no longer available." = "Повторная расшифровка прервана: Guesli недоступен.";
+"The saved meeting recording is no longer available on disk." = "Сохранённой записи встречи больше нет на диске.";
+"Download a transcription model before re-transcribing this meeting." = "Загрузите модель расшифровки, чтобы повторно расшифровать встречу.";
+"Re-transcription finished, but no speech was detected in the saved recording." = "Повторная расшифровка завершена, но речь в записи не найдена.";
+"The re-transcribed meeting could not be saved. %@" = "Не удалось сохранить повторно расшифрованную встречу. %@";
+"The meeting finished transcribing, but the recording could not be saved. %@" = "Встреча расшифрована, но запись сохранить не удалось. %@";
+"The saved meeting recording could not be deleted, so the meeting was left in place. %@" = "Не удалось удалить запись, поэтому встреча оставлена. %@";
+"The meeting could not be deleted. %@" = "Не удалось удалить встречу. %@";
+
+// iCloud sync status
+"Checking iCloud..." = "Проверка iCloud...";
+"Setting up private iCloud sync..." = "Настройка синхронизации iCloud...";
+"Sync needs iCloud: %@" = "Нужен iCloud: %@";
+"Turn on iCloud sync first." = "Сначала включите синхронизацию iCloud.";
+"Sync already in progress." = "Синхронизация уже идёт.";
+"Syncing with private iCloud..." = "Синхронизация с iCloud...";
+"Synced with %@." = "Синхронизировано с %@.";
+"All text is up to date." = "Все тексты актуальны.";
+"Sync failed: %@" = "Ошибка синхронизации: %@";
+"iCloud sync is off." = "Синхронизация iCloud выключена.";
+"%@ up, %@ down" = "отпр. %@, получ. %@";
+"dictation" = "дикт.";
+"dictations" = "дикт.";
+"meeting" = "встр.";
+"meetings" = "встр.";
+
+// Model selection / calendar
+"Meeting model unavailable" = "Модель для встреч недоступна";
+"%@ is a live dictation model and cannot transcribe recordings." = "%@ — модель живой диктовки, записи она не расшифровывает.";
+"Download %@ before using it for meeting transcription." = "Загрузите %@, чтобы расшифровывать встречи.";
+"Custom Cleanup" = "Своя очистка";
+
+// Meeting notification panel
+"Meeting starting now" = "Встреча начинается";
+"Upcoming meeting" = "Скоро встреча";
+"starts in %lld min" = "через %lld мин";
+"starting now" = "начинается";
+"started %lld min ago" = "началась %lld мин назад";
+"Recording scheduled meeting" = "Запись запланированной встречи";
+"Open" = "Открыть";
+"Microphone issue" = "Проблема с микрофоном";
+"Transcription complete" = "Расшифровка готова";
+"View Notes" = "Заметки";
+"Meeting signal lost" = "Сигнал встречи пропал";
+"Still recording. Stop if the meeting ended." = "Запись идёт. Остановите, если встреча закончилась.";
+"Stop Recording" = "Остановить";
+"Meeting detected" = "Обнаружена встреча";
+"Meeting ended" = "Встреча закончилась";
+"%@ · scheduled time is over" = "%@ · время вышло";
+
+// Model preparation
+"Preparing %@" = "Подготовка %@";
+"Preparing %@..." = "Подготовка %@...";
+"%@ ready" = "%@ готова";
+"Ready for transcription" = "Готова к расшифровке";
+"Model setup paused" = "Настройка модели приостановлена";
+"Download paused" = "Загрузка приостановлена";
+"Downloading %@..." = "Загрузка %@...";
+"%@ was not downloaded successfully." = "Не удалось загрузить %@.";
+"Optimizing %@ for this Mac..." = "Оптимизация %@ для этого Mac...";
+"Model setup failed. Restart Guesli or retry from Models." = "Ошибка настройки модели. Перезапустите Guesli или повторите в «Моделях».";
+"Download failed. Check your connection and retry." = "Ошибка загрузки. Проверьте подключение и повторите.";
+"Update checks are disabled for this build." = "В этой сборке проверка обновлений отключена.";
+
+// Delete / clear history
+"Couldn't Delete Meeting" = "Не удалось удалить встречу";
+"Couldn't Clear Meeting History" = "Не удалось очистить историю";
+"A meeting is recording or still being processed. Please wait before clearing saved meetings." = "Встреча записывается или обрабатывается. Подождите перед очисткой.";
+"Saved meeting audio or waveform cache files could not be deleted, so meeting history was left in place. %@" = "Не удалось удалить аудио встреч или кэш волновых форм, история не изменена. %@";
+
+// Quit confirmation
+"Meeting recording is starting" = "Запись встречи запускается";
+"Quitting now will cancel the meeting recording before it has been saved." = "Выход сейчас отменит запись встречи до её сохранения.";
+"Meeting recording in progress" = "Идёт запись встречи";
+"Quitting now will stop the meeting recording and the current transcript may be lost. Stop the recording first if you want Guesli to save notes." = "Выход сейчас остановит запись, расшифровка может потеряться. Чтобы Guesli сохранил заметки, сначала остановите запись.";
+"Meeting transcription in progress" = "Идёт расшифровка встречи";
+"Quitting now will interrupt transcription and the meeting notes may not be saved." = "Выход сейчас прервёт расшифровку, заметки могут не сохраниться.";
+"Keep Guesli Running" = "Не выходить";
+"Stop, Save & Quit" = "Сохранить и выйти";
+"Finish & Quit" = "Завершить и выйти";
+
+// Meeting start / resume / import
+"Meeting" = "Встреча";
+"Meeting failed to start" = "Встреча не запустилась";
+"Download a transcription model before recording a meeting." = "Загрузите модель расшифровки перед записью встречи.";
+"Meeting transcription will start shortly." = "Расшифровка встречи скоро начнётся.";
+"Requesting system audio permission..." = "Запрос доступа к системному аудио...";
+"Retrying meeting start..." = "Повторный запуск встречи...";
+"Preparing meeting..." = "Подготовка встречи...";
+"Resume failed" = "Не удалось продолжить";
+"Download a transcription model before recording." = "Загрузите модель расшифровки перед записью.";
+"Resuming meeting recording…" = "Продолжение записи встречи…";
+"Import Failed" = "Ошибка импорта";
+"Download a transcription model before importing audio files." = "Загрузите модель расшифровки перед импортом аудио.";
+"Imported Recording" = "Импортированная запись";
+"Importing audio file..." = "Импорт аудиофайла...";
+
+// Join & Record
+"Already waiting for a meeting" = "Уже жду встречу";
+"GooseLee is already waiting for a meeting to start before recording." = "GooseLee уже ждёт начала встречи, чтобы записать её.";
+"Meeting link not recognized" = "Ссылка не распознана";
+"GooseLee could not recognize this meeting link. Open the meeting, then use Record Only." = "GooseLee не распознал ссылку. Откройте встречу и нажмите «Только запись».";
+"Meeting failed to open" = "Не удалось открыть встречу";
+"GooseLee could not open the meeting link in the selected browser." = "GooseLee не смог открыть ссылку в выбранном браузере.";
+
+// Discard confirmation
+"Discard recording?" = "Удалить запись?";
+"This will stop the meeting. Choose whether to delete the written notes too." = "Встреча будет остановлена. Удалить и написанные заметки?";
+"This will stop the meeting recording and delete all captured audio. This cannot be undone." = "Запись остановится, всё аудио будет удалено. Это необратимо.";
+"Discard" = "Удалить";
+"Discard Recording" = "Удалить запись";
+"Will delete:" = "Будет удалено:";
+"Recording audio" = "Аудиозапись";
+"Manual notes" = "Мои заметки";
+
+// Meeting stop / processing (indicator titles)
+"Finalizing" = "Завершение";
+"Cleaning" = "Очистка";
+"Titling" = "Название";
+"Summarizing" = "Сводка";
+"Meeting Recording" = "Запись встречи";
+"Recording Not Found" = "Запись не найдена";
+
+// Save recording / start failure alerts
+"Save meeting recording?" = "Сохранить запись встречи?";
+"Keep a merged audio file for \"%@\" so you can inspect it later in Finder." = "Сохранить общий аудиофайл «%@», чтобы потом открыть его в Finder.";
+"Save Recording" = "Сохранить";
+"Don't Save" = "Не сохранять";
+"System audio capture failed" = "Сбой захвата системного аудио";
+"Could not start system audio recording. Open System Settings > Privacy & Security > Screen & System Audio Recording and enable %@ under \"System Audio Recording Only\".\n\nError: %@" = "Не удалось начать запись системного аудио. Откройте «Системные настройки» > «Конфиденциальность и безопасность» > «Запись экрана и системного аудио» и включите %@ в разделе «Только запись системного аудио».\n\nОшибка: %@";
+"Open System Settings" = "Открыть Настройки";
+
+// Dictation test errors
+"Nemotron requires macOS 15 or later. Choose another model to test dictation." = "Nemotron требует macOS 15 или новее. Выберите другую модель.";
+"The selected model is not available. Choose another model and try again." = "Модель недоступна. Выберите другую и повторите.";
+"The model was not ready yet. We are preparing it again, then try once more." = "Модель ещё не готова. Готовим её заново, попробуйте ещё раз.";
+"The model could not finish downloading. Check your connection and retry." = "Модель не догрузилась. Проверьте подключение и повторите.";
+"GooseLee could not access the microphone. Check Microphone permission and try again." = "У GooseLee нет доступа к микрофону. Проверьте разрешение и повторите.";
+"Dictation could not start. Try again in a moment." = "Диктовка не запустилась. Повторите чуть позже.";

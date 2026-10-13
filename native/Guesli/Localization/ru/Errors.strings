@@ -1,0 +1,100 @@
+// Audio import (AudioFileImportController.swift)
+"This audio file format is not supported." = "Этот формат аудио не поддерживается.";
+"Could not convert the audio file. %@" = "Не удалось конвертировать аудио. %@";
+"The selected file does not contain any audio tracks." = "В файле нет аудиодорожек.";
+"Could not read the audio file. %@" = "Не удалось прочитать аудио. %@";
+"Import Audio File for Transcription" = "Импорт аудио для расшифровки";
+"Choose an audio file (m4a, mp4, wav, mp3)" = "Выберите аудио (m4a, mp4, wav, mp3)";
+
+// Sign-in (ChatGPTAuthManager.swift, GoogleCalendarAuthManager.swift, GoogleCalendarClient.swift)
+"Not signed in to ChatGPT" = "Вход в ChatGPT не выполнен";
+"Not signed in to Google Calendar" = "Вход в Google Календарь не выполнен";
+"Google Calendar credentials not configured" = "Доступ к Google Календарю не настроен";
+"Sign-in timed out — no response from browser" = "Вход прерван: браузер не ответил";
+"OAuth callback missing authorization code" = "В ответе OAuth нет кода авторизации";
+"OAuth state mismatch — possible CSRF attack" = "Не совпал state OAuth — возможна CSRF-атака";
+"Token exchange failed: %@" = "Ошибка обмена токена: %@";
+"Token refresh failed: %@" = "Ошибка обновления токена: %@";
+"Callback port 1455 is already in use" = "Порт 1455 уже занят";
+"Callback port 1456 is already in use" = "Порт 1456 уже занят";
+"Google Calendar request failed: %@" = "Ошибка запроса к Google Календарю: %@";
+
+// iCloud sync (GuesliICloudSyncEngine.swift)
+"Sign in to iCloud on this Mac to sync text records." = "Войдите в iCloud на этом Mac для синхронизации.";
+"iCloud is restricted for this Mac." = "iCloud на этом Mac ограничен.";
+"iCloud is temporarily unavailable. Try syncing again shortly." = "iCloud временно недоступен. Повторите позже.";
+"Couldn't determine iCloud account status." = "Не удалось узнать статус iCloud.";
+
+// Audio capture (CoreAudioSystemRecorder.swift, DictationAudioSessionManager.swift, MeetingSession.swift)
+"Could not create output file" = "Не удалось создать файл";
+"No default audio output device found" = "Нет устройства вывода звука";
+"Microphone capture did not deliver audio." = "Микрофон не передал звук.";
+"The microphone did not start, so nothing was recorded. Please try again." = "Микрофон не включился, ничего не записано. Повторите.";
+"Timed out while starting system audio capture after %@ seconds" = "Захват системного звука не запустился за %@ с";
+
+// Meeting processing (MeetingRetranscriptionPipeline.swift)
+"Meeting transcript needs attention: %@" = "Проверьте расшифровку: %@";
+
+// Nemotron (NemotronRNNTEngine.swift)
+"Nemotron models not loaded." = "Модели Nemotron не загружены.";
+"Download failed: %@" = "Ошибка загрузки: %@";
+"Preprocessing failed: %@" = "Ошибка подготовки: %@";
+"Decoding failed: %@" = "Ошибка декодирования: %@";
+
+// Transcript cleanup (TranscriptCleanupClient.swift)
+"%@ transcript cleanup needs an API key." = "Для очистки через %@ нужен API-ключ.";
+"Transcript cleanup supports OpenAI-compatible Custom LLM endpoints, not %@." = "Очистка работает только с OpenAI-совместимыми Custom LLM, не с %@.";
+"Invalid transcript cleanup URL: %@" = "Неверный URL очистки: %@";
+" Status %lld." = " Код %lld.";
+"%@ transcript cleanup failed.%@ %@" = "Очистка через %1$@ не удалась.%2$@ %3$@";
+"%@ transcript cleanup returned an empty response." = "Очистка через %@ вернула пустой ответ.";
+"%@ transcript cleanup output was rejected as unsafe." = "Ответ очистки через %@ отклонён как небезопасный.";
+"%@ transcript cleanup failed; using raw transcript. %@" = "Очистка через %1$@ не удалась, оставлен исходный текст. %2$@";
+
+// Dictionary (CustomWordDictionary.swift, DictionaryView.swift, DictionarySuggestionPromptController.swift)
+"The file is not a valid Guesli dictionary." = "Это не словарь Guesli.";
+"Import Guesli Dictionary" = "Импорт словаря Guesli";
+"Choose a JSON dictionary file" = "Выберите JSON-файл словаря";
+"Import" = "Импорт";
+"Export Guesli Dictionary" = "Экспорт словаря Guesli";
+"Export" = "Экспорт";
+"Add correction?" = "Добавить исправление?";
+"Add" = "Добавить";
+"Ignore" = "Пропустить";
+
+// Model downloads (ModelDownloadCoordinator.swift)
+"Download stalled while receiving %@" = "Загрузка %@ зависла";
+"Downloaded %@ failed integrity validation" = "Файл %@ повреждён";
+"Not enough disk space (need %lld bytes, have %lld)" = "Мало места на диске (нужно %lld байт, есть %lld)";
+"Could not download %@ after three attempts: %@" = "Не удалось скачать %1$@ за три попытки: %2$@";
+
+// Export (MeetingExporter.swift)
+"Export Failed" = "Ошибка экспорта";
+"Format:" = "Формат:";
+
+// Onboarding window (OnboardingWindowController.swift)
+"Welcome to Guesli" = "Добро пожаловать в Guesli";
+
+// Installer (PostInstallChecker.swift, already NSLocalizedString)
+"Install %@ to Applications?" = "Установить %@ в «Программы»?";
+"%@ will copy itself to your Applications folder and relaunch automatically." = "%@ скопируется в «Программы» и перезапустится.";
+"Install" = "Установить";
+"Cancel" = "Отменить";
+"Replace existing %@?" = "Заменить %@?";
+"An older version of %@ is already in Applications. Replace it?" = "В «Программах» уже есть старая версия %@. Заменить?";
+"Replace" = "Заменить";
+"Installing %@" = "Установка %@";
+"Copying %@ to Applications..." = "Копирование %@ в «Программы»…";
+"Installation failed." = "Установка не удалась.";
+"Eject %@ installer disk?" = "Извлечь установщик %@?";
+"%@ is already installed. It can eject the installer disk and move the downloaded DMG to Trash." = "%@ уже установлен. Можно извлечь диск установщика и удалить DMG в Корзину.";
+"Keep" = "Оставить";
+"Eject and Trash DMG" = "Извлечь и удалить";
+
+// Hot files, wrapped by the integrator later (MeetingSummaryClient.swift, DictationStore.swift)
+"%@ could not generate meeting notes.%@ %@ The selected model may be unavailable or retired." = "%1$@ не смог подготовить итоги.%2$@ %3$@ Возможно, модель недоступна или снята с поддержки.";
+"%@ returned an empty response while generating meeting notes. The selected model may be unavailable or incompatible." = "%@ вернул пустой ответ при подготовке итогов. Возможно, модель недоступна или несовместима.";
+"%@ stopped before the meeting notes were complete (%@). The partial response was not saved." = "%1$@ остановился, не закончив итоги (%2$@). Неполный ответ не сохранён.";
+"%@ could not be reached while generating meeting notes. %@" = "%1$@ недоступен при подготовке итогов. %2$@";
+"Dictation %lld no longer exists." = "Диктовки %lld больше нет.";
+"Meeting %lld no longer exists." = "Встречи %lld больше нет.";

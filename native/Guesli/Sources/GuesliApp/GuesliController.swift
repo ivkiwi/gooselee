@@ -529,7 +529,7 @@ public final class GuesliController: NSObject {
     private var pendingPreparingIndicatorWorkItem: DispatchWorkItem?
     private var dictationProcessingDeadline: DictationProcessingDeadline?
     private var _streamingDictationController: Any?  // StreamingDictationController (macOS 15+)
-    private var isNemotron35Streaming = false
+    var isNemotron35Streaming = false
     private var nemotron35StreamingSessionID: UUID?
     private var previousStreamText = ""
     private var openWindowCount = 0
@@ -8219,8 +8219,8 @@ public final class GuesliController: NSObject {
         selectedBackend.isStreamingDictationBackend
     }
 
-    private func ensureDictationBackendReady() -> Bool {
-        if dictationProcessingDeadline != nil {
+    func ensureDictationBackendReady() -> Bool {
+        if dictationProcessingDeadline != nil || isNemotron35Streaming {
             hotkeyMonitor.cancelToggleMode()
             return false
         }
@@ -8851,7 +8851,7 @@ public final class GuesliController: NSObject {
         }
     }
 
-    private func handleStop() {
+    func handleStop() {
         guard dictationProcessingDeadline == nil else { return }
         if isMeetingRecording() {
             cancelDictationAudioSessionForMeetingRecordingIfNeeded()
@@ -8864,11 +8864,12 @@ public final class GuesliController: NSObject {
         // Nemotron streaming: text already typed — just finalize and store
         if isNemotron35Streaming {
             let sessionID = nemotron35StreamingSessionID
+            setState(.transcribing)
             if #available(macOS 15, *), let controller = _streamingDictationController as? StreamingDictationController {
-                controller.stop { [weak self] finalText in
+                controller.stop { [weak self] result in
                     DispatchQueue.main.async {
                         self?.finishNemotronStreamingStop(
-                            finalText: finalText,
+                            result: result,
                             startedAt: startedAt,
                             sessionID: sessionID
                         )
@@ -8877,13 +8878,12 @@ public final class GuesliController: NSObject {
             } else {
                 fputs("[guesli-native] Nemotron streaming stop, controller not ready (short press)\n", stderr)
                 finishNemotronStreamingStop(
-                    finalText: "",
+                    result: StreamingDictationStopResult(text: ""),
                     startedAt: startedAt,
                     sessionID: sessionID
                 )
             }
             dictationAudioSessionManager.endExternalSession(reason: "nemotron-stop")
-            setState(.transcribing)
             return
         }
 
@@ -8932,7 +8932,7 @@ public final class GuesliController: NSObject {
     }
 
     private func finishNemotronStreamingStop(
-        finalText: String,
+        result: StreamingDictationStopResult,
         startedAt: Date,
         sessionID: UUID?
     ) {
@@ -8945,8 +8945,8 @@ public final class GuesliController: NSObject {
         nemotron35StreamingSessionID = nil
         previousStreamText = ""
         let duration = max(Date().timeIntervalSince(startedAt), 0)
-        fputs("[guesli-native] Nemotron streaming stop, got \(finalText.count) chars\n", stderr)
-        let cleaned = FillerWordFilter.apply(finalText)
+        fputs("[guesli-native] Nemotron streaming stop, got \(result.text.count) chars\n", stderr)
+        let cleaned = FillerWordFilter.apply(result.text)
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
         var savedText = true
@@ -8970,6 +8970,14 @@ public final class GuesliController: NSObject {
         fputs("[guesli-native] Nemotron streaming done (\(String(format: "%.1f", duration))s)\n", stderr)
         finishDictationLatencyTrace("nemotron_stop")
         syncDictationRecorderWarmup(intent: .idlePrewarm(.backendRecovery))
+        if !result.isComplete {
+            presentErrorAlert(
+                title: String(localized: "Incomplete dictation"),
+                message: StreamingDictationRecovery.recover(
+                    result, startedAt: startedAt, supportDirectory: configStore.supportDirectory()
+                )
+            )
+        }
     }
 
     private func finishStandardDictationStop(wavURL stoppedWavURL: URL?, startedAt: Date, preserveShortRecording: Bool = false) {

@@ -1,0 +1,4 @@
+"Incomplete dictation" = "Неполная диктовка";
+"Streaming transcription did not finish. Import the saved recording to transcribe the rest: %@" = "Распознавание не завершено. Импортируй запись для повторной обработки: %@";
+"Streaming transcription did not finish. Could not move the recording to recovery storage. Copy it before restarting: %@" = "Распознавание не завершено. Не удалось сохранить запись. Скопируй её до перезапуска: %@";
+"Streaming transcription did not finish. Some words may be missing; no recording was available for recovery." = "Распознавание не завершено. Часть слов потеряна; запись для восстановления недоступна.";

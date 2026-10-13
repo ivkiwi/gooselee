@@ -1,10 +1,7 @@
 "Follow-up Email" = "Письмо по итогам";
-"Cancel" = "Отменить";
 "Close" = "Закрыть";
-"Retry" = "Повторить";
 "Regenerate" = "Заново";
 "Copied" = "Скопировано";
-"Copy" = "Скопировать";
 "Regenerate email?" = "Сгенерировать заново?";
 "Your edits to the draft will be replaced with a new email." = "Ваши правки заменит новое письмо.";
 "Drafting email…" = "Готовлю письмо…";

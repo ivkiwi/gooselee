@@ -16,11 +16,11 @@ enum MeetingJoinDefaultAction: String, Codable, CaseIterable {
     var buttonLabel: String {
         switch self {
         case .joinAndRecord:
-            return "Join & Record"
+            return String(localized: "Join & Record")
         case .joinOnly:
-            return "Join Only"
+            return String(localized: "Join Only")
         case .recordOnly:
-            return "Record Only"
+            return String(localized: "Record Only")
         }
     }
 

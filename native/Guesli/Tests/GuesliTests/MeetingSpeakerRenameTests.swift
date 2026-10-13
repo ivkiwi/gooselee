@@ -55,6 +55,16 @@ struct MeetingSpeakerRenameTests {
         #expect(MeetingSpeakerRename.rename("Speaker 1", to: "   \n", in: transcript) == nil)
     }
 
+    @Test("system labels You and Others are rejected in any case")
+    func reservedNamesAreRejected() {
+        let transcript = "[10:00:00] Speaker 1: Hi."
+
+        for name in ["You", "you", " YOU ", "Others", "others"] {
+            #expect(MeetingSpeakerRename.rename("Speaker 1", to: name, in: transcript) == nil)
+        }
+        #expect(MeetingSpeakerRename.validatedName("Youssef") == "Youssef")
+    }
+
     @Test("renamed labels still parse as speakers in the transcript view")
     func renamedLabelParsesAsSpeaker() throws {
         let renamed = try #require(MeetingSpeakerRename.rename("Speaker 1", to: "Анна", in: "[10:00:00] Speaker 1: Note: hi."))

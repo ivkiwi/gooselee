@@ -92,7 +92,7 @@ struct MeetingQuickActionsView: View {
         model.run(
             action, meetingID: meetingID, transcript: transcript,
             meetingTitle: sourceMeeting?.title ?? "", config: appState.config,
-            isChatGPTAuthenticated: appState.isChatGPTAuthenticated, isLive: isLive,
+            isChatGPTAuthenticated: appState.isChatGPTAuthenticated,
             isCurrentMeeting: { [weak appState] in
                 guard let appState else { return false }
                 return isLive ? appState.liveMeetingTranscriptOwnerID == meetingID : appState.selectedMeetingID == meetingID

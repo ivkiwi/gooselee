@@ -41,7 +41,6 @@ final class MeetingQuickActionModel {
         meetingTitle: String,
         config: AppConfig,
         isChatGPTAuthenticated: Bool,
-        isLive: Bool,
         isCurrentMeeting: @escaping @MainActor () -> Bool
     ) {
         guard !isRunning else { return }
@@ -52,10 +51,10 @@ final class MeetingQuickActionModel {
             errorMessage = hint
             return
         }
-        let clock = Calendar.current.dateComponents([.hour, .minute, .second], from: Date())
-        let now = (clock.hour ?? 0) * 3_600 + (clock.minute ?? 0) * 60 + (clock.second ?? 0)
+        // Transcript timestamps follow recorded audio, which stops during pauses, so the window
+        // ends at the latest line rather than at the wall clock.
         let context = action == .catchUp
-            ? MeetingQuickActionTranscript.lastMinutes(2, from: transcript, endingAtClockSeconds: isLive ? now : nil)
+            ? MeetingQuickActionTranscript.lastMinutes(2, from: transcript)
             : transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !context.isEmpty else {
             errorMessage = action == .catchUp

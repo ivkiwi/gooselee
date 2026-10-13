@@ -6,13 +6,15 @@ enum MeetingSpeakerRename {
     /// Matches the speaker-label limit of the transcript chat parser.
     static let maxNameLength = 32
 
-    /// Trimmed name, or nil when it is empty, too long, or would break the `label:` line format.
+    /// Trimmed name, or nil when it is empty, too long, would break the `label:` line format,
+    /// or takes a system label: "You" marks the user's own bubbles.
     static func validatedName(_ name: String) -> String? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
               trimmed.count <= maxNameLength,
               !trimmed.contains(":"),
-              !trimmed.contains(where: \.isNewline) else {
+              !trimmed.contains(where: \.isNewline),
+              !["You", "Others"].contains(where: { trimmed.localizedCaseInsensitiveCompare($0) == .orderedSame }) else {
             return nil
         }
         return trimmed

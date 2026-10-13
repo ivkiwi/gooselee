@@ -56,6 +56,7 @@ final class ConfigStore {
     private let fileManager: FileManager
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
+    private var canSaveConfiguration: Bool?
 
     init(
         supportURL: URL = AppIdentity.supportDirectoryURL,
@@ -72,11 +73,15 @@ final class ConfigStore {
 
     func load() -> AppConfig {
         ensureDirectory()
+        canSaveConfiguration = true
         var config: AppConfig
         if let data = try? Data(contentsOf: configURL),
            let decoded = try? decoder.decode(AppConfig.self, from: data) {
             config = decoded
         } else {
+            if fileManager.fileExists(atPath: configURL.path) {
+                canSaveConfiguration = preserveUnreadableConfiguration()
+            }
             config = AppConfig()
         }
 
@@ -98,6 +103,11 @@ final class ConfigStore {
     }
 
     func save(_ config: AppConfig) {
+        if canSaveConfiguration == nil { _ = load() }
+        guard canSaveConfiguration == true else {
+            DiagnosticsLog.write("[config-store] save blocked: unreadable configuration could not be preserved")
+            return
+        }
         ensureDirectory()
         guard let data = try? encoder.encode(config) else { return }
         do {
@@ -113,6 +123,23 @@ final class ConfigStore {
 
     func configPath() -> URL {
         configURL
+    }
+
+    private func preserveUnreadableConfiguration() -> Bool {
+        let stamp = Int64(Date().timeIntervalSince1970 * 1_000)
+        let backupURL = configURL.appendingPathExtension("corrupt-\(stamp)-\(UUID().uuidString)")
+        GuesliPaths.preconditionSafeForTestWrite(backupURL)
+        do {
+            let attributes = try fileManager.attributesOfItem(atPath: configURL.path)
+            guard attributes[.type] as? FileAttributeType == .typeRegular else { throw CocoaError(.fileReadUnknown) }
+            try fileManager.copyItem(at: configURL, to: backupURL)
+            try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: backupURL.path)
+            DiagnosticsLog.write("[config-store] unreadable configuration preserved at \(backupURL.path); using defaults")
+            return true
+        } catch {
+            DiagnosticsLog.write("[config-store] failed to preserve unreadable configuration; saves are blocked")
+            return false
+        }
     }
 
     func supportDirectory() -> URL {

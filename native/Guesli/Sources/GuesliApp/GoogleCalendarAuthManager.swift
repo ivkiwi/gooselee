@@ -30,6 +30,7 @@ enum GoogleCalendarAuthError: Error, LocalizedError {
 @MainActor
 final class GoogleCalendarAuthManager {
     static let shared = GoogleCalendarAuthManager()
+    private var authGeneration = 0
 
     private static let authURL = "https://accounts.google.com/o/oauth2/v2/auth"
     private static let tokenURL = "https://oauth2.googleapis.com/token"
@@ -65,6 +66,7 @@ final class GoogleCalendarAuthManager {
     }
 
     func signIn() async throws {
+        let generation = authGeneration
         guard let credentials else { throw GoogleCalendarAuthError.notAvailable }
         let (verifier, challenge) = generatePKCE()
         let code = try await startCallbackServerAndOpenBrowser(
@@ -76,11 +78,13 @@ final class GoogleCalendarAuthManager {
             codeVerifier: verifier,
             credentials: credentials
         )
+        guard generation == authGeneration else { throw GoogleCalendarAuthError.notAuthenticated }
         saveTokens(tokens, reason: "save")
         fputs("[google-cal] signed in successfully\n", stderr)
     }
 
     func signOut() {
+        authGeneration += 1
         deleteTokens()
         fputs("[google-cal] signed out\n", stderr)
     }
@@ -99,13 +103,16 @@ final class GoogleCalendarAuthManager {
                 return accessToken
             }
             fputs("[google-cal] token expired, refreshing...\n", stderr)
-            guard let refreshToken = tokenRead(key: "refresh_token") else {
+            guard let refreshToken = tokenRead(key: "refresh_token"), !refreshToken.isEmpty else {
+                signOut()
                 throw GoogleCalendarAuthError.notAuthenticated
             }
+            let generation = authGeneration
             let tokens = try await refreshAccessToken(
                 refreshToken: refreshToken,
                 credentials: credentials
             )
+            guard generation == authGeneration else { throw GoogleCalendarAuthError.notAuthenticated }
             saveTokens(tokens, reason: "save")
             return tokens.accessToken
         }

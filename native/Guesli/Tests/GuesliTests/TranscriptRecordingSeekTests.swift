@@ -68,6 +68,36 @@ struct TranscriptRecordingSeekTests {
         ) == nil)
     }
 
+    @Test("a transcript written in another time zone disables seeking")
+    func detectsTimeZoneShift() throws {
+        let start = try #require(ISO8601DateFormatter().date(from: "2026-10-13T10:00:00Z"))
+        let moscow = try #require(TimeZone(secondsFromGMT: 3 * 3_600))
+        let berlin = try #require(TimeZone(secondsFromGMT: 2 * 3_600))
+        let tokyo = try #require(TimeZone(secondsFromGMT: 9 * 3_600))
+        let transcript = "[13:00:04] You: Hello\n[13:01:10] Others: Hi"
+
+        #expect(TranscriptRecordingSeek.firstTimestampFitsRecording(
+            transcript: transcript, meetingStart: start, duration: 1_800, timeZone: moscow
+        ))
+        #expect(!TranscriptRecordingSeek.firstTimestampFitsRecording(
+            transcript: transcript, meetingStart: start, duration: 1_800, timeZone: berlin
+        ))
+        #expect(!TranscriptRecordingSeek.firstTimestampFitsRecording(
+            transcript: transcript, meetingStart: start, duration: 1_800, timeZone: tokyo
+        ))
+    }
+
+    @Test("transcripts without clock labels or duration are not flagged")
+    func skipsUncheckableTranscripts() throws {
+        let start = try #require(ISO8601DateFormatter().date(from: "2026-10-13T10:00:00Z"))
+        #expect(TranscriptRecordingSeek.firstTimestampFitsRecording(
+            transcript: "Plain text", meetingStart: start, duration: 60, timeZone: utc
+        ))
+        #expect(TranscriptRecordingSeek.firstTimestampFitsRecording(
+            transcript: "[23:00:00] You: Hi", meetingStart: start, duration: 0, timeZone: utc
+        ))
+    }
+
     @Test("invalid recording bounds are rejected", arguments: [-1.0, Double.nan, Double.infinity])
     func rejectsInvalidDuration(_ duration: TimeInterval) throws {
         let start = try #require(ISO8601DateFormatter().date(from: "2026-10-13T10:00:00Z"))

@@ -43,10 +43,36 @@ enum TranscriptRecordingSeek {
         if meeting.rawTranscript.contains("— Resumed —") {
             return String(localized: "Seeking unavailable for a resumed meeting")
         }
-        guard ISO8601DateFormatter().date(from: meeting.startTime) != nil else {
+        guard let start = ISO8601DateFormatter().date(from: meeting.startTime) else {
             return String(localized: "Meeting start time unavailable")
         }
+        guard firstTimestampFitsRecording(
+            transcript: meeting.rawTranscript,
+            meetingStart: start,
+            duration: meeting.durationSeconds
+        ) else {
+            return String(localized: "Transcript times are from another time zone")
+        }
         return nil
+    }
+
+    /// Clock labels use the time zone current at transcription. A later zone change shifts every
+    /// label equally, so one out-of-range first label means clicks would silently do nothing.
+    static func firstTimestampFitsRecording(
+        transcript: String,
+        meetingStart: Date,
+        duration: TimeInterval,
+        timeZone: TimeZone = .current
+    ) -> Bool {
+        let label = transcript.drop(while: { $0 != "[" }).dropFirst().prefix(9)
+        guard label.count == 9, label.last == "]", duration.isFinite, duration > 0 else { return true }
+        // The stored meeting duration can trail the audio file by a few seconds.
+        return offset(
+            for: String(label.dropLast()),
+            meetingStart: meetingStart,
+            duration: duration + 60,
+            timeZone: timeZone
+        ) != nil
     }
 }
 

@@ -452,7 +452,7 @@ final class StreamingDictationController {
             streamState = nil
             return fullTranscript
         }
-        fputs("[streaming-dictation] stopped, transcript (\(transcript.count) chars): \(transcript.prefix(100))...\n", stderr)
+        fputs("[streaming-dictation] stopped, transcript \(DictationLogMetadata(text: transcript).summary)\n", stderr)
         return transcript
     }
 
@@ -495,7 +495,7 @@ final class StreamingDictationController {
                     return fullTranscript
                 }
                 if !newText.isEmpty {
-                    fputs("[streaming-dictation] chunk → \"\(newText)\" (\(String(format: "%.0f", elapsed * 1000))ms)\n", stderr)
+                    fputs("[streaming-dictation] chunk → \(DictationLogMetadata(text: newText).summary) (\(String(format: "%.0f", elapsed * 1000))ms)\n", stderr)
                     if let transcript {
                         onPartialText?(transcript)
                     }

@@ -8408,6 +8408,28 @@ public final class GuesliController: NSObject {
             SoundController.playDictationInsert(enabled: shouldPlayDictationLifecycleSounds)
         case .cancelled:
             break
+        case .interrupted(_, let wavURL, _):
+            guard dictationAudioSessionManager.currentSessionID == nil,
+                  dictationProcessingDeadline == nil,
+                  dictationState == .recording || dictationState == .preparing || pendingDictationStopStartedAt != nil else {
+                let keptURL = DictationRecordingRecovery.retainForRetry(wavURL, supportDirectory: configStore.supportDirectory())
+                if !isDictationTestMode {
+                    presentErrorAlert(title: String(localized: "Microphone recording interrupted"), message: DictationRecordingRecovery.failureMessage(recordingURL: keptURL))
+                }
+                break
+            }
+            let startedAt = pendingDictationStopStartedAt ?? dictationStartedAt ?? Date()
+            dictationStartedAt = nil
+            pendingDictationStopSessionID = nil
+            pendingDictationStopStartedAt = nil
+            pendingReleaseSoundSessionID = nil
+            hotkeyMonitor.cancelToggleMode()
+            indicator.isToggleDictation = false
+            finishStandardDictationStop(wavURL: wavURL, startedAt: startedAt, preserveShortRecording: true)
+            if !isDictationTestMode {
+                statusBarController?.setStatus(String(localized: "Microphone interrupted — transcribing recorded part"))
+                indicator.setTranscribingTitle(String(localized: "Transcribing recorded part"), config: config)
+            }
         case .failed(let eventSessionID, let error):
             if let currentSessionID = dictationAudioSessionManager.currentSessionID,
                currentSessionID != eventSessionID { break }
@@ -8612,7 +8634,7 @@ public final class GuesliController: NSObject {
                     DispatchQueue.main.async {
                         guard self.isNemotron35Streaming, self.nemotron35StreamingSessionID == sessionID else { return }
                         let delta = String(fullText.dropFirst(self.previousStreamText.count))
-                        fputs("[guesli-native] streaming partial: +\"\(delta)\" (total \(fullText.count) chars)\n", stderr)
+                        fputs("[guesli-native] streaming partial: \(DictationLogMetadata(text: delta).summary) (total \(fullText.count) chars)\n", stderr)
                         if !delta.isEmpty {
                             self.previousStreamText = fullText
                             if self.currentDictationOutputMode != .voiceNote {
@@ -8927,14 +8949,12 @@ public final class GuesliController: NSObject {
         let cleaned = FillerWordFilter.apply(finalText)
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
+        var savedText = true
         if !cleaned.isEmpty {
-            _ = try? dictationStore.insertDictation(
-                text: cleaned,
-                durationSeconds: duration,
-                startedAt: startedAt,
-                endedAt: Date()
-            )
-            scheduleICloudSyncAfterLocalChange()
+            savedText = DictationTextRecovery.save(cleaned, insert: { text in
+                _ = try self.dictationStore.insertDictation(text: text, durationSeconds: duration, startedAt: startedAt, endedAt: Date())
+            }, copyToClipboard: copyToClipboard)
+            if savedText { scheduleICloudSyncAfterLocalChange() }
         }
 
         statusBarController?.refresh()
@@ -8944,14 +8964,17 @@ public final class GuesliController: NSObject {
         resetDictationOutputMode()
         setState(.idle)
         meetingMonitor.resumeAfterCooldown()
+        if !savedText {
+            presentErrorAlert(title: String(localized: "Dictation was not saved"), message: DictationTextRecovery.failureMessage)
+        }
         fputs("[guesli-native] Nemotron streaming done (\(String(format: "%.1f", duration))s)\n", stderr)
         finishDictationLatencyTrace("nemotron_stop")
         syncDictationRecorderWarmup(intent: .idlePrewarm(.backendRecovery))
     }
 
-    private func finishStandardDictationStop(wavURL stoppedWavURL: URL?, startedAt: Date) {
+    private func finishStandardDictationStop(wavURL stoppedWavURL: URL?, startedAt: Date, preserveShortRecording: Bool = false) {
         markDictationLatency("stop_finished")
-        guard let wavURL = stoppedWavURL else {
+        guard let recordedWavURL = stoppedWavURL else {
             fputs("[guesli-native] stop without wav\n", stderr)
             clearCapturedDictationSessionContext()
             resetDictationOutputMode()
@@ -8962,9 +8985,9 @@ public final class GuesliController: NSObject {
             return
         }
         let duration = max(Date().timeIntervalSince(startedAt), 0)
-        if duration < 0.3 {
+        if duration < 0.3 && !preserveShortRecording {
             fputs("[guesli-native] discarded short recording\n", stderr)
-            try? FileManager.default.removeItem(at: wavURL)
+            try? FileManager.default.removeItem(at: recordedWavURL)
             if isDictationTestMode {
                 dictationTestCallback?("")
             }
@@ -8977,6 +9000,7 @@ public final class GuesliController: NSObject {
             return
         }
 
+        let wavURL = DictationRecordingRecovery.retainForRetry(recordedWavURL, supportDirectory: configStore.supportDirectory())
         setState(.transcribing)
         finishDictationLatencyTrace("ready_for_transcription")
         syncDictationRecorderWarmup(intent: .postDictation(.dictationStop))
@@ -9033,14 +9057,20 @@ public final class GuesliController: NSObject {
                     ? String(localized: "Dictation timed out — try again")
                     : (savedText ? String(localized: "Processing stopped — text saved in history") : String(localized: "Processing stopped — text in clipboard (⌘V)"))
                 self.indicator.showWarning(message, duration: 4)
+                if text.isEmpty {
+                    self.presentErrorAlert(title: String(localized: "Dictation transcription failed"), message: DictationRecordingRecovery.failureMessage(recordingURL: wavURL))
+                } else if !savedText {
+                    self.presentErrorAlert(title: String(localized: "Dictation was not saved"), message: DictationTextRecovery.failureMessage + "\n\n" + DictationRecordingRecovery.failureMessage(recordingURL: wavURL))
+                }
             }
         }
         let task = Task { [weak self] in
             guard let self else { return }
             var recognizedCommand: String?
             var commandContext: DictationContext?
+            var discardRecording = isTestMode
             defer {
-                try? FileManager.default.removeItem(at: wavURL)
+                DictationRecordingRecovery.finishProcessing(wavURL, succeeded: discardRecording)
             }
 
             do {
@@ -9086,13 +9116,14 @@ public final class GuesliController: NSObject {
                     try Task.checkCancellation()
                 }
                 guard !text.isEmpty else {
-                    await MainActor.run {
-                        guard self.dictationProcessingDeadline === processingDeadline else { return }
+                    discardRecording = await MainActor.run {
+                        guard self.dictationProcessingDeadline === processingDeadline else { return false }
                         self.clearCapturedDictationSessionContext()
                         self.resetDictationOutputMode()
                         self.setState(.idle)
                         self.meetingMonitor.resumeAfterCooldown()
                         self.syncDictationRecorderWarmup(intent: .postDictation(.transcriptionComplete))
+                        return true
                     }
                     return
                 }
@@ -9106,16 +9137,12 @@ public final class GuesliController: NSObject {
                 } else {
                     commandTargetChanged = false
                 }
-                await MainActor.run {
-                    guard self.dictationProcessingDeadline === processingDeadline else { return }
-                    _ = try? self.dictationStore.insertDictation(
-                        text: text,
-                        durationSeconds: duration,
-                        appContext: storageContext,
-                        startedAt: startedAt,
-                        endedAt: Date()
-                    )
-                    self.scheduleICloudSyncAfterLocalChange()
+                discardRecording = await MainActor.run {
+                    guard self.dictationProcessingDeadline === processingDeadline else { return false }
+                    let savedText = DictationTextRecovery.save(text, insert: { text in
+                        _ = try self.dictationStore.insertDictation(text: text, durationSeconds: duration, appContext: storageContext, startedAt: startedAt, endedAt: Date())
+                    }, copyToClipboard: self.copyToClipboard)
+                    if savedText { self.scheduleICloudSyncAfterLocalChange() }
                     self.clearCapturedDictationSessionContext()
                     self.statusBarController?.refresh()
                     self.historyWindowController?.reload()
@@ -9123,7 +9150,7 @@ public final class GuesliController: NSObject {
                     if commandTargetChanged {
                         self.copyToClipboard(text)
                         self.indicator.showWarning(String(localized: "Selection changed — result in clipboard (⌘V)"), duration: 4)
-                    } else if outputMode != .voiceNote {
+                    } else if outputMode != .voiceNote && savedText {
                         PasteController.paste(
                             text: text,
                             appendDictationSentenceSpace: !isCommand,
@@ -9150,6 +9177,10 @@ public final class GuesliController: NSObject {
                     self.setState(.idle)
                     self.meetingMonitor.resumeAfterCooldown()
                     self.syncDictationRecorderWarmup(intent: .postDictation(.transcriptionComplete))
+                    if !savedText {
+                        self.presentErrorAlert(title: String(localized: "Dictation was not saved"), message: DictationTextRecovery.failureMessage + "\n\n" + DictationRecordingRecovery.failureMessage(recordingURL: wavURL))
+                    }
+                    return savedText
                 }
             } catch is CancellationError where recognizedCommand == nil {
                 fputs("[guesli-native] test dictation cancelled\n", stderr)
@@ -9160,6 +9191,9 @@ public final class GuesliController: NSObject {
                     self.setState(.idle)
                     self.meetingMonitor.resumeAfterCooldown()
                     self.syncDictationRecorderWarmup(intent: .postDictation(.transcriptionCancelled))
+                    if !isTestMode {
+                        self.presentErrorAlert(title: String(localized: "Dictation transcription failed"), message: DictationRecordingRecovery.failureMessage(recordingURL: wavURL))
+                    }
                 }
             } catch {
                 if recognizedCommand == nil { fputs("[guesli-native] transcription failed: \(error)\n", stderr) }
@@ -9184,6 +9218,7 @@ public final class GuesliController: NSObject {
                             backend: transcriptionBackend,
                             error: error
                         )
+                        self.presentErrorAlert(title: String(localized: "Dictation transcription failed"), message: DictationRecordingRecovery.failureMessage(recordingURL: wavURL))
                     }
                     self.clearCapturedDictationSessionContext()
                     self.resetDictationOutputMode()

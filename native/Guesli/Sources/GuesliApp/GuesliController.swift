@@ -3415,6 +3415,7 @@ public final class GuesliController: NSObject {
         }
         updateConfig { $0.dictationHotkey = hotkey }
         hotkeyMonitor.configure(hotkey)
+        startMeetingBookmarkHotkeyMonitorIfNeeded()
         return result
     }
 
@@ -3430,6 +3431,7 @@ public final class GuesliController: NSObject {
         }
         updateConfig { $0.meetingRecordingHotkey = hotkey }
         meetingRecordingHotkeyMonitor.configure(hotkey)
+        startMeetingBookmarkHotkeyMonitorIfNeeded()
         return result
     }
 
@@ -3443,10 +3445,12 @@ public final class GuesliController: NSObject {
             guard result.didUpdate else { return result }
             updateConfig { $0.enableMeetingRecordingHotkey = true }
             startMeetingRecordingHotkeyMonitorIfNeeded()
+            startMeetingBookmarkHotkeyMonitorIfNeeded()
             return result
         } else {
             updateConfig { $0.enableMeetingRecordingHotkey = false }
             meetingRecordingHotkeyMonitor.stop()
+            startMeetingBookmarkHotkeyMonitorIfNeeded()
             return .updated
         }
     }

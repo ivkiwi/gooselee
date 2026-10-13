@@ -7,5 +7,4 @@
 "Your instruction is in the clipboard." = "Команда в буфере.";
 "Check your text processing model or account and try again." = "Проверь модель или аккаунт и повтори.";
 "No command recognized. Select text to improve or try again." = "Команда не распознана. Выдели текст или повтори.";
-"The model returned an empty response." = "Модель вернула пустой ответ.";
 "Local voice commands require macOS 15 or later." = "Локальные команды требуют macOS 15+.";

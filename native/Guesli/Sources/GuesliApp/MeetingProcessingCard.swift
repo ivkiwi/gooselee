@@ -3,10 +3,10 @@ import SwiftUI
 extension MeetingProcessingStage {
     var cardLabel: String {
         switch self {
-        case .transcribingAudio: return "Финальное распознавание…"
-        case .cleaningAudio: return "Очищаем звук…"
-        case .generatingTitle: return "Придумываем название…"
-        case .summarizingNotes: return "Готовим итог…"
+        case .transcribingAudio: return String(localized: "Final transcription…")
+        case .cleaningAudio: return String(localized: "Cleaning audio…")
+        case .generatingTitle: return String(localized: "Naming meeting…")
+        case .summarizingNotes: return String(localized: "Summarizing…")
         }
     }
 }
@@ -38,13 +38,13 @@ struct MeetingProcessingDraftSection: View {
             }
             .accessibilityElement(children: .combine)
 
-            Text("Черновик живой расшифровки — заменится финальной после обработки")
+            Text("Live draft — replaced by the final transcript when processing ends")
                 .font(GuesliTheme.captionMedium())
                 .foregroundStyle(GuesliTheme.textTertiary)
 
             LiveTranscriptView(
                 transcript: transcript,
-                placeholder: "Живой расшифровки нет — ждём финальную",
+                placeholder: String(localized: "No live transcript — waiting for the final one"),
                 partialYou: ownsLiveTranscript ? appState.liveMeetingPartialYou : "",
                 partialOthers: ownsLiveTranscript ? appState.liveMeetingPartialOthers : ""
             )
@@ -72,18 +72,18 @@ struct MeetingProcessingFailedBanner: View {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(GuesliTheme.transcribing)
             VStack(alignment: .leading, spacing: 3) {
-                Text("Не удалось обработать встречу")
+                Text("Couldn't process meeting")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(GuesliTheme.textPrimary)
                 Text(canRetry
-                    ? "Ручные заметки сохранены. Запись можно распознать заново."
-                    : "Ручные заметки сохранены.")
+                    ? "Your notes are saved. You can transcribe the recording again."
+                    : "Your notes are saved.")
                     .font(.system(size: 11))
                     .foregroundStyle(GuesliTheme.textSecondary)
             }
             Spacer(minLength: GuesliTheme.spacing8)
             if canRetry {
-                Button("Повторить", action: onRetry)
+                Button("Retry", action: onRetry)
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .disabled(isRetrying)

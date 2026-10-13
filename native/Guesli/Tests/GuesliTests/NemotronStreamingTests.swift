@@ -41,7 +41,7 @@ struct StreamingDictationControllerTests {
 
     @available(macOS 15, *)
     @Test("stream state failure cancels mic session and permits retry")
-    func streamStateFailureCancelsMicSessionAndPermitsRetry() async {
+    func streamStateFailureCancelsMicSessionAndPermitsRetry() async throws {
         let transcriber = FailingStreamingTranscriber()
         let recorder = InspectableStreamingDictationRecorder()
         let failures = FailureCounter()
@@ -49,12 +49,13 @@ struct StreamingDictationControllerTests {
             transcriber: transcriber,
             recorder: recorder
         )
+        defer { controller.cancel() }
         controller.onFailure = { _ in
             failures.increment()
         }
 
         #expect(controller.start() == true)
-        try? await Task.sleep(nanoseconds: 50_000_000)
+        try #require(try await failures.wait(for: 1), "Timed out waiting for stream-state onFailure")
         #expect(transcriber.makeStateCalls == 1)
         #expect(recorder.prepareCalls == 1)
         #expect(recorder.startCalls == 1)
@@ -62,7 +63,7 @@ struct StreamingDictationControllerTests {
         #expect(failures.value == 1)
 
         #expect(controller.start() == true)
-        try? await Task.sleep(nanoseconds: 50_000_000)
+        try #require(try await failures.wait(for: 2), "Timed out waiting for retry stream-state onFailure")
         #expect(transcriber.makeStateCalls == 2)
         #expect(recorder.prepareCalls == 2)
         #expect(recorder.startCalls == 2)
@@ -203,7 +204,7 @@ struct StreamingDictationControllerTests {
 
     @available(macOS 15, *)
     @Test("chunk transcription failure cancels mic session and permits retry")
-    func chunkTranscriptionFailureCancelsMicSessionAndPermitsRetry() async {
+    func chunkTranscriptionFailureCancelsMicSessionAndPermitsRetry() async throws {
         let transcriber = ThrowingChunkStreamingTranscriber()
         let recorder = InspectableStreamingDictationRecorder()
         let failures = FailureCounter()
@@ -211,19 +212,19 @@ struct StreamingDictationControllerTests {
             transcriber: transcriber,
             recorder: recorder
         )
+        defer { controller.cancel() }
         controller.onFailure = { _ in
             failures.increment()
         }
 
         #expect(controller.start() == true)
         recorder.emit(samples: [Float](repeating: 0.2, count: 8960))
-        try? await Task.sleep(for: .milliseconds(50))
+        try #require(try await failures.wait(for: 1), "Timed out waiting for chunk onFailure")
 
         #expect(await transcriber.transcribeCalls == 1)
         #expect(recorder.cancelCalls == 1)
         #expect(failures.value == 1)
         #expect(controller.start() == true)
-        controller.cancel()
     }
 
     @available(macOS 15, *)
@@ -730,6 +731,17 @@ private final class FailureCounter {
         lock.withLock {
             storage += 1
         }
+    }
+
+    // Only onFailure increments this counter, after the controller has torn down the session.
+    func wait(for expectedCount: Int, timeout: Duration = .seconds(5)) async throws -> Bool {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while value < expectedCount {
+            guard clock.now < deadline else { return false }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        return true
     }
 }
 

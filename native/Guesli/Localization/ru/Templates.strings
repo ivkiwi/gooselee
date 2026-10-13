@@ -2,14 +2,8 @@
 "Create reusable prompts for Guesli dictation cleanup." = "Свои промпты для очистки диктовки.";
 "Built-in Presets" = "Встроенные";
 "Custom Prompts" = "Свои промпты";
-"Cancel" = "Отменить";
-"Delete" = "Удалить";
-"Done" = "Готово";
-"Edit" = "Изменить";
 "Duplicate" = "Дублировать";
-"Use" = "Выбрать";
 "Active" = "Активно";
-"Name" = "Название";
 "Prompt" = "Промпт";
 "Save changes" = "Сохранить";
 "New prompt" = "Новый промпт";
@@ -40,7 +34,6 @@
 "Icon" = "Значок";
 "Enter the prompt instructions for this template." = "Введите инструкции промпта.";
 "Custom" = "Свой";
-"Notes" = "Заметки";
 "1 to 1" = "1 на 1";
 "Discovery" = "Знакомство";
 "Hiring" = "Найм";
@@ -72,3 +65,7 @@
 "Projects" = "Проекты";
 "Timeline" = "Хронология";
 "Sprint" = "Спринт";
+"Auto Detailed Notes" = "Авто: подробно";
+"Simple Notes" = "Простые заметки";
+"Customer: Discovery" = "Клиент: знакомство";
+"Weekly Team Meeting" = "Еженедельная встреча";

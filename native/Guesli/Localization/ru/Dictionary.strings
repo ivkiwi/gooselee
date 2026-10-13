@@ -1,14 +1,9 @@
 "Enable Accessibility?" = "Включить Универсальный доступ?";
-"Cancel" = "Отменить";
-"Enable" = "Включить";
 "Dictionary suggestions briefly read focused app text via Accessibility after dictation. Grant access, then relaunch Guesli to turn suggestions on." = "После диктовки подсказки словаря кратко читают текст приложения через Универсальный доступ. Дайте доступ и перезапустите Guesli.";
 "Dictionary" = "Словарь";
-"OK" = "ОК";
 "Dictionary suggestions" = "Подсказки словаря";
 "Briefly reads focused app text after dictation to detect corrections." = "После диктовки кратко читает текст, чтобы заметить исправления.";
-"Import" = "Импорт";
 "Import dictionary entries from a JSON file" = "Импорт словаря из JSON-файла";
-"Export" = "Экспорт";
 "Export the current dictionary as JSON" = "Экспорт словаря в JSON";
 "Add new" = "Добавить";
 "Add custom words for names, brands, and domain terms, and tune how aggressively each entry should fuzzy-match transcription errors." = "Добавляйте имена, бренды и термины и настраивайте, насколько смело каждое слово исправляет ошибки распознавания.";

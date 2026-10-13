@@ -123,7 +123,7 @@ struct MeetingTemplatesManagerView: View {
                         Image(systemName: template.icon)
                             .font(.system(size: 10))
                             .foregroundStyle(GuesliTheme.accent)
-                        Text(template.name)
+                        Text(verbatim: template.name)
                             .font(GuesliTheme.captionMedium())
                             .foregroundStyle(GuesliTheme.textPrimary)
                     }

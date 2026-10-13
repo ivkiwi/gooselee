@@ -17,8 +17,8 @@ private enum ManualNotesSaveStatus {
 
     var label: String {
         switch self {
-        case .saved: return "Saved"
-        case .saving: return "Saving..."
+        case .saved: return String(localized: "Saved")
+        case .saving: return String(localized: "Saving...")
         }
     }
 }
@@ -44,8 +44,8 @@ private struct LiveTranscriptSection: View {
         LiveTranscriptView(
             transcript: transcript,
             placeholder: appState.config.resolvedMeetingProcessingMode == .post
-                ? "Recording… transcript after meeting"
-                : "Waiting for speech…",
+                ? String(localized: "Recording… transcript after meeting")
+                : String(localized: "Waiting for speech…"),
             partialYou: appState.liveMeetingPartialYou,
             partialOthers: appState.liveMeetingPartialOthers
         )
@@ -94,7 +94,7 @@ struct MeetingDetailView: View {
         controller: GuesliController,
         appState: AppState,
         onBack: (() -> Void)? = nil,
-        backLabel: String = "Back to Meetings"
+        backLabel: String = String(localized: "Back to Meetings")
     ) {
         self.meeting = meeting
         self.controller = controller
@@ -181,14 +181,14 @@ struct MeetingDetailView: View {
                 summaryErrorMessage = nil
             }
         } message: {
-            Text(summaryErrorMessage ?? "The updated meeting notes could not be saved.")
+            Text(summaryErrorMessage ?? String(localized: "The updated meeting notes could not be saved."))
         }
         .alert("Couldn't Re-transcribe Meeting", isPresented: retranscriptionErrorBinding) {
             Button("OK", role: .cancel) {
                 retranscriptionErrorMessage = nil
             }
         } message: {
-            Text(retranscriptionErrorMessage ?? "The saved recording could not be re-transcribed.")
+            Text(retranscriptionErrorMessage ?? String(localized: "The saved recording could not be re-transcribed."))
         }
         .alert("Re-summarize Notes?", isPresented: transcriptResummaryPromptBinding) {
             Button("Re-summarize") {
@@ -852,7 +852,7 @@ struct MeetingDetailView: View {
     private func statusChip(for meeting: MeetingRecord) -> some View {
         let isPreparing = isPreparingThisMeeting(meeting)
         let isPaused = meeting.status == .recording && appState.isMeetingRecordingPaused
-        let label = isPreparing ? "Preparing" : isPaused ? "Paused" : meeting.status.displayLabel
+        let label = isPreparing ? String(localized: "Preparing") : isPaused ? String(localized: "Paused") : meeting.status.displayLabel
         let color = isPreparing || isPaused ? GuesliTheme.transcribing : meeting.status.displayColor
         HStack(spacing: 6) {
             Circle()
@@ -966,7 +966,7 @@ struct MeetingDetailView: View {
     @ViewBuilder
     private func exportMenu(for meeting: MeetingRecord) -> some View {
         let currentContent: MeetingExportContent = documentMode == .transcript ? .transcript : .notes
-        let currentLabel = documentMode == .transcript ? "Export Transcript" : "Export Notes"
+        let currentLabel = documentMode == .transcript ? String(localized: "Export Transcript") : String(localized: "Export Notes")
         Menu {
             Button {
                 MeetingExporter.export(meeting: meeting, content: currentContent)
@@ -1093,7 +1093,7 @@ struct MeetingDetailView: View {
                 .controlSize(.small)
                 .frame(width: 14, height: 14)
                 .accessibilityLabel("Preparing transcription")
-            Text(appState.meetingStartStatus ?? "Meeting transcription will start shortly.")
+            Text(appState.meetingStartStatus ?? String(localized: "Meeting transcription will start shortly."))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(GuesliTheme.textSecondary)
                 .lineLimit(1)
@@ -1271,7 +1271,7 @@ struct MeetingDetailView: View {
             HStack(spacing: 5) {
                 Image(systemName: hasFolder ? "folder.fill" : "folder.badge.plus")
                     .font(.system(size: 10))
-                Text(currentFolder?.name ?? "Add to folder")
+                Text(currentFolder?.name ?? String(localized: "Add to folder"))
                     .font(.system(size: 11, weight: .medium))
             }
             .foregroundStyle(hasFolder ? GuesliTheme.accent : GuesliTheme.textSecondary)
@@ -1745,7 +1745,7 @@ private struct MarqueeTitleTextField: View {
                     restartMarqueeIfNeeded()
                 }
 
-            Text(text.isEmpty ? "Meeting Title" : text)
+            Text(text.isEmpty ? String(localized: "Meeting Title") : text)
                 .font(titleFont)
                 .fontWeight(.bold)
                 .foregroundStyle(GuesliTheme.textPrimary)
@@ -1764,7 +1764,7 @@ private struct MarqueeTitleTextField: View {
             }
         )
         .overlay(
-            Text(text.isEmpty ? "Meeting Title" : text)
+            Text(text.isEmpty ? String(localized: "Meeting Title") : text)
                 .font(titleFont)
                 .fontWeight(.bold)
                 .lineLimit(1)

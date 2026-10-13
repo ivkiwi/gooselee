@@ -2,7 +2,7 @@
 "Decisions" = "Решения";
 "Tasks" = "Задачи";
 "Open previous meeting" = "Открыть прошлую встречу";
-"Recurring meeting preparation" = "Подготовка к повторным встречам";
+"Recurring meeting preparation" = "Подготовка к регулярным встречам";
 "Show previous decisions and tasks 15 minutes before recurring meetings." = "Решения и задачи прошлого раза за 15 минут до встречи.";
 "Before meeting: %@" = "Перед встречей: %@";
 "Tasks:" = "Задачи:";

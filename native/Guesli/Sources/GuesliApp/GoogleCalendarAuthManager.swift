@@ -41,6 +41,8 @@ final class GoogleCalendarAuthManager {
     private let credentials: GoogleCalendarCredentials?
     /// Bumped on sign-out and sign-in so a refresh that finishes afterwards cannot restore old tokens.
     private var authGeneration = 0
+    /// Cancels the pending browser sign-in so a new attempt can take over the callback port.
+    private var cancelPendingCallback: (() -> Void)?
 
     private var tokenFileURL: URL {
         AppIdentity.supportDirectoryURL.appendingPathComponent("google-calendar-auth.json")
@@ -157,10 +159,13 @@ final class GoogleCalendarAuthManager {
     }
 
     private func startCallbackServerAndOpenBrowser(codeChallenge: String, clientId: String) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
+        cancelPendingCallback?()
+        return try await withCheckedThrowingContinuation { continuation in
             let port: NWEndpoint.Port = 1456
             let params = NWParameters.tcp
             params.requiredLocalEndpoint = NWEndpoint.hostPort(host: .ipv4(.loopback), port: port)
+            // The cancelled previous listener may still be releasing the port.
+            params.allowLocalEndpointReuse = true
 
             guard let listener = try? NWListener(using: params) else {
                 continuation.resume(throwing: GoogleCalendarAuthError.portInUse)
@@ -178,6 +183,13 @@ final class GoogleCalendarAuthManager {
                 deadline: .now() + Self.callbackTimeoutSeconds,
                 execute: timeoutWork
             )
+            self.cancelPendingCallback = { [weak listener] in
+                guard !resumed else { return }
+                resumed = true
+                timeoutWork.cancel()
+                listener?.cancel()
+                continuation.resume(throwing: GoogleCalendarAuthError.callbackTimeout)
+            }
 
             let expectedState = self.generateState()
 
@@ -214,7 +226,10 @@ final class GoogleCalendarAuthManager {
                         listener.cancel()
                         timeoutWork.cancel()
                     }
-                    guard !resumed else { return }
+                    guard !resumed else {
+                        connection.cancel()
+                        return
+                    }
                     resumed = true
 
                     guard let data, let request = String(data: data, encoding: .utf8) else {

@@ -221,6 +221,9 @@ enum AudioFileImportController {
 
         try Task.checkCancellation()
 
+        // Transcript clock labels and the saved meeting start share one origin, so timestamps can seek the recording.
+        let startTime = Date().addingTimeInterval(-duration)
+
         // Run speaker diarization if available
         var diarizedTranscript = rawTranscript
         if let diarizerManager = await transcriptionCoordinator.getDiarizerManager(),
@@ -239,7 +242,7 @@ enum AudioFileImportController {
                     diarizedTranscript = formatTranscriptWithSpeakers(
                         transcription: transcription,
                         diarizationSegments: diarizationResult.segments,
-                        meetingStart: importedTranscriptTimelineStart()
+                        meetingStart: startTime
                     )
                 }
             } catch is CancellationError {
@@ -300,8 +303,7 @@ enum AudioFileImportController {
         try Task.checkCancellation()
 
         progress("Saving...")
-        let now = Date()
-        let startTime = now.addingTimeInterval(-duration)
+        let endTime = startTime.addingTimeInterval(duration)
         // Persist the converted WAV as compressed retained audio so retranscription works.
         let savedRecordingPath = try await MeetingRecordingStorage.persistTemporaryRecordingAsync(
             from: wavURL,
@@ -314,7 +316,7 @@ enum AudioFileImportController {
             title: generatedTitle,
             calendarEventID: nil,
             startTime: startTime,
-            endTime: now,
+            endTime: endTime,
             rawTranscript: finalTranscript,
             rawOriginalTranscript: cleanupResult.originalTranscript,
             formattedNotes: formattedNotes,

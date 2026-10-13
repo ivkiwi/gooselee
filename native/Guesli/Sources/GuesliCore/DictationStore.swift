@@ -3268,7 +3268,7 @@ public final class DictationStore {
 
     private func dictationStreaks(db: OpaquePointer?) throws -> (current: Int, longest: Int) {
         let sql = """
-        SELECT DISTINCT date(timestamp) AS used_day
+        SELECT DISTINCT date(timestamp, 'localtime') AS used_day
         FROM dictations
         WHERE deleted_at IS NULL
         ORDER BY used_day ASC
@@ -3280,10 +3280,15 @@ public final class DictationStore {
         defer { sqlite3_finalize(statement) }
 
         var days: [Date] = []
-        let formatter = ISO8601DateFormatter()
+        // Streaks are shown per local day, so group and parse days in the local time zone.
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
         while sqlite3_step(statement) == SQLITE_ROW {
             let raw = stringColumn(statement, index: 0)
-            if let date = formatter.date(from: "\(raw)T00:00:00Z") {
+            if let date = formatter.date(from: raw) {
                 days.append(date)
             }
         }

@@ -31,9 +31,9 @@ enum DictationBackendReadiness: Equatable {
 
     func blockingMessage(backendLabel: String) -> String? {
         switch self {
-        case .preparing: return "Warming up \(backendLabel)..."
+        case .preparing: return String(localized: "Warming up \(backendLabel)...")
         case .ready: return nil
-        case .failed: return "\(backendLabel) unavailable"
+        case .failed: return String(localized: "\(backendLabel) unavailable")
         }
     }
 }
@@ -90,9 +90,9 @@ enum MeetingSummaryPersistenceError: Error, LocalizedError {
         case .failedToSaveSummary(let underlying):
             let detail = underlying.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
             if detail.isEmpty {
-                return "The updated meeting notes could not be saved."
+                return String(localized: "The updated meeting notes could not be saved.")
             }
-            return "The updated meeting notes could not be saved. \(detail)"
+            return String(localized: "The updated meeting notes could not be saved. \(detail)")
         }
     }
 }
@@ -103,7 +103,7 @@ enum MeetingTemplateSelectionError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .templateNoLongerExists:
-            return "That template no longer exists. Choose another template and try again."
+            return String(localized: "That template no longer exists. Choose another template and try again.")
         }
     }
 }
@@ -217,15 +217,15 @@ enum MeetingRetranscriptionError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .controllerUnavailable:
-            return "Meeting re-transcription could not continue because Guesli is no longer available."
+            return String(localized: "Meeting re-transcription could not continue because Guesli is no longer available.")
         case .recordingUnavailable:
-            return "The saved meeting recording is no longer available on disk."
+            return String(localized: "The saved meeting recording is no longer available on disk.")
         case .noDownloadedTranscriptionModel:
-            return "Download a transcription model before re-transcribing this meeting."
+            return String(localized: "Download a transcription model before re-transcribing this meeting.")
         case .emptyTranscript:
-            return "Re-transcription finished, but no speech was detected in the saved recording."
+            return String(localized: "Re-transcription finished, but no speech was detected in the saved recording.")
         case .failedToSave(let underlying):
-            return "The re-transcribed meeting could not be saved. \(underlying.localizedDescription)"
+            return String(localized: "The re-transcribed meeting could not be saved. \(underlying.localizedDescription)")
         }
     }
 }
@@ -238,11 +238,11 @@ enum MeetingLifecycleError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .failedToSaveRecording(let underlying):
-            return "The meeting finished transcribing, but the recording could not be saved. \(underlying.localizedDescription)"
+            return String(localized: "The meeting finished transcribing, but the recording could not be saved. \(underlying.localizedDescription)")
         case .failedToDeleteRecording(let underlying):
-            return "The saved meeting recording could not be deleted, so the meeting was left in place. \(underlying.localizedDescription)"
+            return String(localized: "The saved meeting recording could not be deleted, so the meeting was left in place. \(underlying.localizedDescription)")
         case .failedToDeleteMeeting(let underlying):
-            return "The meeting could not be deleted. \(underlying.localizedDescription)"
+            return String(localized: "The meeting could not be deleted. \(underlying.localizedDescription)")
         }
     }
 }
@@ -1040,7 +1040,7 @@ public final class GuesliController: NSObject {
         guard let warning else { return }
         statusBarController?.setStatus(warning)
         statusBarController?.refresh()
-        indicator.showWarning("AI cleanup failed", icon: "!", duration: 3.0)
+        indicator.showWarning(String(localized: "AI cleanup failed"), icon: "!", duration: 3.0)
     }
 
     func refreshUI() {
@@ -1519,7 +1519,7 @@ public final class GuesliController: NSObject {
 
         bridgeActivationPending = true
         appState.isICloudBridgeActivationPending = true
-        appState.iCloudSyncStatus = "Checking iCloud..."
+        appState.iCloudSyncStatus = String(localized: "Checking iCloud...")
         appState.iCloudBridgeState = .checkingICloud
         appState.iCloudBridgeMessage = nil
 
@@ -1533,7 +1533,7 @@ public final class GuesliController: NSObject {
                     guard let self, self.iCloudSyncGeneration == generation else { return }
                     self.iCloudSubscriptionTask = nil
                     self.hasEnsuredICloudSubscription = true
-                    self.appState.iCloudSyncStatus = "Setting up private iCloud sync..."
+                    self.appState.iCloudSyncStatus = String(localized: "Setting up private iCloud sync...")
                     self.appState.iCloudBridgeState = .syncing
                     self.appState.iCloudBridgeMessage = nil
                     self.updateConfig { $0.iCloudSyncEnabled = true }
@@ -1553,7 +1553,7 @@ public final class GuesliController: NSObject {
                     self.bridgeActivationPending = false
                     self.appState.isICloudBridgeActivationPending = false
                     let message = error.localizedDescription
-                    self.appState.iCloudSyncStatus = "Sync needs iCloud: \(message)"
+                    self.appState.iCloudSyncStatus = String(localized: "Sync needs iCloud: \(message)")
                     if GuesliICloudSyncEngine.isICloudAccountAvailabilityError(error) {
                         self.appState.iCloudBridgeState = .needsICloud
                     } else {
@@ -1672,7 +1672,7 @@ public final class GuesliController: NSObject {
         guard appleCloudCapabilities.canUseCloudKit else { return }
         guard config.iCloudSyncEnabled else {
             if userInitiated {
-                appState.iCloudSyncStatus = "Turn on iCloud sync first."
+                appState.iCloudSyncStatus = String(localized: "Turn on iCloud sync first.")
             }
             appState.iCloudBridgeState = .notConfigured
             appState.iCloudBridgeMessage = nil
@@ -1683,7 +1683,7 @@ public final class GuesliController: NSObject {
             appState.iCloudBridgeState = .syncing
             appState.iCloudBridgeMessage = nil
             if userInitiated {
-                appState.iCloudSyncStatus = "Sync already in progress."
+                appState.iCloudSyncStatus = String(localized: "Sync already in progress.")
             }
             if bridgeDiscoveryPending {
                 bridgeDiscoveryFollowUpPending = true
@@ -1696,7 +1696,7 @@ public final class GuesliController: NSObject {
         }
         enableICloudPersistentSync()
         appState.isICloudSyncInProgress = true
-        appState.iCloudSyncStatus = "Syncing with private iCloud..."
+        appState.iCloudSyncStatus = String(localized: "Syncing with private iCloud...")
         appState.iCloudBridgeState = .syncing
         appState.iCloudBridgeMessage = nil
         let store = dictationStore
@@ -1731,8 +1731,8 @@ public final class GuesliController: NSObject {
                     self.refreshICloudBridgeDeviceState()
                     let remoteDeviceName = GuesliBridgeDeviceIdentity.remoteDeviceDisplayName ?? "iPhone"
                     self.appState.iCloudSyncStatus = result.downloaded.total > 0
-                        ? "Synced with \(remoteDeviceName)."
-                        : "All text is up to date."
+                        ? String(localized: "Synced with \(remoteDeviceName).")
+                        : String(localized: "All text is up to date.")
                     self.appState.iCloudBridgeState = .active
                     self.appState.iCloudBridgeMessage = nil
                     self.appState.iCloudLastSyncSummary = summary
@@ -1775,7 +1775,7 @@ public final class GuesliController: NSObject {
                     self.appState.isICloudSyncInProgress = false
                     self.bridgeDiscoveryFollowUpPending = false
                     let message = error.localizedDescription
-                    self.appState.iCloudSyncStatus = "Sync failed: \(message)"
+                    self.appState.iCloudSyncStatus = String(localized: "Sync failed: \(message)")
                     if GuesliICloudSyncEngine.isICloudAccountAvailabilityError(error) {
                         self.appState.iCloudBridgeState = .needsICloud
                     } else {
@@ -1808,7 +1808,7 @@ public final class GuesliController: NSObject {
         iCloudSubscriptionTask = nil
         resetICloudSubscriptionState()
         resetBridgeDiscoveryRuntimeState()
-        appState.iCloudSyncStatus = "iCloud sync is off."
+        appState.iCloudSyncStatus = String(localized: "iCloud sync is off.")
         appState.iCloudBridgeState = .notConfigured
         appState.iCloudBridgeMessage = nil
     }
@@ -1850,17 +1850,17 @@ public final class GuesliController: NSObject {
     }
 
     private func formatICloudSyncSummary(_ result: ICloudSyncResult) -> String {
-        "\(formatICloudSyncCounts(result.uploaded)) up, \(formatICloudSyncCounts(result.downloaded)) down"
+        String(localized: "\(formatICloudSyncCounts(result.uploaded)) up, \(formatICloudSyncCounts(result.downloaded)) down")
     }
 
     private func formatICloudSyncCounts(_ counts: ICloudSyncKindCounts) -> String {
         guard counts.total > 0 else { return "0" }
         var parts: [String] = []
         if counts.dictations > 0 {
-            parts.append("\(counts.dictations) \(counts.dictations == 1 ? "dictation" : "dictations")")
+            parts.append("\(counts.dictations) \(counts.dictations == 1 ? String(localized: "dictation") : String(localized: "dictations"))")
         }
         if counts.meetings > 0 {
-            parts.append("\(counts.meetings) \(counts.meetings == 1 ? "meeting" : "meetings")")
+            parts.append("\(counts.meetings) \(counts.meetings == 1 ? String(localized: "meeting") : String(localized: "meetings"))")
         }
         return "\(counts.total) (\(parts.joined(separator: ", ")))"
     }
@@ -2001,16 +2001,16 @@ public final class GuesliController: NSObject {
     func selectMeetingTranscriptionBackend(_ option: BackendOption, requireDownloaded: Bool = true) {
         guard option.supportsMeetingTranscription else {
             presentErrorAlert(
-                title: "Meeting model unavailable",
-                message: "\(option.label) is a live dictation model and cannot transcribe recordings."
+                title: String(localized: "Meeting model unavailable"),
+                message: String(localized: "\(option.label) is a live dictation model and cannot transcribe recordings.")
             )
             normalizeMeetingTranscriptionSelectionForAvailability()
             return
         }
         guard !requireDownloaded || option.isDownloaded else {
             presentErrorAlert(
-                title: "Meeting model unavailable",
-                message: "Download \(option.label) before using it for meeting transcription."
+                title: String(localized: "Meeting model unavailable"),
+                message: String(localized: "Download \(option.label) before using it for meeting transcription.")
             )
             normalizeMeetingTranscriptionSelectionForAvailability()
             return
@@ -2341,7 +2341,7 @@ public final class GuesliController: NSObject {
             DiagnosticsLog.write("[guesli-native] Google Calendar token invalid while loading calendar list, signed out")
         } catch GoogleCalendarAuthError.refreshFailed(let message) {
             DiagnosticsLog.write("[guesli-native] Google Calendar token refresh failed while loading calendar list: \(message)")
-            appState.googleCalendarListLoadState = .failed("Token refresh failed: \(message)")
+            appState.googleCalendarListLoadState = .failed(String(localized: "Token refresh failed: \(message)"))
         } catch {
             DiagnosticsLog.write("[guesli-native] Google calendarList fetch failed: \(error.localizedDescription)")
             appState.googleCalendarListLoadState = .failed(error.localizedDescription)
@@ -3063,7 +3063,7 @@ public final class GuesliController: NSObject {
         isShowingCalendarNotification = true
 
         let didShow = meetingNotification.show(
-            title: "Meeting starting now",
+            title: String(localized: "Meeting starting now"),
             subtitle: title,
             meetingURL: meetingURL,
             dismissAfter: 30,
@@ -3116,9 +3116,9 @@ public final class GuesliController: NSObject {
         isShowingCalendarNotification = true
         let didShow = meetingNotification.show(
             promptID: "auto-record-\(notificationKey)",
-            title: "Recording scheduled meeting",
+            title: String(localized: "Recording scheduled meeting"),
             subtitle: event.title,
-            actionLabel: "Open",
+            actionLabel: String(localized: "Open"),
             meetingURL: event.meetingURL,
             dismissAfter: 12,
             onStartRecording: { [weak self] in
@@ -3588,8 +3588,8 @@ public final class GuesliController: NSObject {
     ) {
         onboardingModelPreparationTask?.cancel()
         updateModelPreparationStatus(
-            title: "Preparing \(backend.label)",
-            detail: initialStatus ?? "Preparing \(backend.label)...",
+            title: String(localized: "Preparing \(backend.label)"),
+            detail: initialStatus ?? String(localized: "Preparing \(backend.label)..."),
             progress: initialProgress,
             isPreparing: isPreparing,
             isComplete: false
@@ -3614,8 +3614,8 @@ public final class GuesliController: NSObject {
                 await MainActor.run {
                     self.onboardingModelPreparationTask = nil
                     self.updateModelPreparationStatus(
-                        title: "\(backend.label) ready",
-                        detail: "Ready for transcription",
+                        title: String(localized: "\(backend.label) ready"),
+                        detail: String(localized: "Ready for transcription"),
                         progress: 1.0,
                         isPreparing: false,
                         isComplete: true
@@ -3631,7 +3631,7 @@ public final class GuesliController: NSObject {
                 await MainActor.run {
                     self.onboardingModelPreparationTask = nil
                     self.updateModelPreparationStatus(
-                        title: backend.isDownloaded ? "Model setup paused" : "Download paused",
+                        title: backend.isDownloaded ? String(localized: "Model setup paused") : String(localized: "Download paused"),
                         detail: self.modelPreparationFailureMessage(for: backend),
                         progress: nil,
                         isPreparing: false,
@@ -3708,7 +3708,7 @@ public final class GuesliController: NSObject {
         let wasDownloaded = backend.isDownloaded
         progress(
             wasDownloaded ? 0.75 : 0.0,
-            wasDownloaded ? "Warming up \(backend.label)..." : "Downloading \(backend.label)..."
+            wasDownloaded ? String(localized: "Warming up \(backend.label)...") : String(localized: "Downloading \(backend.label)...")
         )
         try await transcriptionCoordinator.preloadRequired(
             backend: backend,
@@ -3721,11 +3721,11 @@ public final class GuesliController: NSObject {
                     return
                 }
                 if status?.localizedCaseInsensitiveContains("download") == true {
-                    progress(value, "\(status ?? "Downloading \(backend.label)...")")
+                    progress(value, status ?? String(localized: "Downloading \(backend.label)..."))
                 } else if value >= 0.9 {
-                    progress(value, status ?? "Warming up \(backend.label)...")
+                    progress(value, status ?? String(localized: "Warming up \(backend.label)..."))
                 } else {
-                    progress(value, status ?? "Preparing \(backend.label)...")
+                    progress(value, status ?? String(localized: "Preparing \(backend.label)..."))
                 }
             }
         )
@@ -3733,23 +3733,25 @@ public final class GuesliController: NSObject {
             throw NSError(
                 domain: "GuesliOnboardingModelDownload",
                 code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "\(backend.label) was not downloaded successfully."]
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "\(backend.label) was not downloaded successfully.")]
             )
         }
-        progress(1.0, "\(backend.label) ready")
+        progress(1.0, String(localized: "\(backend.label) ready"))
     }
 
     private func applyModelPreparationProgress(_ progress: Double, status: String?, backend: BackendOption) {
-        let detail = status ?? "Preparing \(backend.label)..."
+        let detail = status ?? String(localized: "Preparing \(backend.label)...")
         let lowercasedDetail = detail.lowercased()
+        // Our own warm-up status is localized, so match it exactly; coordinator statuses stay English.
         let isPreparing = lowercasedDetail.contains("compiling")
             || lowercasedDetail.contains("warming")
             || lowercasedDetail.contains("readying")
+            || detail == String(localized: "Warming up \(backend.label)...")
 
         if isPreparing {
             updateModelPreparationStatus(
-                title: "Preparing \(backend.label)",
-                detail: "Optimizing \(backend.label) for this Mac...",
+                title: String(localized: "Preparing \(backend.label)"),
+                detail: String(localized: "Optimizing \(backend.label) for this Mac..."),
                 progress: nil,
                 isPreparing: true,
                 isComplete: false
@@ -3758,7 +3760,7 @@ public final class GuesliController: NSObject {
         }
 
         updateModelPreparationStatus(
-            title: "Preparing \(backend.label)",
+            title: String(localized: "Preparing \(backend.label)"),
             detail: detail,
             progress: progress,
             isPreparing: false,
@@ -3804,8 +3806,8 @@ public final class GuesliController: NSObject {
 
     private func modelPreparationFailureMessage(for backend: BackendOption) -> String {
         backend.isDownloaded
-            ? "Model setup failed. Restart Guesli or retry from Models."
-            : "Download failed. Check your connection and retry."
+            ? String(localized: "Model setup failed. Restart Guesli or retry from Models.")
+            : String(localized: "Download failed. Check your connection and retry.")
     }
 
     func completeOnboarding(
@@ -3998,7 +4000,7 @@ public final class GuesliController: NSObject {
 
     private func presentStandardUpdateCheck() {
         guard let updaterController else {
-            appState.sparkleUpdateStatus = .disabled(message: "Update checks are disabled for this build.")
+            appState.sparkleUpdateStatus = .disabled(message: String(localized: "Update checks are disabled for this build."))
             return
         }
         let existingWindows = Set(NSApplication.shared.windows.map(ObjectIdentifier.init))
@@ -4048,7 +4050,10 @@ public final class GuesliController: NSObject {
         if title.localizedCaseInsensitiveContains("update") ||
             title.localizedCaseInsensitiveContains("updater") ||
             title.localizedCaseInsensitiveContains("new version") ||
-            title.localizedCaseInsensitiveContains("available") {
+            title.localizedCaseInsensitiveContains("available") ||
+            // Sparkle ships ru.lproj, so in Russian UI its titles read «Обновление…», «новая версия».
+            title.localizedCaseInsensitiveContains("обновл") ||
+            title.localizedCaseInsensitiveContains("верси") {
             return true
         }
         return false
@@ -5194,11 +5199,11 @@ public final class GuesliController: NSObject {
             try dictationStore.deleteMeeting(id: id)
             scheduleICloudSyncAfterLocalChange()
         } catch let error as MeetingLifecycleError {
-            presentErrorAlert(title: "Couldn't Delete Meeting", message: error.localizedDescription)
+            presentErrorAlert(title: String(localized: "Couldn't Delete Meeting"), message: error.localizedDescription)
             return
         } catch {
             presentErrorAlert(
-                title: "Couldn't Delete Meeting",
+                title: String(localized: "Couldn't Delete Meeting"),
                 message: MeetingLifecycleError.failedToDeleteMeeting(underlying: error).localizedDescription
             )
             return
@@ -5252,8 +5257,8 @@ public final class GuesliController: NSObject {
     func clearMeetingHistory() {
         guard !isMeetingRecording(), !isStartingMeetingRecording, backgroundMeetingProcessingCount == 0 else {
             presentErrorAlert(
-                title: "Couldn't Clear Meeting History",
-                message: "A meeting is recording or still being processed. Please wait before clearing saved meetings."
+                title: String(localized: "Couldn't Clear Meeting History"),
+                message: String(localized: "A meeting is recording or still being processed. Please wait before clearing saved meetings.")
             )
             return
         }
@@ -5265,8 +5270,8 @@ public final class GuesliController: NSObject {
             try clearSavedMeetingRecordingsDirectory(savedRecordingPaths: savedRecordingPaths)
         } catch {
             presentErrorAlert(
-                title: "Couldn't Clear Meeting History",
-                message: "Saved meeting audio or waveform cache files could not be deleted, so meeting history was left in place. \(error.localizedDescription)"
+                title: String(localized: "Couldn't Clear Meeting History"),
+                message: String(localized: "Saved meeting audio or waveform cache files could not be deleted, so meeting history was left in place. \(error.localizedDescription)")
             )
             return
         }
@@ -5315,14 +5320,14 @@ public final class GuesliController: NSObject {
         case .none:
             return true
         case .starting:
-            messageText = "Meeting recording is starting"
-            informativeText = "Quitting now will cancel the meeting recording before it has been saved."
+            messageText = String(localized: "Meeting recording is starting")
+            informativeText = String(localized: "Quitting now will cancel the meeting recording before it has been saved.")
         case .recording:
-            messageText = "Meeting recording in progress"
-            informativeText = "Quitting now will stop the meeting recording and the current transcript may be lost. Stop the recording first if you want Guesli to save notes."
+            messageText = String(localized: "Meeting recording in progress")
+            informativeText = String(localized: "Quitting now will stop the meeting recording and the current transcript may be lost. Stop the recording first if you want Guesli to save notes.")
         case .processing:
-            messageText = "Meeting transcription in progress"
-            informativeText = "Quitting now will interrupt transcription and the meeting notes may not be saved."
+            messageText = String(localized: "Meeting transcription in progress")
+            informativeText = String(localized: "Quitting now will interrupt transcription and the meeting notes may not be saved.")
         }
 
         guard !isPresentingMeetingTerminationConfirmation else {
@@ -5333,8 +5338,8 @@ public final class GuesliController: NSObject {
         alert.alertStyle = .warning
         alert.messageText = messageText
         alert.informativeText = informativeText
-        alert.addButton(withTitle: "Keep Guesli Running")
-        alert.addButton(withTitle: state == .recording ? "Stop, Save & Quit" : "Finish & Quit")
+        alert.addButton(withTitle: String(localized: "Keep Guesli Running"))
+        alert.addButton(withTitle: state == .recording ? String(localized: "Stop, Save & Quit") : String(localized: "Finish & Quit"))
 
         isPresentingMeetingTerminationConfirmation = true
         let didPresent = presentAlert(alert, fallbackLogContext: "meeting termination confirmation") { [weak self] response in
@@ -5496,8 +5501,8 @@ public final class GuesliController: NSObject {
         guard !isMeetingRecording(), !isStartingMeetingRecording else { return false }
         guard let meetingBackend = normalizeMeetingTranscriptionSelectionForAvailability() else {
             presentErrorAlert(
-                title: "Meeting failed to start",
-                message: "Download a transcription model before recording a meeting."
+                title: String(localized: "Meeting failed to start"),
+                message: String(localized: "Download a transcription model before recording a meeting.")
             )
             return false
         }
@@ -5538,7 +5543,7 @@ public final class GuesliController: NSObject {
                 backend: meetingBackend,
                 error: error
             )
-            presentErrorAlert(title: "Meeting failed to start", message: error.localizedDescription)
+            presentErrorAlert(title: String(localized: "Meeting failed to start"), message: error.localizedDescription)
             return false
         }
         let observedMeetingSource = autoStopSource ?? recentMeetingAutoStopSource()
@@ -5578,7 +5583,7 @@ public final class GuesliController: NSObject {
         cancelDictationAudioSessionForMeetingRecordingIfNeeded()
         syncDictationRecorderWarmup(intent: .idlePrewarm(.meetingStateChanged))
         meetingStartMeetingID = meetingID
-        updateMeetingStartStatus("Meeting transcription will start shortly.")
+        updateMeetingStartStatus(String(localized: "Meeting transcription will start shortly."))
         indicator.setState(.preparing, config: config)
         beginMeetingActivity(reason: "Recording and transcribing a meeting")
         meetingMonitor.suppressWhileActive()
@@ -5707,7 +5712,7 @@ public final class GuesliController: NSObject {
               let meeting = meeting(id: meetingID),
               canResumeFinishedMeeting(meeting) else { return }
         guard let meetingBackend = normalizeMeetingTranscriptionSelectionForAvailability() else {
-            presentErrorAlert(title: "Resume failed", message: "Download a transcription model before recording.")
+            presentErrorAlert(title: String(localized: "Resume failed"), message: String(localized: "Download a transcription model before recording."))
             return
         }
 
@@ -5716,7 +5721,7 @@ public final class GuesliController: NSObject {
             priorTranscript = try dictationStore.prepareMeetingForResume(id: meetingID)
         } catch {
             fputs("[guesli-native] failed to prepare meeting resume: \(error)\n", stderr)
-            presentErrorAlert(title: "Resume failed", message: error.localizedDescription)
+            presentErrorAlert(title: String(localized: "Resume failed"), message: error.localizedDescription)
             return
         }
 
@@ -5740,7 +5745,7 @@ public final class GuesliController: NSObject {
         cancelDictationAudioSessionForMeetingRecordingIfNeeded()
         syncDictationRecorderWarmup(intent: .idlePrewarm(.meetingStateChanged))
         meetingStartMeetingID = meetingID
-        updateMeetingStartStatus("Resuming meeting recording…")
+        updateMeetingStartStatus(String(localized: "Resuming meeting recording…"))
         indicator.setState(.preparing, config: config)
         beginMeetingActivity(reason: "Recording and transcribing a meeting")
         meetingMonitor.suppressWhileActive()
@@ -5802,8 +5807,8 @@ public final class GuesliController: NSObject {
         guard !isMeetingRecording(), !isStartingMeetingRecording else { return }
         guard normalizeMeetingTranscriptionSelectionForAvailability() != nil else {
             presentErrorAlert(
-                title: "Import Failed",
-                message: "Download a transcription model before importing audio files."
+                title: String(localized: "Import Failed"),
+                message: String(localized: "Download a transcription model before importing audio files.")
             )
             return
         }
@@ -5831,15 +5836,15 @@ public final class GuesliController: NSObject {
         guard !isMeetingRecording(), !isStartingMeetingRecording else { return }
         guard AudioFileImportController.isSupportedFileURL(url) else {
             presentErrorAlert(
-                title: "Import Failed",
-                message: "This audio file format is not supported."
+                title: String(localized: "Import Failed"),
+                message: String(localized: "This audio file format is not supported.")
             )
             return
         }
         guard normalizeMeetingTranscriptionSelectionForAvailability() != nil else {
             presentErrorAlert(
-                title: "Import Failed",
-                message: "Download a transcription model before importing audio files."
+                title: String(localized: "Import Failed"),
+                message: String(localized: "Download a transcription model before importing audio files.")
             )
             return
         }
@@ -5858,7 +5863,7 @@ public final class GuesliController: NSObject {
         let filename = sourceURL.deletingPathExtension().lastPathComponent
         let title = filename.isEmpty ? "Imported Recording" : filename
 
-        self.updateImportProgressStatus("Importing audio file...", sessionID: sessionID)
+        self.updateImportProgressStatus(String(localized: "Importing audio file..."), sessionID: sessionID)
         self.beginMeetingActivity(reason: "Importing audio file for transcription")
 
         do {
@@ -5914,7 +5919,7 @@ public final class GuesliController: NSObject {
                 self.statusBarController?.refresh()
                 self.syncAppState()
                 self.presentErrorAlert(
-                    title: "Import Failed",
+                    title: String(localized: "Import Failed"),
                     message: error.localizedDescription
                 )
                 self.finishTerminationAfterMeetingSafetyWorkIfNeeded()
@@ -6217,14 +6222,14 @@ public final class GuesliController: NSObject {
                 meetingSession.discard()
                 try Task.checkCancellation()
                 try checkMeetingStartStillCurrent(meetingID)
-                updateMeetingStartStatus("Requesting system audio permission...")
+                updateMeetingStartStatus(String(localized: "Requesting system audio permission..."))
                 statusBarController?.setStatus("Requesting system audio permission...")
                 statusBarController?.refresh()
                 let granted = await CoreAudioSystemRecorder.requestSystemAudioAccess()
                 try Task.checkCancellation()
                 try checkMeetingStartStillCurrent(meetingID)
                 if granted {
-                    updateMeetingStartStatus("Retrying meeting start...")
+                    updateMeetingStartStatus(String(localized: "Retrying meeting start..."))
                     statusBarController?.setStatus("Retrying meeting start...")
                     statusBarController?.refresh()
                     continue
@@ -6256,16 +6261,16 @@ public final class GuesliController: NSObject {
 
         guard pendingMeetingJoinRecording == nil else {
             presentErrorAlert(
-                title: "Already waiting for a meeting",
-                message: "GooseLee is already waiting for a meeting to start before recording."
+                title: String(localized: "Already waiting for a meeting"),
+                message: String(localized: "GooseLee is already waiting for a meeting to start before recording.")
             )
             return
         }
 
         guard let request = PendingMeetingJoinRecordingPolicy.Request(meetingURL: meetingURL) else {
             presentErrorAlert(
-                title: "Meeting link not recognized",
-                message: "GooseLee could not recognize this meeting link. Open the meeting, then use Record Only."
+                title: String(localized: "Meeting link not recognized"),
+                message: String(localized: "GooseLee could not recognize this meeting link. Open the meeting, then use Record Only.")
             )
             return
         }
@@ -6286,8 +6291,8 @@ public final class GuesliController: NSObject {
             } else {
                 self.cancelPendingMeetingJoinRecording(id: pendingID)
                 self.presentErrorAlert(
-                    title: "Meeting failed to open",
-                    message: "GooseLee could not open the meeting link in the selected browser."
+                    title: String(localized: "Meeting failed to open"),
+                    message: String(localized: "GooseLee could not open the meeting link in the selected browser.")
                 )
             }
         }
@@ -6448,7 +6453,7 @@ public final class GuesliController: NSObject {
         }
 
         @MainActor @objc func manualNotesCheckboxChanged(_ sender: NSButton) {
-            discardButton?.title = sender.state == .on ? "Discard" : "Discard Recording"
+            discardButton?.title = sender.state == .on ? String(localized: "Discard") : String(localized: "Discard Recording")
         }
     }
 
@@ -6459,40 +6464,40 @@ public final class GuesliController: NSObject {
         let hasManualNotes = activeMeetingID.map { id in
             !manualNotesForLiveMeeting(id: id).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         } ?? false
-        alert.messageText = "Discard recording?"
+        alert.messageText = String(localized: "Discard recording?")
         alert.alertStyle = .warning
         var manualNotesCheckbox: NSButton?
         if hasManualNotes {
-            alert.informativeText = "This will stop the meeting. Choose whether to delete the written notes too."
+            alert.informativeText = String(localized: "This will stop the meeting. Choose whether to delete the written notes too.")
             let accessory = Self.makeDiscardMeetingAccessoryView()
             manualNotesCheckbox = accessory.manualNotesCheckbox
             alert.accessoryView = accessory.view
-            alert.addButton(withTitle: "Discard Recording")
-            alert.addButton(withTitle: "Cancel")
+            alert.addButton(withTitle: String(localized: "Discard Recording"))
+            alert.addButton(withTitle: String(localized: "Cancel"))
             alert.buttons.first?.hasDestructiveAction = true
             let titleUpdater = MeetingDiscardButtonTitleUpdater(discardButton: alert.buttons.first)
             manualNotesCheckbox?.target = titleUpdater
             manualNotesCheckbox?.action = #selector(MeetingDiscardButtonTitleUpdater.manualNotesCheckboxChanged(_:))
             (accessory.view as? MeetingDiscardAccessoryView)?.titleUpdater = titleUpdater
         } else {
-            alert.informativeText = "This will stop the meeting recording and delete all captured audio. This cannot be undone."
-            alert.addButton(withTitle: "Discard")
-            alert.addButton(withTitle: "Cancel")
+            alert.informativeText = String(localized: "This will stop the meeting recording and delete all captured audio. This cannot be undone.")
+            alert.addButton(withTitle: String(localized: "Discard"))
+            alert.addButton(withTitle: String(localized: "Cancel"))
             alert.buttons.first?.hasDestructiveAction = true
         }
         presentDiscardMeetingAlert(alert, manualNotesCheckbox: manualNotesCheckbox)
     }
 
     private static func makeDiscardMeetingAccessoryView() -> MeetingDiscardAccessory {
-        let label = NSTextField(labelWithString: "Will delete:")
+        let label = NSTextField(labelWithString: String(localized: "Will delete:"))
         label.font = .systemFont(ofSize: NSFont.systemFontSize)
         label.textColor = .secondaryLabelColor
 
-        let recordingCheckbox = NSButton(checkboxWithTitle: "Recording audio", target: nil, action: nil)
+        let recordingCheckbox = NSButton(checkboxWithTitle: String(localized: "Recording audio"), target: nil, action: nil)
         recordingCheckbox.state = .on
         recordingCheckbox.isEnabled = false
 
-        let notesCheckbox = NSButton(checkboxWithTitle: "Manual notes", target: nil, action: nil)
+        let notesCheckbox = NSButton(checkboxWithTitle: String(localized: "Manual notes"), target: nil, action: nil)
         notesCheckbox.state = .off
 
         let container = MeetingDiscardAccessoryView(frame: NSRect(x: 0, y: 0, width: 230, height: 76))
@@ -6829,9 +6834,9 @@ public final class GuesliController: NSObject {
     private func showMeetingAudioWarningNotification(meetingID: Int64, message: String) {
         let didShow = meetingNotification.show(
             promptID: "meeting-audio-warning-\(meetingID)",
-            title: "Microphone issue",
+            title: String(localized: "Microphone issue"),
             subtitle: message,
-            actionLabel: "Open",
+            actionLabel: String(localized: "Open"),
             dismissAfter: 30,
             onStartRecording: { [weak self] in
                 self?.historyWindowController?.show()
@@ -6886,7 +6891,7 @@ public final class GuesliController: NSObject {
             syncAppState()
         }
         indicator.setMeetingRecording(false, config: config)
-        indicator.setTranscribingTitle("Transcribing", config: config)
+        indicator.setTranscribingTitle(String(localized: "Transcribing"), config: config)
         setState(.transcribing)
         let processingGeneration = backgroundMeetingProcessingCount + 1
         sessionToStop.onProgress = { [weak self] stage in
@@ -6940,7 +6945,7 @@ public final class GuesliController: NSObject {
                 meetingResult = result
                 meetingTitle = result.title
                 await MainActor.run {
-                    self.setMeetingProcessingStatus("Finalizing")
+                    self.setMeetingProcessingStatus(String(localized: "Finalizing"))
                 }
                 let recordingSaveDecision = await self.recordingSaveDecision(for: result)
                 let preparedRecordingSave = await self.prepareMeetingRecordingSave(
@@ -6964,7 +6969,7 @@ public final class GuesliController: NSObject {
                             backend: self.selectedMeetingTranscriptionBackend,
                             error: recordingSaveError
                         )
-                        self.presentErrorAlert(title: "Meeting Recording", message: recordingSaveError.localizedDescription)
+                        self.presentErrorAlert(title: String(localized: "Meeting Recording"), message: recordingSaveError.localizedDescription)
                     }
                 }
             } catch {
@@ -6985,7 +6990,7 @@ public final class GuesliController: NSObject {
                 }
                 failedLiveMeetingID = liveMeetingID
                 await MainActor.run {
-                    self.presentErrorAlert(title: "Meeting Recording", message: message)
+                    self.presentErrorAlert(title: String(localized: "Meeting Recording"), message: message)
                 }
             }
             let finalFailedLiveMeetingID = failedLiveMeetingID
@@ -7038,8 +7043,8 @@ public final class GuesliController: NSObject {
         let url = URL(fileURLWithPath: path)
         guard FileManager.default.fileExists(atPath: url.path) else {
             presentErrorAlert(
-                title: "Recording Not Found",
-                message: "The saved meeting recording is no longer available on disk."
+                title: String(localized: "Recording Not Found"),
+                message: String(localized: "The saved meeting recording is no longer available on disk.")
             )
             return
         }
@@ -7636,11 +7641,11 @@ public final class GuesliController: NSObject {
     private func promptToSaveMeetingRecording(for title: String) async -> Bool {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
-        alert.messageText = "Save meeting recording?"
-        alert.informativeText = "Keep a merged audio file for \"\(title)\" so you can inspect it later in Finder."
+        alert.messageText = String(localized: "Save meeting recording?")
+        alert.informativeText = String(localized: "Keep a merged audio file for \"\(title)\" so you can inspect it later in Finder.")
         alert.alertStyle = .informational
-        alert.addButton(withTitle: "Save Recording")
-        alert.addButton(withTitle: "Don't Save")
+        alert.addButton(withTitle: String(localized: "Save Recording"))
+        alert.addButton(withTitle: String(localized: "Don't Save"))
         guard let window = alertPresentationWindow(showHistoryIfNeeded: true) else {
             fputs("[guesli-native] no window available for recording save prompt; saving recording by default\n", stderr)
             return true
@@ -7705,14 +7710,14 @@ public final class GuesliController: NSObject {
         let alert = NSAlert()
         alert.alertStyle = .warning
         if isSystemAudioError {
-            alert.messageText = "System audio capture failed"
-            alert.informativeText = "Could not start system audio recording. Open System Settings > Privacy & Security > Screen & System Audio Recording and enable \(AppIdentity.displayName) under \"System Audio Recording Only\".\n\nError: \(error.localizedDescription)"
-            alert.addButton(withTitle: "Open System Settings")
-            alert.addButton(withTitle: "OK")
+            alert.messageText = String(localized: "System audio capture failed")
+            alert.informativeText = String(localized: "Could not start system audio recording. Open System Settings > Privacy & Security > Screen & System Audio Recording and enable \(AppIdentity.displayName) under \"System Audio Recording Only\".\n\nError: \(error.localizedDescription)")
+            alert.addButton(withTitle: String(localized: "Open System Settings"))
+            alert.addButton(withTitle: String(localized: "OK"))
         } else {
-            alert.messageText = "Meeting failed to start"
+            alert.messageText = String(localized: "Meeting failed to start")
             alert.informativeText = error.localizedDescription
-            alert.addButton(withTitle: "OK")
+            alert.addButton(withTitle: String(localized: "OK"))
         }
 
         presentAlert(alert, fallbackLogContext: "meeting start failure") { response in
@@ -7726,7 +7731,7 @@ public final class GuesliController: NSObject {
         alert.messageText = title
         alert.informativeText = message
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: String(localized: "OK"))
         presentAlert(alert, fallbackLogContext: title)
     }
 
@@ -7852,7 +7857,7 @@ public final class GuesliController: NSObject {
 
     private func blockDictationForMeetingActivityIfNeeded() -> Bool {
         guard isStartingMeetingRecording else { return false }
-        let status = meetingStartStatus ?? "Preparing meeting..."
+        let status = meetingStartStatus ?? String(localized: "Preparing meeting...")
         indicator.showLoading(status)
         statusBarController?.setStatus(status)
         statusBarController?.refresh()
@@ -7909,9 +7914,9 @@ public final class GuesliController: NSObject {
 
     private func showMeetingCompletionNotification(_ notification: PendingMeetingCompletionNotification) {
         meetingNotification.show(
-            title: "Transcription complete",
+            title: String(localized: "Transcription complete"),
             subtitle: notification.title,
-            actionLabel: "View Notes",
+            actionLabel: String(localized: "View Notes"),
             onStartRecording: { [weak self] in
                 guard let self else { return }
                 if let meetingID = notification.meetingID {
@@ -8049,9 +8054,9 @@ public final class GuesliController: NSObject {
         let response = activeMeetingSignalLossResponse
         let didShow = meetingNotification.show(
             promptID: promptID,
-            title: "Meeting signal lost",
-            subtitle: "Still recording. Stop if the meeting ended.",
-            actionLabel: "Stop Recording",
+            title: String(localized: "Meeting signal lost"),
+            subtitle: String(localized: "Still recording. Stop if the meeting ended."),
+            actionLabel: String(localized: "Stop Recording"),
             dismissAfter: 30,
             // MeetingNotificationController uses onStartRecording as its generic
             // primary-action slot; here the primary action is stopping recording.
@@ -8095,7 +8100,7 @@ public final class GuesliController: NSObject {
         let preferredScreen = meetingSourceWindowLocator.screen(for: candidate)
         let didShow = meetingNotification.show(
             promptID: candidate.id,
-            title: "Meeting detected",
+            title: String(localized: "Meeting detected"),
             subtitle: title,
             preferredScreen: preferredScreen,
             platform: MeetingPlatform(candidate.platform),
@@ -8148,13 +8153,13 @@ public final class GuesliController: NSObject {
     private func setMeetingProcessingStage(_ stage: MeetingProcessingStage) {
         switch stage {
         case .transcribingAudio:
-            setMeetingProcessingStatus("Transcribing")
+            setMeetingProcessingStatus(String(localized: "Transcribing"))
         case .cleaningAudio:
-            setMeetingProcessingStatus("Cleaning")
+            setMeetingProcessingStatus(String(localized: "Cleaning"))
         case .generatingTitle:
-            setMeetingProcessingStatus("Titling")
+            setMeetingProcessingStatus(String(localized: "Titling"))
         case .summarizingNotes:
-            setMeetingProcessingStatus("Summarizing")
+            setMeetingProcessingStatus(String(localized: "Summarizing"))
         }
     }
 
@@ -9136,9 +9141,9 @@ public final class GuesliController: NSObject {
         if nsError.domain == "GuesliTranscriptionRuntime" {
             switch nsError.code {
             case 1:
-                return "Nemotron requires macOS 15 or later. Choose another model to test dictation."
+                return String(localized: "Nemotron requires macOS 15 or later. Choose another model to test dictation.")
             default:
-                return "The selected model is not available. Choose another model and try again."
+                return String(localized: "The selected model is not available. Choose another model and try again.")
             }
         }
 
@@ -9146,15 +9151,15 @@ public final class GuesliController: NSObject {
         let lowercasedMessage = rawMessage.lowercased()
 
         if lowercasedMessage.contains("not loaded") || lowercasedMessage.contains("loadmodels") {
-            return "The model was not ready yet. We are preparing it again, then try once more."
+            return String(localized: "The model was not ready yet. We are preparing it again, then try once more.")
         }
         if lowercasedMessage.contains("network") || lowercasedMessage.contains("internet") || lowercasedMessage.contains("timed out") {
-            return "The model could not finish downloading. Check your connection and retry."
+            return String(localized: "The model could not finish downloading. Check your connection and retry.")
         }
         if lowercasedMessage.contains("permission") || lowercasedMessage.contains("microphone") {
-            return "GooseLee could not access the microphone. Check Microphone permission and try again."
+            return String(localized: "GooseLee could not access the microphone. Check Microphone permission and try again.")
         }
-        return "Dictation could not start. Try again in a moment."
+        return String(localized: "Dictation could not start. Try again in a moment.")
     }
 
     @discardableResult
@@ -9178,15 +9183,15 @@ public final class GuesliController: NSObject {
         let minutesUntil = Int(ceil(event.startDate.timeIntervalSinceNow / 60))
         let timeLabel: String
         if minutesUntil > 0 {
-            timeLabel = "starts in \(minutesUntil) min"
+            timeLabel = String(localized: "starts in \(minutesUntil) min")
         } else if minutesUntil == 0 {
-            timeLabel = "starting now"
+            timeLabel = String(localized: "starting now")
         } else {
-            timeLabel = "started \(abs(minutesUntil)) min ago"
+            timeLabel = String(localized: "started \(abs(minutesUntil)) min ago")
         }
 
         let title = event.title
-        let notificationTitle = minutesUntil <= 0 ? "Meeting starting now" : "Upcoming meeting"
+        let notificationTitle = minutesUntil <= 0 ? String(localized: "Meeting starting now") : String(localized: "Upcoming meeting")
         return meetingNotification.show(
             title: notificationTitle,
             subtitle: "\(title) · \(timeLabel)",
@@ -9265,9 +9270,9 @@ public final class GuesliController: NSObject {
     private func showMeetingEndNotification(title: String) {
         guard isMeetingRecording() else { return }
         meetingNotification.show(
-            title: "Meeting ended",
-            subtitle: "\(title) · scheduled time is over",
-            actionLabel: "Stop Recording",
+            title: String(localized: "Meeting ended"),
+            subtitle: String(localized: "\(title) · scheduled time is over"),
+            actionLabel: String(localized: "Stop Recording"),
             dismissAfter: 45,
             onStartRecording: { [weak self] in
                 self?.stopMeetingRecording()

@@ -23,18 +23,33 @@ struct PasteControllerTests {
         pasteboard.clearContents()
         pasteboard.setString("clipboard-sentinel", forType: .string)
 
-        // Post a single space via CGEvent (minimal side-effect in test runner)
-        PasteController.typeText(" ")
+        PasteController.typeText(" ", postEvent: { _ in })
 
         // Clipboard must be unchanged — this is the whole point of typeText
         #expect(pasteboard.string(forType: .string) == "clipboard-sentinel")
     }
 
-    @Test("common ASCII text uses physical keyboard path")
-    func commonASCIIUsesPhysicalKeyboardPath() {
-        #expect(PasteController.canTypeUsingPhysicalKeys("Hello, world! 123"))
-        #expect(PasteController.canTypeUsingPhysicalKeys("this has been created using computer use"))
-        #expect(!PasteController.canTypeUsingPhysicalKeys("नमस्ते"))
+    @Test("streaming text uses Unicode events for ASCII and non-ASCII without posting them")
+    func streamingTextUsesUnicodeEvents() {
+        let text = "Hello,\nпривет\t👩🏽‍💻"
+        var events: [CGEvent] = []
+        PasteController.typeText(text, postEvent: { events.append($0) })
+        #expect(events.count == text.count * 2)
+        for (index, character) in text.enumerated() {
+            for offset in 0...1 {
+                guard events.indices.contains(index * 2 + offset) else { continue }
+                let event = events[index * 2 + offset]
+                #expect(event.type == (offset == 0 ? .keyDown : .keyUp))
+                #expect(event.getIntegerValueField(.keyboardEventKeycode) == 0)
+                #expect(event.flags.isEmpty)
+                var units = [UniChar](repeating: 0, count: 32)
+                var length = 0
+                units.withUnsafeMutableBufferPointer { buffer in
+                    event.keyboardGetUnicodeString(maxStringLength: buffer.count, actualStringLength: &length, unicodeString: buffer.baseAddress)
+                }
+                #expect(Array(units.prefix(length)) == Array(character.utf16))
+            }
+        }
     }
 
     @Test("UTF-16 encoding of SentencePiece leading-space deltas is correct")

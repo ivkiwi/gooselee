@@ -175,6 +175,7 @@ enum Qwen3PostProcessorOutputCleaner {
     static func shouldFallbackToInput(cleaned: String, input: String) -> Bool {
         let trimmed = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return true }
+        if trimmed.allSatisfy({ $0 == "." || $0 == "…" || $0.isWhitespace }) { return true }
 
         let lower = trimmed.lowercased()
         let assistantMarkers = [
@@ -209,7 +210,7 @@ enum Qwen3PostProcessorConfig {
     // Local development override — takes precedence over the UI-selected model when set.
     static let envOverride = "GUESLI_QWEN3_POSTPROC_GGUF"
     static let legacyDirectoryEnvOverride = "GUESLI_QWEN3_POSTPROC_DIR"
-    // Dictation-only cleanup cap. Keep bounded to avoid slow local inference; long dictations may be truncated by LLM.swift.
+    // Keep local inference bounded; dictations that cannot fit retain their original transcript.
     static let maxContextTokens: Int32 = 1024
 
     static func formatInput(_ text: String, appContext: String? = nil, maxAppContextCharacters: Int = 1_200) -> String {
@@ -320,7 +321,13 @@ private actor Qwen3PostProcessorManager {
                 let bot = try loadBot()
                 defer { bot.reset() }
                 let formattedInput = Qwen3PostProcessorConfig.formatInput(text, appContext: appContext)
+                let promptTokens = await bot.core.encode(bot.preprocess(formattedInput, [], .suppressed)).count
+                let replyTokens = await bot.core.encode(text, shouldAddBOS: false, special: false).count
+                guard DictationCleanupSafety.hasContextBudget(promptTokens: promptTokens, replyTokens: replyTokens, contextTokens: Int(Qwen3PostProcessorConfig.maxContextTokens)) else {
+                    throw DictationCleanupError.contextExceeded
+                }
                 await bot.respond(to: formattedInput, thinking: .suppressed)
+                try Task.checkCancellation()
                 let raw = bot.output
                 let cleaned = Qwen3PostProcessorOutputCleaner.clean(raw)
                 Qwen3PostProcessorLogging.logVerbose("Qwen3 GGUF prompt chars=\(bot.preprocess(formattedInput, [], .suppressed).count)")

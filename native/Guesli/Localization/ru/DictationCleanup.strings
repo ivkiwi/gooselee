@@ -1,0 +1,2 @@
+"Dictation exceeds the local cleanup context. Keeping the original text." = "Диктовка длиннее контекста модели. Сохранён исходный текст.";
+"Text cleanup returned an incomplete response. Keeping the original text." = "Обработка оборвалась. Сохранён исходный текст.";

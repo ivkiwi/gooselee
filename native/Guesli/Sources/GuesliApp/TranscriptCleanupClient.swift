@@ -422,6 +422,7 @@ enum ExternalTranscriptCleanupClient {
         else {
             throw TranscriptCleanupError.emptyResponse(provider)
         }
+        if !isVoiceCommand { try DictationCleanupSafety.requireCompletedResponse(json) }
         if isVoiceCommand { return try VoiceCommandResponseCleaner.validated(raw) }
         return try validateOutput(raw, input: text, provider: provider)
     }

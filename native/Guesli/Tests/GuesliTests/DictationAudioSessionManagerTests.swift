@@ -734,17 +734,51 @@ struct DictationAudioSessionManagerTests {
         harness.wait()
 
         #expect(harness.recorder.cancelCalls == 1)
+        #expect(harness.recorder.stopCalls == 1)
         #expect(harness.manager.currentState == .idle)
         #expect(harness.manager.currentSessionID == nil)
         #expect(harness.ducking.restoreCalls == 1)
         #expect(harness.media.restoreCalls == 1)
         #expect(harness.events.contains { if case .failed = $0 { return true }; return false })
+        #expect(!harness.events.contains { if case .interrupted = $0 { return true }; return false })
         #expect(harness.events.contains { event in
             if case .latency(let name, _) = event {
                 return name == "recorder_failed"
             }
             return false
         })
+    }
+
+    @Test("microphone failure finalizes a recorded fragment instead of cancelling it")
+    func recorderFailurePreservesCapturedAudio() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("dictation-partial-test-\(UUID()).wav")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try WavWriter.writeWAV(samples: [0.2], to: url)
+        let harness = Harness(routeKind: .speakerLike)
+        harness.recorder.stopURL = url
+        harness.manager.beginRecording(mode: "toggle", duckingEnabled: true, mediaPauseEnabled: true)
+        harness.wait()
+        let sessionID = harness.manager.currentSessionID
+        let runID = try #require(harness.recorder.activeRecordingID)
+        let error = NSError(domain: "DictationAudioSessionManagerTests", code: 44)
+
+        harness.recorder.onRecordingFailed?(error, runID)
+        harness.wait()
+
+        #expect(harness.recorder.stopCalls == 1)
+        #expect(harness.recorder.cancelCalls == 0)
+        #expect(harness.manager.currentState == .idle)
+        #expect(harness.manager.currentSessionID == nil)
+        #expect(harness.ducking.restoreCalls == 1)
+        #expect(harness.media.restoreCalls == 1)
+        #expect(FileManager.default.fileExists(atPath: url.path))
+        #expect(harness.events.contains {
+            if case .interrupted(let id, let keptURL, let failure) = $0 {
+                return id == sessionID && keptURL == url && (failure as NSError).code == 44
+            }
+            return false
+        })
+        #expect(!harness.events.contains { if case .failed = $0 { return true }; return false })
     }
 
     @Test("stale recorder failure does not fail newer session")

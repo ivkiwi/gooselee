@@ -1,0 +1,8 @@
+"Could not save dictation. Text is in the clipboard — paste it manually (⌘V)." = "Сбой сохранения. Текст в буфере — вставьте вручную (⌘V).";
+"The recording was kept at %@. Import this WAV to retry." = "Запись сохранена: %@. Импортируйте WAV для повтора.";
+"Recording could not be archived. Copy %@ to a safe folder before quitting." = "Не удалось сохранить запись. Скопируйте %@ в другую папку до выхода.";
+"Microphone recording interrupted" = "Запись микрофона прервана";
+"Microphone interrupted — transcribing recorded part" = "Микрофон отключился — распознаём записанное";
+"Transcribing recorded part" = "Распознаём записанное";
+"Dictation was not saved" = "Диктовка не сохранена";
+"Dictation transcription failed" = "Не удалось распознать диктовку";

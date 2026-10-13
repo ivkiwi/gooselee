@@ -29,6 +29,7 @@ enum DictationAudioSessionEvent {
     case cancelled(UUID?, reason: String)
     case failed(UUID?, error: Error)
     case latency(String, Date)
+    case interrupted(UUID?, wavURL: URL, error: Error)
 }
 
 enum DictationWarmupIntent: Equatable {
@@ -665,6 +666,19 @@ final class DictationAudioSessionManager: @unchecked Sendable {
                   self.activeRecorderRunID == recorderRunID else { return }
             self.emitLatency("recorder_failed")
             self.recorder.keepsAudioGraphWarm = false
+            let wavURL = self.recorder.stop()
+            if let wavURL, DictationRecordingRecovery.containsAudio(wavURL) {
+                let sessionID = self.stateStorage.sessionID
+                self.activeRecorderRunID = nil
+                self.recorder.preferredInputDeviceID = nil
+                self.stateStorage = .idle
+                self.finishStartupWatchdog(sessionID)
+                self.clearSessionHint(sessionID)
+                self.emit(.interrupted(sessionID, wavURL: wavURL, error: error))
+                self.restoreSessionAudioState()
+                return
+            }
+            if let wavURL { try? FileManager.default.removeItem(at: wavURL) }
             self.recorder.cancel()
             self.failCurrentSession(error: error)
         }

@@ -161,8 +161,8 @@ actor TranscriptionCoordinator {
 
     private struct PostProcPairLogEntry: Encodable {
         let ts: String
-        let raw: String
-        let processed: String
+        let raw: DictationLogMetadata
+        let processed: DictationLogMetadata
         let model: String
         let asr: String
     }
@@ -176,8 +176,8 @@ actor TranscriptionCoordinator {
         let ts = iso8601.string(from: Date())
         let entry = PostProcPairLogEntry(
             ts: ts,
-            raw: raw,
-            processed: processed,
+            raw: DictationLogMetadata(text: raw),
+            processed: DictationLogMetadata(text: processed),
             model: model ?? postProcessorModelId,
             asr: asr
         )
@@ -495,7 +495,7 @@ actor TranscriptionCoordinator {
         await onRecognizedText?(result.text)
         try Task.checkCancellation()
         if !result.text.isEmpty {
-            Qwen3PostProcessorLogging.logVerbose("Dictation raw transcript after artifact cleanup: \(result.text)")
+            Qwen3PostProcessorLogging.logVerbose("Dictation raw transcript after artifact cleanup: \(DictationLogMetadata(text: result.text).summary)")
         }
         result = await postProcessDictationIfNeeded(
             result,
@@ -510,7 +510,7 @@ actor TranscriptionCoordinator {
             segments: corrected.segments
         )
         if !final.text.isEmpty {
-            Qwen3PostProcessorLogging.logVerbose("Dictation final transcript: \(final.text)")
+            Qwen3PostProcessorLogging.logVerbose("Dictation final transcript: \(DictationLogMetadata(text: final.text).summary)")
         }
         return final
     }
@@ -612,7 +612,7 @@ actor TranscriptionCoordinator {
         let filtered = removeFillers(result)
         let elapsedMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
         if filtered.text != result.text {
-            Qwen3PostProcessorLogging.logVerbose("FillerWordFilter applied in \(String(format: "%.1f", elapsedMs))ms -> \(filtered.text)")
+            Qwen3PostProcessorLogging.logVerbose("FillerWordFilter applied in \(String(format: "%.1f", elapsedMs))ms -> \(DictationLogMetadata(text: filtered.text).summary)")
         } else {
             Qwen3PostProcessorLogging.logVerbose("FillerWordFilter skipped effective changes (\(String(format: "%.1f", elapsedMs))ms)")
         }
@@ -659,7 +659,7 @@ actor TranscriptionCoordinator {
                 )
                 let elapsedMs = (CFAbsoluteTimeGetCurrent() - start) * 1000
                 Qwen3PostProcessorLogging.logVerbose("External transcript cleanup applied via \(transcriptCleanupSettings.provider.label) to \(backend.label) in \(String(format: "%.1f", elapsedMs))ms (chars=\(trimmed.count))")
-                Qwen3PostProcessorLogging.logVerbose("External transcript cleanup final output: \(trimmed)")
+                Qwen3PostProcessorLogging.logVerbose("External transcript cleanup final output: \(DictationLogMetadata(text: trimmed).summary)")
                 await transcriptCleanupWarningHandler?(nil)
                 logPostProcPair(
                     raw: result.text,
@@ -702,7 +702,7 @@ actor TranscriptionCoordinator {
                 return nil
             }
             Qwen3PostProcessorLogging.logVerbose("Qwen3 post-processor applied to \(backend.label) in \(String(format: "%.1f", elapsedMs))ms (chars=\(trimmed.count))")
-            Qwen3PostProcessorLogging.logVerbose("Qwen3 post-processor final output: \(trimmed)")
+            Qwen3PostProcessorLogging.logVerbose("Qwen3 post-processor final output: \(DictationLogMetadata(text: trimmed).summary)")
             logPostProcPair(raw: result.text, processed: trimmed, asr: backend.backend)
             return SpeechTranscriptionResult(
                 text: trimmed,
@@ -754,7 +754,7 @@ actor TranscriptionCoordinator {
     ) async throws -> SpeechTranscriptionResult {
         fputs("[guesli-native] transcribing with FluidAudio: \(url.lastPathComponent)\n", stderr)
         let result = try await fluidTranscriber.transcribe(wavURL: url, language: language.isoCode)
-        fputs("[guesli-native] FluidAudio result: \(result.text.prefix(80)) (took \(String(format: "%.3f", result.processingTime))s)\n", stderr)
+        fputs("[guesli-native] FluidAudio result: \(DictationLogMetadata(text: result.text).summary) (took \(String(format: "%.3f", result.processingTime))s)\n", stderr)
         let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
         let segments = (result.tokenTimings ?? []).map { timing in
             SpeechSegment(start: timing.startTime, end: timing.endTime, text: timing.token)
@@ -775,7 +775,7 @@ actor TranscriptionCoordinator {
         } else {
             result = try await onnxGigaAMTranscriber.transcribe(wavURL: url)
         }
-        fputs("[guesli-native] ONNX GigaAM result: \(result.text.prefix(80)) (took \(String(format: "%.3f", result.processingTime))s)\n", stderr)
+        fputs("[guesli-native] ONNX GigaAM result: \(DictationLogMetadata(text: result.text).summary) (took \(String(format: "%.3f", result.processingTime))s)\n", stderr)
         let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
         return SpeechTranscriptionResult(
             text: text,
@@ -811,7 +811,7 @@ actor TranscriptionCoordinator {
             } else {
                 result = try await transcriber.transcribe(wavURL: url)
             }
-            fputs("[guesli-native] Nemotron 3.5 result: \(result.text.prefix(80)) (took \(String(format: "%.3f", result.processingTime))s)\n", stderr)
+            fputs("[guesli-native] Nemotron 3.5 result: \(DictationLogMetadata(text: result.text).summary) (took \(String(format: "%.3f", result.processingTime))s)\n", stderr)
             let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             return SpeechTranscriptionResult(
                 text: text,

@@ -324,8 +324,8 @@ private actor Qwen3PostProcessorManager {
                 let raw = bot.output
                 let cleaned = Qwen3PostProcessorOutputCleaner.clean(raw)
                 Qwen3PostProcessorLogging.logVerbose("Qwen3 GGUF prompt chars=\(bot.preprocess(formattedInput, [], .suppressed).count)")
-                Qwen3PostProcessorLogging.logVerbose("Qwen3 GGUF raw output: \(raw)")
-                Qwen3PostProcessorLogging.logVerbose("Qwen3 GGUF cleaned output: \(cleaned)")
+                Qwen3PostProcessorLogging.logVerbose("Qwen3 GGUF raw output: \(DictationLogMetadata(text: raw).summary)")
+                Qwen3PostProcessorLogging.logVerbose("Qwen3 GGUF cleaned output: \(DictationLogMetadata(text: cleaned).summary)")
                 if Qwen3PostProcessorOutputCleaner.shouldFallbackToInput(cleaned: cleaned, input: text) {
                     Qwen3PostProcessorLogging.logVerbose("Qwen3 GGUF output rejected; falling back to deterministic cleanup")
                     throw NSError(domain: "Qwen3PostProcessor", code: 4, userInfo: [

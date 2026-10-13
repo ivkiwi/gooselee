@@ -38,6 +38,21 @@ enum VoiceCommandScreenContext {
         return [String(title.prefix(300)), document].filter { !$0.isEmpty }.joined(separator: "\n")
     }
 
+    /// Reads the frontmost app and its selection again; call off the main thread before pasting a result.
+    static func targetChanged(since start: DictationContext?) -> Bool {
+        let app = NSWorkspace.shared.frontmostApplication
+        var selectedText = ""
+        if let app, AXIsProcessTrusted(), let focusedElement = DictationContextCapture.focusedUIElement(for: app) {
+            selectedText = string(focusedElement, attribute: kAXSelectedTextAttribute)
+        }
+        return targetChanged(since: start, bundleID: app?.bundleIdentifier ?? "", selectedText: selectedText)
+    }
+
+    static func targetChanged(since start: DictationContext?, bundleID: String, selectedText: String) -> Bool {
+        guard let start else { return false }
+        return start.bundleID != bundleID || start.selectedText != selectedText
+    }
+
     private static func string(_ element: AXUIElement, attribute: String) -> String {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return "" }

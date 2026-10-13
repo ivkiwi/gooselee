@@ -8,3 +8,4 @@
 "Check your text processing model or account and try again." = "Проверьте модель или аккаунт и повторите.";
 "No command recognized. Select text to improve or try again." = "Команда не распознана. Выделите текст или повторите.";
 "Local voice commands require macOS 15 or later." = "Локальные команды требуют macOS 15+.";
+"Selection changed — result in clipboard (⌘V)" = "Выделение изменилось — результат в буфере (⌘V)";

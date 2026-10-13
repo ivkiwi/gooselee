@@ -73,7 +73,7 @@ enum DictationContextCapture {
 
     // MARK: - Accessibility helpers
 
-    private static func focusedUIElement(for app: NSRunningApplication) -> AXUIElement? {
+    static func focusedUIElement(for app: NSRunningApplication) -> AXUIElement? {
         let axApp = AXUIElementCreateApplication(app.processIdentifier)
         var focusedElement: CFTypeRef?
         let result = AXUIElementCopyAttributeValue(axApp, kAXFocusedUIElementAttribute as CFString, &focusedElement)

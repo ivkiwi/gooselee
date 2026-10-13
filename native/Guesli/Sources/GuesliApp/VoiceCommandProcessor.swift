@@ -13,8 +13,13 @@ enum VoiceCommandProcessor {
         config: AppConfig,
         coordinator: TranscriptionCoordinator
     ) async throws -> String {
-        let prompt = try VoiceCommandPrompt.user(instruction: instruction, context: context)
         var settings = TranscriptCleanupSettings(config: config)
+        let prompt = try VoiceCommandPrompt.user(
+            instruction: instruction,
+            context: context,
+            includeScreenContext: config.enableScreenContext,
+            maxScreenContextCharacters: settings.provider == .local ? VoiceCommandPrompt.localScreenContextCharacters : nil
+        )
         settings.systemPrompt = VoiceCommandPrompt.system
         if settings.provider == .local {
             return try await coordinator.generateVoiceCommand(prompt)

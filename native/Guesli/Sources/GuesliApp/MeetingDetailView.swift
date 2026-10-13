@@ -478,7 +478,12 @@ struct MeetingDetailView: View {
                         .allowsHitTesting(documentMode == .notes)
                         .accessibilityHidden(documentMode != .notes)
 
-                    MeetingTranscriptView(transcript: meeting.rawTranscript)
+                    MeetingTranscriptView(
+                        transcript: meeting.rawTranscript,
+                        onRenameSpeaker: meeting.status == .completed ? { oldLabel, newName in
+                            controller.renameMeetingSpeaker(id: meeting.id, from: oldLabel, to: newName)
+                        } : nil
+                    )
                         .opacity(documentMode == .transcript ? 1 : 0)
                         .allowsHitTesting(documentMode == .transcript)
                         .accessibilityHidden(documentMode != .transcript)
@@ -1838,7 +1843,7 @@ struct TranscriptChatMessage: Identifiable, Equatable {
             let remainderStart = line.index(after: timestampEnd)
             let remainder = line[remainderStart...]
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            let speakerText = splitSpeakerAndText(remainder)
+            let speakerText = splitSpeakerAndText(remainder, isTimestamped: true)
             return TranscriptChatMessage(
                 id: id,
                 timestamp: timestamp.isEmpty ? nil : timestamp,
@@ -1856,13 +1861,14 @@ struct TranscriptChatMessage: Identifiable, Equatable {
         )
     }
 
-    private static func splitSpeakerAndText(_ text: String) -> (speaker: String?, text: String) {
+    private static func splitSpeakerAndText(_ text: String, isTimestamped: Bool = false) -> (speaker: String?, text: String) {
         guard let separator = text.firstIndex(of: ":") else {
             return (nil, text)
         }
 
         let candidate = text[..<separator].trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isLikelySpeakerLabel(candidate) else {
+        // Timestamped lines always carry a label, including manually renamed speakers.
+        guard isLikelySpeakerLabel(candidate) || (isTimestamped && !candidate.isEmpty && candidate.count <= MeetingSpeakerRename.maxNameLength) else {
             return (nil, text)
         }
 
@@ -1884,10 +1890,13 @@ struct TranscriptChatMessage: Identifiable, Equatable {
 
 private struct MeetingTranscriptView: View {
     let transcript: String
+    var onRenameSpeaker: ((String, String) -> Void)? = nil
     @State private var messages: [TranscriptChatMessage]
+    @State private var speakerToRename: String?
 
-    init(transcript: String) {
+    init(transcript: String, onRenameSpeaker: ((String, String) -> Void)? = nil) {
         self.transcript = transcript
+        self.onRenameSpeaker = onRenameSpeaker
         _messages = State(initialValue: TranscriptChatMessage.messages(from: transcript))
     }
 
@@ -1902,7 +1911,10 @@ private struct MeetingTranscriptView: View {
                         .padding(GuesliTheme.spacing24)
                 } else {
                     ForEach(messages) { message in
-                        TranscriptChatBubble(message: message)
+                        TranscriptChatBubble(
+                            message: message,
+                            onRenameSpeaker: onRenameSpeaker == nil ? nil : { speakerToRename = $0 }
+                        )
                     }
                 }
             }
@@ -1914,11 +1926,15 @@ private struct MeetingTranscriptView: View {
         .onChange(of: transcript) { _, newTranscript in
             messages = TranscriptChatMessage.messages(from: newTranscript)
         }
+        .speakerRenameAlert(speaker: $speakerToRename) { oldLabel, newName in
+            onRenameSpeaker?(oldLabel, newName)
+        }
     }
 }
 
 struct TranscriptChatBubble: View {
     let message: TranscriptChatMessage
+    var onRenameSpeaker: ((String) -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .bottom, spacing: GuesliTheme.spacing8) {
@@ -1928,10 +1944,23 @@ struct TranscriptChatBubble: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 if let metadata = metadata {
-                    Text(metadata)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(GuesliTheme.textTertiary)
-                        .textSelection(.enabled)
+                    // The mic speaker stays "You" so user bubbles keep their alignment.
+                    if let speaker = message.speaker, message.timestamp != nil, !message.isUser, let onRenameSpeaker {
+                        Button {
+                            onRenameSpeaker(speaker)
+                        } label: {
+                            Text(metadata)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(GuesliTheme.textTertiary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Переименовать…")
+                    } else {
+                        Text(metadata)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(GuesliTheme.textTertiary)
+                            .textSelection(.enabled)
+                    }
                 }
                 Text(message.text)
                     .font(.system(size: 14))

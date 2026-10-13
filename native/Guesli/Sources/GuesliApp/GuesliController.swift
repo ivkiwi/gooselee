@@ -4759,6 +4759,33 @@ public final class GuesliController: NSObject {
         syncAppState()
     }
 
+    /// Renames a speaker in the saved transcript; keeps rawOriginalTranscript and notes as they are.
+    func renameMeetingSpeaker(id: Int64, from oldLabel: String, to newName: String) {
+        do {
+            guard let meeting = try dictationStore.meeting(id: id),
+                  meeting.status == .completed,
+                  let transcript = MeetingSpeakerRename.rename(oldLabel, to: newName, in: meeting.rawTranscript) else {
+                return
+            }
+            // Empty template fields read back the same as NULL (see MeetingTemplates.snapshot(for:)).
+            try dictationStore.updateMeetingTranscriptAndSummary(
+                id: id,
+                rawTranscript: transcript,
+                rawOriginalTranscript: meeting.rawOriginalTranscript,
+                formattedNotes: meeting.formattedNotes,
+                summaryError: meeting.summaryError,
+                selectedTemplateID: meeting.selectedTemplateID ?? "",
+                selectedTemplateName: meeting.selectedTemplateName ?? "",
+                selectedTemplateKind: meeting.selectedTemplateKind ?? .auto,
+                selectedTemplatePrompt: meeting.selectedTemplatePrompt ?? ""
+            )
+            scheduleICloudSyncAfterLocalChange()
+        } catch {
+            fputs("[guesli-native] failed to rename speaker in meeting \(id): \(error)\n", stderr)
+        }
+        syncAppState()
+    }
+
     func updateMeetingManualNotes(id: Int64, notes: String) {
         liveManualNotesPersistWorkItems[id]?.cancel()
         liveManualNotesPersistWorkItems[id] = nil

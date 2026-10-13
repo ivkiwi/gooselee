@@ -727,7 +727,7 @@ final class GuesliICloudSyncEngine {
                     continuation.resume(throwing: error)
                 }
             }
-            database.add(operation)
+            self.database.add(operation)
         }
     }
 
@@ -768,7 +768,7 @@ final class GuesliICloudSyncEngine {
                     continuation.resume(throwing: error)
                 }
             }
-            database.add(operation)
+            self.database.add(operation)
         }
     }
 
@@ -837,7 +837,7 @@ final class GuesliICloudSyncEngine {
                     continuation.resume(throwing: error)
                 }
             }
-            database.add(operation)
+            self.database.add(operation)
         }
     }
 
@@ -916,7 +916,7 @@ final class GuesliICloudSyncEngine {
                 }
             }
 
-            database.add(operation)
+            self.database.add(operation)
         }
     }
 
@@ -946,7 +946,7 @@ final class GuesliICloudSyncEngine {
                     continuation.resume(throwing: error)
                 }
             }
-            database.add(operation)
+            self.database.add(operation)
         }
     }
 

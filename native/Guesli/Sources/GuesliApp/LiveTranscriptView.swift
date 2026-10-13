@@ -27,7 +27,7 @@ struct LiveTranscriptView: View {
 
     init(
         transcript: String,
-        placeholder: String = "Waiting for speech…",
+        placeholder: String = String(localized: "Waiting for speech…"),
         partialYou: String = "",
         partialOthers: String = ""
     ) {
@@ -51,10 +51,10 @@ struct LiveTranscriptView: View {
                             liveBubble(for: group)
                         }
                         if !trimmedPartialOthers.isEmpty {
-                            partialBubble(speaker: "Others", text: trimmedPartialOthers, isUser: false)
+                            partialBubble(speaker: String(localized: "Others"), text: trimmedPartialOthers, isUser: false)
                         }
                         if !trimmedPartialYou.isEmpty {
-                            partialBubble(speaker: "You", text: trimmedPartialYou, isUser: true)
+                            partialBubble(speaker: String(localized: "You"), text: trimmedPartialYou, isUser: true)
                         }
                         Color.clear
                             .frame(height: 1)

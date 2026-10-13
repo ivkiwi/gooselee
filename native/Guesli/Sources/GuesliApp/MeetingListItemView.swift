@@ -139,10 +139,10 @@ struct MeetingListItemView: View {
         if record.followUpToID != nil || hasFollowUps {
             HStack(spacing: 4) {
                 if record.followUpToID != nil {
-                    relationshipIcon("arrow.turn.down.right", help: "Follow-up meeting")
+                    relationshipIcon("arrow.turn.down.right", help: String(localized: "Follow-up meeting"))
                 }
                 if hasFollowUps {
-                    relationshipIcon("arrow.triangle.branch", help: "Has follow-up meetings")
+                    relationshipIcon("arrow.triangle.branch", help: String(localized: "Has follow-up meetings"))
                 }
             }
         }
@@ -187,7 +187,7 @@ struct MeetingListItemView: View {
         .help("Move to folder")
         .popover(isPresented: $showFolderPopover, arrowEdge: .leading) {
             VStack(alignment: .leading, spacing: 0) {
-                folderPopoverRow(icon: "tray", label: "Unfiled", isActive: record.folderID == nil) {
+                folderPopoverRow(icon: "tray", label: String(localized: "Unfiled"), isActive: record.folderID == nil) {
                     onMove(nil)
                     showFolderPopover = false
                 }
@@ -205,7 +205,7 @@ struct MeetingListItemView: View {
                 }
                 if onCreateFolderAndMove != nil {
                     Divider().padding(.vertical, 4)
-                    folderPopoverRow(icon: "folder.badge.plus", label: "New Folder...") {
+                    folderPopoverRow(icon: "folder.badge.plus", label: String(localized: "New Folder...")) {
                         showFolderPopover = false
                         newFolderName = ""
                         showNewFolderPrompt = true
@@ -288,10 +288,10 @@ struct MeetingListItemView: View {
             return AnyView(SyncOriginBadge(label: label))
         }
         if isImportedAudio {
-            return AnyView(sourceBadge(icon: "square.and.arrow.down", label: "Imported", help: "Imported audio"))
+            return AnyView(sourceBadge(icon: "square.and.arrow.down", label: String(localized: "Imported"), help: String(localized: "Imported audio")))
         }
         if hasSavedRecording {
-            return AnyView(sourceBadge(icon: "waveform", label: "Recording", help: "Saved recording available"))
+            return AnyView(sourceBadge(icon: "waveform", label: String(localized: "Recording"), help: String(localized: "Saved recording available")))
         }
         return nil
     }
@@ -337,14 +337,14 @@ struct MeetingListItemView: View {
     private func formatDuration(_ seconds: Double) -> String {
         let rounded = Int(seconds.rounded())
         if rounded >= 3600 {
-            return "\(rounded / 3600)h \((rounded % 3600) / 60)m"
+            return String(localized: "\(rounded / 3600)h \((rounded % 3600) / 60)m")
         }
         if rounded >= 60 {
             let m = rounded / 60
             let s = rounded % 60
-            return s == 0 ? "\(m)m" : "\(m)m \(s)s"
+            return s == 0 ? String(localized: "\(m)m") : String(localized: "\(m)m \(s)s")
         }
-        return "\(rounded)s"
+        return String(localized: "\(rounded)s")
     }
 
     private func previewText() -> String {

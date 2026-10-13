@@ -6,12 +6,12 @@ enum DictationFilter: Hashable {
 
     var label: String {
         switch self {
-        case .all: return "All time"
-        case .last2Days: return "Last 2 days"
-        case .lastWeek: return "Last week"
-        case .last2Weeks: return "Last 2 weeks"
-        case .lastMonth: return "Last month"
-        case .last3Months: return "Last 3 months"
+        case .all: return String(localized: "All time")
+        case .last2Days: return String(localized: "Last 2 days")
+        case .lastWeek: return String(localized: "Last week")
+        case .last2Weeks: return String(localized: "Last 2 weeks")
+        case .lastMonth: return String(localized: "Last month")
+        case .last3Months: return String(localized: "Last 3 months")
         }
     }
 }
@@ -51,9 +51,9 @@ struct DictationsView: View {
                 currentRecords = []
 
                 if dayStart == today {
-                    currentHeader = "TODAY"
+                    currentHeader = String(localized: "TODAY")
                 } else if dayStart == yesterday {
-                    currentHeader = "YESTERDAY"
+                    currentHeader = String(localized: "YESTERDAY")
                 } else {
                     currentHeader = dateHeaderFormatter.string(from: date).uppercased()
                 }
@@ -173,8 +173,8 @@ struct DictationsView: View {
 
     private var emptyStateInstruction: String {
         appState.config.resolvedOnboardingUseCase.includesVoiceNotes
-            ? "Click Record Voice Note to capture your first note"
-            : "Hold \(appState.config.dictationHotkey.label) to start dictating"
+            ? String(localized: "Click Record Voice Note to capture your first note")
+            : String(localized: "Hold \(appState.config.dictationHotkey.label) to start dictating")
     }
 
     private var voiceNoteButton: some View {

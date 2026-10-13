@@ -136,7 +136,7 @@ struct DictationRowView: View {
                 ForEach(trace.events) { event in
                     VStack(alignment: .leading, spacing: GuesliTheme.spacing4) {
                         HStack(spacing: GuesliTheme.spacing8) {
-                            Text(event.step.map { "Step \($0)" } ?? "Run")
+                            Text(event.step.map { String(localized: "Step \($0)") } ?? String(localized: "Run"))
                                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                                 .foregroundStyle(GuesliTheme.textTertiary)
                                 .frame(width: 48, alignment: .leading)
@@ -184,15 +184,15 @@ struct DictationRowView: View {
     private static func displayFinalStatus(_ status: String) -> String {
         switch status.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "done":
-            return "Done"
+            return String(localized: "Done")
         case "timed_out", "timedout":
-            return "Timed out"
+            return String(localized: "Timed out")
         case "failed", "fail":
-            return "Failed"
+            return String(localized: "Failed")
         case "confirm", "needsconfirmation", "needs_confirmation":
-            return "Confirm"
+            return String(localized: "Confirm")
         case "cancelled", "canceled":
-            return "Cancelled"
+            return String(localized: "Cancelled")
         default:
             return status.capitalized
         }

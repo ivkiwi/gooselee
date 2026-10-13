@@ -1,0 +1,10 @@
+"Final transcription…" = "Финальное распознавание…";
+"Cleaning audio…" = "Очистка звука…";
+"Naming meeting…" = "Придумываем название…";
+"Summarizing…" = "Готовим итог…";
+"Live draft — replaced by the final transcript when processing ends" = "Черновик — заменится финальной расшифровкой";
+"No live transcript — waiting for the final one" = "Черновика нет — ждём финальную расшифровку";
+"Couldn't process meeting" = "Не удалось обработать встречу";
+"Your notes are saved. You can transcribe the recording again." = "Заметки сохранены. Запись можно расшифровать заново.";
+"Your notes are saved." = "Заметки сохранены.";
+"Retry" = "Повторить";

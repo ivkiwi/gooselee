@@ -178,6 +178,7 @@ while IFS= read -r fragment; do
   cat "$fragment" >> "$STAGED_APP_DIR/Contents/Resources/ru.lproj/Localizable.strings"
   echo >> "$STAGED_APP_DIR/Contents/Resources/ru.lproj/Localizable.strings"
 done < <(find "$ROOT/native/Guesli/Localization/ru" -maxdepth 1 -name "*.strings" -type f | LC_ALL=C sort)
+cp "$ROOT/native/Guesli/Localization/ru/Localizable.stringsdict" "$STAGED_APP_DIR/Contents/Resources/ru.lproj/Localizable.stringsdict"
 cat > "$STAGED_APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

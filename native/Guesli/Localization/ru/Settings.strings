@@ -134,7 +134,6 @@
 "Open in System Settings" = "Открыть в Системных настройках";
 "No retries" = "Без повторов";
 "1 retry" = "1 повтор";
-"%lld retries" = "Повторов: %lld";
 "Don't notify me when a call is detected in these apps:" = "Не уведомлять о звонках в этих приложениях:";
 " (Primary)" = " (основной)";
 "Connected directly to Guesli" = "Подключён напрямую к Guesli";

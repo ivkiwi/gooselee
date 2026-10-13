@@ -9,7 +9,6 @@
 "skipped %lld" = "пропущено: %lld";
 " dictionary entries." = ".";
 "Could not import the dictionary. %@" = "Не удалось импортировать словарь. %@";
-"Exported %lld dictionary entries." = "Экспортировано записей: %lld.";
 "Could not export the dictionary. %@" = "Не удалось экспортировать словарь. %@";
 "Suggested Corrections" = "Предложенные исправления";
 "Corrections Guesli noticed by briefly reading focused app text after dictation." = "Исправления, которые Guesli заметил в тексте приложения после диктовки.";

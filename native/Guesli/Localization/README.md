@@ -5,5 +5,6 @@
 - Everything else the user sees (String variables, enum/model labels, `NSMenuItem`, `NSAlert`, notifications, user-facing errors) goes through `String(localized: "English text")`.
 - Interpolation becomes format specifiers in the key: `Int` → `%lld`, `String` → `%@`, `Double` → `%lf`. The translation must keep the same specifiers; use positional `%1$@`, `%2$lld` when the order changes.
 - Russian lives in `ru/<Area>.strings`, one fragment per feature or area: `"English key" = "Русский перевод";`, UTF-8, escape `\"` and `\n`. Edit only your own fragment; shared words go to `Common.strings`.
+- Counters where a Russian noun agrees with the number (`%lld meetings`) go to `ru/Localizable.stringsdict` with one/few/many/other forms, not to a `.strings` fragment.
 - Keep translations as short as possible and use standard macOS Russian terms («Отменить», «Готово», «Настройки»). LLM prompts are not UI and are not localized.
-- `scripts/build_native_app.sh` merges `ru/*.strings` (sorted) into `ru.lproj/Localizable.strings`; `LocalizationStringsTests` checks parsing, duplicate keys, empty values and format specifiers.
+- `scripts/build_native_app.sh` merges `ru/*.strings` (sorted) into `ru.lproj/Localizable.strings` and copies `ru/Localizable.stringsdict`; `LocalizationStringsTests` checks parsing, duplicate keys, empty values and format specifiers.

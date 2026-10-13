@@ -7842,6 +7842,7 @@ public final class GuesliController: NSObject {
             return
         }
         meetingBookmarkHotkeyMonitor.doubleTapEnabled = false
+        meetingBookmarkHotkeyMonitor.handlesCombinationWhileEditingText = true
         meetingBookmarkHotkeyMonitor.configure(config.meetingBookmarkHotkey)
         meetingBookmarkHotkeyMonitor.start()
     }

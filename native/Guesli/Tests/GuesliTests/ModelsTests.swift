@@ -1015,6 +1015,18 @@ struct HotkeyMonitorTests {
         )
     }
 
+    @Test("bookmark combination still fires while editing text")
+    @MainActor
+    func bookmarkCombinationFiresWhileEditingText() async throws {
+        let monitor = HotkeyMonitor()
+        monitor.configure(.meetingBookmarkDefault)
+        let textView = NSTextView()
+
+        #expect(monitor.shouldHandleLocalEventForTests(type: .keyDown, keyCode: 11, firstResponder: textView) == false)
+        monitor.handlesCombinationWhileEditingText = true
+        #expect(monitor.shouldHandleLocalEventForTests(type: .keyDown, keyCode: 11, firstResponder: textView) == true)
+    }
+
     @Test("local monitor preserves key-up cleanup after hotkey session is armed")
     @MainActor
     func localMonitorPreservesKeyUpCleanupAfterHotkeySessionIsArmed() async throws {

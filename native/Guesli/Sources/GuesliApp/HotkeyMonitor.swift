@@ -36,6 +36,8 @@ final class HotkeyMonitor {
     var doubleTapEnabled: Bool = true
     var voiceCommandsEnabled: Bool = false
     var onVoiceCommandModeChanged: (() -> Void)?
+    /// One-shot combinations (meeting bookmarks) also fire while a text field has focus.
+    var handlesCombinationWhileEditingText = false
     private var voiceCommandMode = VoiceCommandMode()
     private var combinationShiftDown = false
 
@@ -382,6 +384,7 @@ final class HotkeyMonitor {
     ) -> Bool {
         let isTextEditing = firstResponder is NSTextView || firstResponder is NSTextField
         guard isTextEditing else { return true }
+        if handlesCombinationWhileEditingText && isCombinationMode { return true }
 
         // Text editing owns fresh hotkey starts, but an already-armed hotkey
         // session must still receive key-up/Escape cleanup events.

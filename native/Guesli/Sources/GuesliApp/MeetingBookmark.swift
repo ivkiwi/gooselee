@@ -8,7 +8,7 @@ enum MeetingBookmark {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = .current
         formatter.dateFormat = "HH:mm:ss"
-        return "⭐ [\(formatter.string(from: date))] Важно"
+        return "⭐ [\(formatter.string(from: date))] \(String(localized: "Important"))"
     }
 
     /// Returns the notes with a bookmark line appended, or nil when this second is already bookmarked.

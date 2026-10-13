@@ -103,7 +103,7 @@ struct AboutView: View {
 
     @ViewBuilder
     private func sectionHeader(_ title: String) -> some View {
-        Text(title)
+        Text(LocalizedStringKey(title))
             .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(GuesliTheme.textTertiary)
             .textCase(.uppercase)
@@ -134,15 +134,15 @@ struct AboutView: View {
     private var updateRowGuidance: String {
         switch appState.sparkleUpdateStatus {
         case .available:
-            return "Use the menu bar icon > Check for Updates..."
+            return String(localized: "Use the menu bar icon > Check for Updates...")
         case .downloaded:
-            return "Use the menu bar updater to finish installation."
+            return String(localized: "Use the menu bar updater to finish installation.")
         case .checking, .busy, .installing:
-            return "Checking..."
+            return String(localized: "Checking...")
         case .failed:
-            return "Use the menu bar icon > Check for Updates..."
+            return String(localized: "Use the menu bar icon > Check for Updates...")
         case .idle, .upToDate, .disabled:
-            return "Use the menu bar icon > Check for Updates..."
+            return String(localized: "Use the menu bar icon > Check for Updates...")
         }
     }
 
@@ -153,57 +153,57 @@ struct AboutView: View {
         case .checking:
             return UpdateBanner(
                 icon: "arrow.triangle.2.circlepath",
-                title: "Checking for updates",
-                message: "GooseLee is checking the appcast for the latest version.",
+                title: String(localized: "Checking for updates"),
+                message: String(localized: "GooseLee is checking the appcast for the latest version."),
                 tint: GuesliTheme.transcribing
             )
         case .busy(let message):
             return UpdateBanner(
                 icon: "clock.arrow.circlepath",
-                title: "Updater is busy",
+                title: String(localized: "Updater is busy"),
                 message: message,
                 tint: GuesliTheme.transcribing
             )
         case .available(let version):
             return UpdateBanner(
                 icon: "exclamationmark.triangle.fill",
-                title: "GooseLee \(version) is available",
-                message: "An update is available. Use the menu bar icon > Check for Updates... to open the updater.",
+                title: String(localized: "GooseLee \(version) is available"),
+                message: String(localized: "An update is available. Use the menu bar icon > Check for Updates... to open the updater."),
                 tint: GuesliTheme.transcribing
             )
         case .downloaded(let version):
             return UpdateBanner(
                 icon: "exclamationmark.triangle.fill",
-                title: "GooseLee \(version) is ready to install",
-                message: "The update is downloaded. Use the menu bar updater to finish installation.",
+                title: String(localized: "GooseLee \(version) is ready to install"),
+                message: String(localized: "The update is downloaded. Use the menu bar updater to finish installation."),
                 tint: GuesliTheme.transcribing
             )
         case .installing(let version):
             return UpdateBanner(
                 icon: "arrow.down.circle.fill",
-                title: "Installing GooseLee \(version)",
-                message: "Sparkle is preparing the update. GooseLee may relaunch when installation finishes.",
+                title: String(localized: "Installing GooseLee \(version)"),
+                message: String(localized: "Sparkle is preparing the update. GooseLee may relaunch when installation finishes."),
                 tint: GuesliTheme.transcribing
             )
         case .upToDate:
             return UpdateBanner(
                 icon: "checkmark.circle.fill",
-                title: "GooseLee is up to date",
-                message: "No newer version was found in the appcast.",
+                title: String(localized: "GooseLee is up to date"),
+                message: String(localized: "No newer version was found in the appcast."),
                 tint: GuesliTheme.success
             )
         case .disabled(let message):
             return UpdateBanner(
                 icon: "minus.circle.fill",
-                title: "Updates are disabled",
+                title: String(localized: "Updates are disabled"),
                 message: message,
                 tint: GuesliTheme.textTertiary
             )
         case .failed(let message):
             return UpdateBanner(
                 icon: "xmark.octagon.fill",
-                title: "Update check failed",
-                message: "\(message) Use the menu bar icon > Check for Updates... to try again.",
+                title: String(localized: "Update check failed"),
+                message: String(localized: "\(message) Use the menu bar icon > Check for Updates... to try again."),
                 tint: GuesliTheme.recording
             )
         }
@@ -241,7 +241,7 @@ struct AboutView: View {
     @ViewBuilder
     private func aboutRow(_ label: String, @ViewBuilder control: () -> some View) -> some View {
         HStack {
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(GuesliTheme.body())
                 .foregroundStyle(GuesliTheme.textPrimary)
             Spacer()
@@ -256,7 +256,7 @@ struct AboutView: View {
             Text(name)
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(GuesliTheme.textPrimary)
-            Text(description)
+            Text(LocalizedStringKey(description))
                 .font(GuesliTheme.callout())
                 .foregroundStyle(GuesliTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -273,7 +273,7 @@ struct AboutView: View {
                     Image(systemName: icon)
                         .font(.system(size: 11))
                 }
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.system(size: 13, weight: .medium))
             }
             .foregroundStyle(GuesliTheme.textPrimary)

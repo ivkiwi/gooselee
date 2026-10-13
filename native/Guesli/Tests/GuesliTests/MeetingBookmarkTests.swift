@@ -13,15 +13,15 @@ struct MeetingBookmarkTests {
 
     @Test("formats the line with the transcript wall-clock timestamp")
     func formatsLine() {
-        #expect(MeetingBookmark.line(at: date(hour: 9, minute: 5, second: 7)) == "⭐ [09:05:07] Важно")
+        #expect(MeetingBookmark.line(at: date(hour: 9, minute: 5, second: 7)) == "⭐ [09:05:07] Important")
     }
 
     @Test("appends on its own line")
     func appendsOnOwnLine() {
         let at = date(hour: 14, minute: 31, second: 5)
-        #expect(MeetingBookmark.appending(to: "", at: at) == "⭐ [14:31:05] Важно")
-        #expect(MeetingBookmark.appending(to: "Agenda", at: at) == "Agenda\n⭐ [14:31:05] Важно")
-        #expect(MeetingBookmark.appending(to: "Agenda\n", at: at) == "Agenda\n⭐ [14:31:05] Важно")
+        #expect(MeetingBookmark.appending(to: "", at: at) == "⭐ [14:31:05] Important")
+        #expect(MeetingBookmark.appending(to: "Agenda", at: at) == "Agenda\n⭐ [14:31:05] Important")
+        #expect(MeetingBookmark.appending(to: "Agenda\n", at: at) == "Agenda\n⭐ [14:31:05] Important")
     }
 
     @Test("skips a repeated press within the same second")
@@ -30,7 +30,7 @@ struct MeetingBookmarkTests {
         let notes = MeetingBookmark.appending(to: "Agenda", at: first)!
         #expect(MeetingBookmark.appending(to: notes, at: first.addingTimeInterval(0.4)) == nil)
         #expect(MeetingBookmark.appending(to: notes, at: first.addingTimeInterval(1))
-            == "Agenda\n⭐ [14:31:05] Важно\n⭐ [14:31:06] Важно")
+            == "Agenda\n⭐ [14:31:05] Important\n⭐ [14:31:06] Important")
     }
 
     @Test("bookmark hotkey must differ from active meeting shortcuts")

@@ -44,19 +44,19 @@ struct SidebarView: View {
         switch appState.sparkleUpdateStatus {
         case .available:
             return UpdateCTA(
-                label: "Update",
+                label: String(localized: "Update"),
                 icon: "arrow.down",
                 foreground: updateCTAForeground,
-                accessibilityLabel: "Update available",
-                tooltip: "Open About for update instructions"
+                accessibilityLabel: String(localized: "Update available"),
+                tooltip: String(localized: "Open About for update instructions")
             )
         case .downloaded:
             return UpdateCTA(
-                label: "Ready",
+                label: String(localized: "Ready"),
                 icon: "arrow.clockwise",
                 foreground: updateCTAForeground,
-                accessibilityLabel: "Update ready to install",
-                tooltip: "Open About for update instructions"
+                accessibilityLabel: String(localized: "Update ready to install"),
+                tooltip: String(localized: "Open About for update instructions")
             )
         case .idle, .checking, .busy, .installing, .upToDate, .disabled, .failed:
             return nil
@@ -147,7 +147,7 @@ struct SidebarView: View {
                 appState.directMeetingCountsByFolder[folder.id] ?? 0
             } ?? 0
             if directCount > 0 {
-                Text("\(directCount) meeting\(directCount == 1 ? "" : "s") in this folder will be moved to Unfiled. Subfolders will be kept.")
+                Text("Meetings in this folder will be moved to Unfiled: \(directCount). Subfolders will be kept.")
             } else {
                 Text("This folder will be permanently removed. Subfolders will be kept.")
             }
@@ -289,7 +289,7 @@ struct SidebarView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     meetingFilterRow(
                         icon: "tray.2",
-                        label: "All Meetings",
+                        label: String(localized: "All Meetings"),
                         count: appState.totalMeetingCount,
                         isSelected: appState.selectedTab == .meetings && appState.selectedFolderID == nil
                     ) {
@@ -420,7 +420,7 @@ struct SidebarView: View {
                     .foregroundStyle(isSelected ? GuesliTheme.accent : GuesliTheme.textSecondary)
                     .frame(width: sidebarIconColumnWidth, height: sidebarIconColumnWidth, alignment: .center)
                     .offset(y: icon == "square.and.arrow.down" ? -1 : 0)
-                Text(label)
+                Text(LocalizedStringKey(label))
                     .font(GuesliTheme.headline())
                     .foregroundStyle(isSelected ? GuesliTheme.textPrimary : GuesliTheme.textSecondary)
                 Spacer()
@@ -605,24 +605,24 @@ struct SidebarView: View {
     }
 
     private func createNewFolder() {
-        if let id = controller.createFolder(name: "New Folder") {
+        if let id = controller.createFolder(name: String(localized: "New Folder")) {
             withAnimation(.easeInOut(duration: 0.15)) {
                 meetingsExpanded = true
             }
             renamingFolderID = id
-            renamingFolderName = "New Folder"
+            renamingFolderName = String(localized: "New Folder")
             controller.showMeetingsHome(folderID: id)
         }
     }
 
     private func createNewSubfolder(parentID: Int64) {
-        if let id = controller.createSubfolder(name: "New Folder", parentID: parentID) {
+        if let id = controller.createSubfolder(name: String(localized: "New Folder"), parentID: parentID) {
             withAnimation(.easeInOut(duration: 0.15)) {
                 meetingsExpanded = true
                 collapsedFolderIDs.remove(parentID)
             }
             renamingFolderID = id
-            renamingFolderName = "New Folder"
+            renamingFolderName = String(localized: "New Folder")
             controller.showMeetingsHome(folderID: id)
         }
     }

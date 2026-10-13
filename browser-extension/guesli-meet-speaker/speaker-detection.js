@@ -41,7 +41,15 @@
     return [];
   }
 
-  const api = { participantNameMatches, captionSpeakerFromLines, preferExplicitSpeakers };
+  // Whole-label match: JS \b does not see Cyrillic word edges, so anchor instead of \b.
+  function captionsToggleAction(label) {
+    const text = String(label || "").replace(/\s+/g, " ").trim().toLocaleLowerCase();
+    if (/^(turn on|enable|включить) (captions|субтитры)(?: ?\([^()]{1,20}\))?$/.test(text)) return "enable";
+    if (/^(turn off|disable|выключить) (captions|субтитры)(?: ?\([^()]{1,20}\))?$/.test(text)) return "disable";
+    return "";
+  }
+
+  const api = { participantNameMatches, captionSpeakerFromLines, preferExplicitSpeakers, captionsToggleAction };
   root.GuesliMeetSpeakerDetection = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof globalThis === "undefined" ? this : globalThis);

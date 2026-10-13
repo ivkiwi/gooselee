@@ -23,7 +23,8 @@ let backupPersistTimer = 0;
 let pendingScanTimer = 0;
 let lastScanAt = 0;
 let lastKnownParticipants = [];
-let captionsStateChecked = false;
+let bridgeAcceptedPath = "";
+let captionsHandledPath = "";
 const recentCaptionSpeakers = new Map();
 
 function isVisible(element) {
@@ -206,17 +207,19 @@ function activeSpeakersFromRecentCaptions() {
 }
 
 function maybeEnableCaptions() {
-  if (captionsStateChecked) return;
+  // The app accepts samples only while recording this meeting; touch captions once per call after that.
+  const callPath = location.pathname;
+  if (!speakerDetection || bridgeAcceptedPath !== callPath || captionsHandledPath === callPath) return;
   const controls = [...document.querySelectorAll('button[aria-label], [role="button"][aria-label]')].filter(isVisible);
-  const enabled = controls.some((control) => /^(turn off|disable) captions\b|^выключить субтитры\b/i.test(control.getAttribute("aria-label") || ""));
-  if (enabled) {
-    captionsStateChecked = true;
+  const actionOf = (control) => speakerDetection.captionsToggleAction(control.getAttribute("aria-label"));
+  if (controls.some((control) => actionOf(control) === "disable")) {
+    captionsHandledPath = callPath;
     return;
   }
 
-  const enableButton = controls.find((control) => /^(turn on|enable) captions\b|^включить субтитры\b/i.test(control.getAttribute("aria-label") || ""));
+  const enableButton = controls.find((control) => actionOf(control) === "enable");
   if (enableButton) {
-    captionsStateChecked = true;
+    captionsHandledPath = callPath;
     enableButton.click();
   }
 }
@@ -374,6 +377,7 @@ async function postBridgePayload(payload) {
   if (!response?.ok) {
     throw new Error(response?.error || "Guesli bridge request failed");
   }
+  bridgeAcceptedPath = location.pathname;
 }
 
 function sendBackgroundMessage(message) {

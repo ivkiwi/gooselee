@@ -13,4 +13,4 @@ After updating the extension files, click **Reload** on `chrome://extensions` an
 
 The extension sends only active speaker name samples, visible Meet participant names, and the current Meet URL to `http://127.0.0.1:1477/v1/meet-speaker`.
 GooseLee accepts authenticated requests only while it is recording the matching active Google Meet.
-It enables Meet captions locally once per call and uses only recent caption rows tied to a known participant; it does not scan arbitrary page text for speaker names.
+It enables Meet captions locally once per call, only after GooseLee accepts its first sample for that meeting, so opening Meet without a recording leaves captions alone. It uses only recent caption rows tied to a known participant; it does not scan arbitrary page text for speaker names.

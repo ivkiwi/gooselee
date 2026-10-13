@@ -10,6 +10,7 @@ struct ShortcutsView: View {
     @State private var pendingModifierKeyCode: UInt16?
     @State private var dictationShortcutMessage: String?
     @State private var meetingRecordingShortcutMessage: String?
+    @State private var meetingBookmarkShortcutMessage: String?
 
     var body: some View {
         ScrollView {
@@ -26,6 +27,8 @@ struct ShortcutsView: View {
 
                 meetingRecordingShortcutSection
 
+                meetingBookmarkShortcutSection
+
                 doubleTapSection
 
                 resetButton
@@ -41,6 +44,7 @@ struct ShortcutsView: View {
     private enum ShortcutTarget {
         case dictation
         case meetingRecording
+        case meetingBookmark
     }
 
     private var dictationShortcutSection: some View {
@@ -132,6 +136,54 @@ struct ShortcutsView: View {
         )
     }
 
+    private var meetingBookmarkShortcutSection: some View {
+        VStack(alignment: .leading, spacing: GuesliTheme.spacing16) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: GuesliTheme.spacing4) {
+                    Text("Метка во встрече")
+                        .font(GuesliTheme.headline())
+                        .foregroundStyle(GuesliTheme.textPrimary)
+                    Text("Добавляет в заметки идущей встречи строку ⭐ со временем")
+                        .font(GuesliTheme.caption())
+                        .foregroundStyle(GuesliTheme.textSecondary)
+                }
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { appState.config.enableMeetingBookmarkHotkey },
+                    set: { newValue in
+                        let result = controller.updateMeetingBookmarkHotkeyEnabled(newValue)
+                        meetingBookmarkShortcutMessage = result.message
+                    }
+                ))
+                .toggleStyle(.switch)
+                .tint(GuesliTheme.accent)
+                .labelsHidden()
+            }
+
+            Divider()
+                .background(GuesliTheme.surfaceBorder)
+
+            HStack(spacing: GuesliTheme.spacing12) {
+                hotkeyBadge(appState.config.meetingBookmarkHotkey)
+                changeButton(for: .meetingBookmark)
+                    .disabled(!appState.config.enableMeetingBookmarkHotkey)
+                    .opacity(appState.config.enableMeetingBookmarkHotkey ? 1 : 0.55)
+                Spacer(minLength: GuesliTheme.spacing16)
+            }
+
+            if let meetingBookmarkShortcutMessage {
+                shortcutMessage(meetingBookmarkShortcutMessage)
+            }
+        }
+        .padding(GuesliTheme.spacing16)
+        .background(GuesliTheme.backgroundRaised)
+        .clipShape(RoundedRectangle(cornerRadius: GuesliTheme.cornerMedium))
+        .overlay(
+            RoundedRectangle(cornerRadius: GuesliTheme.cornerMedium)
+                .strokeBorder(GuesliTheme.surfaceBorder, lineWidth: 1)
+        )
+    }
+
     private func hotkeyBadge(_ hotkey: HotkeyConfig) -> some View {
         Text(hotkey.displayLabel)
             .font(.system(size: 12, weight: .medium, design: .rounded))
@@ -174,6 +226,8 @@ struct ShortcutsView: View {
             return appState.config.dictationHotkey
         case .meetingRecording:
             return appState.config.meetingRecordingHotkey
+        case .meetingBookmark:
+            return appState.config.meetingBookmarkHotkey
         }
     }
 
@@ -247,6 +301,8 @@ struct ShortcutsView: View {
             return "Press a key or modifier..."
         case .dictation:
             return "Press a modifier key..."
+        case .meetingBookmark:
+            return "Нажмите сочетание клавиш..."
         }
     }
 
@@ -287,6 +343,7 @@ struct ShortcutsView: View {
             controller.resetShortcutDefaults()
             dictationShortcutMessage = nil
             meetingRecordingShortcutMessage = nil
+            meetingBookmarkShortcutMessage = nil
         } label: {
             Text("Reset to Defaults")
                 .font(GuesliTheme.body())
@@ -299,6 +356,8 @@ struct ShortcutsView: View {
                 && !appState.config.enableMeetingRecordingHotkey
                 && appState.config.hotkeyTriggerThresholdMS == HotkeyTriggerTiming.defaultThresholdMilliseconds
                 && appState.config.meetingRecordingHotkeyTriggerThresholdMS == HotkeyTriggerTiming.defaultMeetingThresholdMilliseconds
+                && appState.config.meetingBookmarkHotkey == .meetingBookmarkDefault
+                && !appState.config.enableMeetingBookmarkHotkey
         )
     }
 
@@ -316,7 +375,7 @@ struct ShortcutsView: View {
                 let mods = HotkeyConfig.supportedCombinationModifiers(from: event.modifierFlags)
                 let hasModifiers = mods.contains(.command) || mods.contains(.control)
                     || mods.contains(.option)
-                guard target == .meetingRecording,
+                guard target != .dictation,
                       hasModifiers,
                       HotkeyConfig.letterLabel(for: event.keyCode) != nil else {
                     return event
@@ -328,7 +387,8 @@ struct ShortcutsView: View {
             }
 
             let keyCode = event.keyCode
-            guard HotkeyConfig.label(for: keyCode) != nil else { return event }
+            // Bookmarks fire on press, so they only accept key combinations.
+            guard target != .meetingBookmark, HotkeyConfig.label(for: keyCode) != nil else { return event }
             let flags = event.modifierFlags
             let isDown: Bool
             switch keyCode {
@@ -356,6 +416,8 @@ struct ShortcutsView: View {
             result = controller.updateDictationHotkey(config)
         case .meetingRecording:
             result = controller.updateMeetingRecordingHotkey(config)
+        case .meetingBookmark:
+            result = controller.updateMeetingBookmarkHotkey(config)
         }
         setShortcutMessage(result.message, for: target)
         stopRecording()
@@ -373,6 +435,8 @@ struct ShortcutsView: View {
         case .meetingRecording:
             meetingRecordingShortcutMessage = message
             if message == nil { dictationShortcutMessage = nil }
+        case .meetingBookmark:
+            meetingBookmarkShortcutMessage = message
         }
     }
 

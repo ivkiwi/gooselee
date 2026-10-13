@@ -80,6 +80,19 @@ struct ShortcutHotkeyPolicy {
         return commonAppShortcuts.contains(signature) ? commonGlobalShortcutWarning : nil
     }
 
+    static func validateMeetingBookmarkHotkey(
+        _ hotkey: HotkeyConfig,
+        dictationHotkey: HotkeyConfig,
+        meetingRecordingHotkey: HotkeyConfig,
+        isMeetingRecordingEnabled: Bool
+    ) -> ShortcutHotkeyUpdateResult {
+        if hotkeysConflict(hotkey, dictationHotkey)
+            || (isMeetingRecordingEnabled && hotkeysConflict(hotkey, meetingRecordingHotkey)) {
+            return .conflict(message: "Это сочетание уже используется для другого действия.")
+        }
+        return .updated
+    }
+
     private struct HotkeySignature: Hashable {
         let modifiersRawValue: UInt
         let keyCode: UInt16

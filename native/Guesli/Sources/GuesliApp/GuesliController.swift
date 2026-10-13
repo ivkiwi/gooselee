@@ -429,6 +429,8 @@ public final class GuesliController: NSObject {
     let transcriptionCoordinator = TranscriptionCoordinator()
     private let hotkeyMonitor = HotkeyMonitor()
     private let meetingRecordingHotkeyMonitor = HotkeyMonitor()
+    // Bookmarks fire on key press, without a hold threshold.
+    private let meetingBookmarkHotkeyMonitor = HotkeyMonitor(prepareDelay: 0, startDelay: 0)
     private let dictationRecorder = RouteAwareDictationRecorder()
     private let dictationCorrectionMonitor = DictationCorrectionMonitor()
     private let dictionarySuggestionPrompt = DictionarySuggestionPromptController()
@@ -704,6 +706,11 @@ public final class GuesliController: NSObject {
         meetingRecordingHotkeyMonitor.onCancel = { [weak self] in
             DispatchQueue.main.async { self?.stopMeetingRecording() }
         }
+        meetingBookmarkHotkeyMonitor.onToggleStart = { [weak self] in
+            // Each press is a one-shot bookmark, not a toggle session.
+            self?.meetingBookmarkHotkeyMonitor.cancelToggleMode()
+            DispatchQueue.main.async { self?.addMeetingBookmark() }
+        }
 
         let canRunMainApp = config.hasCompletedOnboarding
             && hasRequiredStartupPermissions(for: config.resolvedOnboardingUseCase)
@@ -716,6 +723,7 @@ public final class GuesliController: NSObject {
         }
         if canRunMainApp {
             startMeetingRecordingHotkeyMonitorIfNeeded()
+            startMeetingBookmarkHotkeyMonitorIfNeeded()
         }
         syncDictationRecorderWarmup(intent: .idlePrewarm(.startup))
         indicator.onStopMeeting = { [weak self] in self?.stopMeetingRecording() }
@@ -725,6 +733,7 @@ public final class GuesliController: NSObject {
             guard let self, let meetingID = self.activeMeetingID else { return }
             self.showMeetingDocument(id: meetingID)
         }
+        indicator.onAddMeetingBookmark = { [weak self] in self?.addMeetingBookmark() }
         indicator.onStopToggleDictation = { [weak self] in
             guard let self else { return }
             if self.hotkeyMonitor.isToggleRecording {
@@ -927,6 +936,7 @@ public final class GuesliController: NSObject {
         iCloudSubscriptionTask = nil
         hotkeyMonitor.stop()
         meetingRecordingHotkeyMonitor.stop()
+        meetingBookmarkHotkeyMonitor.stop()
         calendarMonitor.stop()
         calendarCheckTimer?.invalidate()
         calendarCheckTimer = nil
@@ -3448,9 +3458,44 @@ public final class GuesliController: NSObject {
             config.enableMeetingRecordingHotkey = false
             config.hotkeyTriggerThresholdMS = HotkeyTriggerTiming.defaultThresholdMilliseconds
             config.meetingRecordingHotkeyTriggerThresholdMS = HotkeyTriggerTiming.defaultMeetingThresholdMilliseconds
+            config.meetingBookmarkHotkey = .meetingBookmarkDefault
+            config.enableMeetingBookmarkHotkey = false
         }
         hotkeyMonitor.configure(.default)
         meetingRecordingHotkeyMonitor.stop()
+        meetingBookmarkHotkeyMonitor.stop()
+    }
+
+    private func validateMeetingBookmarkHotkey(_ hotkey: HotkeyConfig) -> ShortcutHotkeyUpdateResult {
+        ShortcutHotkeyPolicy.validateMeetingBookmarkHotkey(
+            hotkey,
+            dictationHotkey: config.dictationHotkey,
+            meetingRecordingHotkey: config.meetingRecordingHotkey,
+            isMeetingRecordingEnabled: config.enableMeetingRecordingHotkey
+        )
+    }
+
+    @discardableResult
+    func updateMeetingBookmarkHotkey(_ hotkey: HotkeyConfig) -> ShortcutHotkeyUpdateResult {
+        let result = validateMeetingBookmarkHotkey(hotkey)
+        guard result.didUpdate else { return result }
+        updateConfig { $0.meetingBookmarkHotkey = hotkey }
+        meetingBookmarkHotkeyMonitor.configure(hotkey)
+        return result
+    }
+
+    @discardableResult
+    func updateMeetingBookmarkHotkeyEnabled(_ enabled: Bool) -> ShortcutHotkeyUpdateResult {
+        guard enabled else {
+            updateConfig { $0.enableMeetingBookmarkHotkey = false }
+            meetingBookmarkHotkeyMonitor.stop()
+            return .updated
+        }
+        let result = validateMeetingBookmarkHotkey(config.meetingBookmarkHotkey)
+        guard result.didUpdate else { return result }
+        updateConfig { $0.enableMeetingBookmarkHotkey = true }
+        startMeetingBookmarkHotkeyMonitorIfNeeded()
+        return result
     }
 
     // MARK: - Onboarding
@@ -3601,6 +3646,7 @@ public final class GuesliController: NSObject {
     func stopHotkeyMonitor() {
         hotkeyMonitor.stop()
         meetingRecordingHotkeyMonitor.stop()
+        meetingBookmarkHotkeyMonitor.stop()
     }
 
     func downloadModelForOnboarding(
@@ -4800,6 +4846,15 @@ public final class GuesliController: NSObject {
         syncAppState()
     }
 
+    /// Appends a timestamped bookmark to the live meeting's manual notes; works while paused.
+    func addMeetingBookmark() {
+        guard let meetingID = activeMeetingID,
+              activeMeetingSession?.isRecording == true,
+              !isStoppingMeetingRecording,
+              let notes = MeetingBookmark.appending(to: manualNotesForLiveMeeting(id: meetingID), at: Date()) else { return }
+        updateMeetingManualNotes(id: meetingID, notes: notes)
+    }
+
     func cacheMeetingManualNotes(id: Int64, notes: String) {
         liveManualNotesCache[id] = notes
         scheduleCachedMeetingManualNotesPersistence(id: id)
@@ -4902,7 +4957,7 @@ public final class GuesliController: NSObject {
         liveMeetingTitleCache.removeAll()
     }
 
-    private func manualNotesForLiveMeeting(id: Int64) -> String {
+    func manualNotesForLiveMeeting(id: Int64) -> String {
         if let cached = liveManualNotesCache[id] {
             return cached
         }
@@ -7688,6 +7743,18 @@ public final class GuesliController: NSObject {
         meetingRecordingHotkeyMonitor.doubleTapEnabled = false
         meetingRecordingHotkeyMonitor.configure(config.meetingRecordingHotkey)
         meetingRecordingHotkeyMonitor.start()
+    }
+
+    private func startMeetingBookmarkHotkeyMonitorIfNeeded() {
+        guard config.enableMeetingBookmarkHotkey,
+              config.meetingBookmarkHotkey.isCombination,
+              validateMeetingBookmarkHotkey(config.meetingBookmarkHotkey).didUpdate else {
+            meetingBookmarkHotkeyMonitor.stop()
+            return
+        }
+        meetingBookmarkHotkeyMonitor.doubleTapEnabled = false
+        meetingBookmarkHotkeyMonitor.configure(config.meetingBookmarkHotkey)
+        meetingBookmarkHotkeyMonitor.start()
     }
 
     private func beginMeetingActivity(reason: String) {

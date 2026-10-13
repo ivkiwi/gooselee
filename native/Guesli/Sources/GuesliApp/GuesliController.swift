@@ -1867,10 +1867,10 @@ public final class GuesliController: NSObject {
         guard counts.total > 0 else { return "0" }
         var parts: [String] = []
         if counts.dictations > 0 {
-            parts.append("\(counts.dictations) \(counts.dictations == 1 ? String(localized: "dictation") : String(localized: "dictations"))")
+            parts.append(counts.dictations == 1 ? String(localized: "1 dictation") : String(localized: "\(counts.dictations) dictations"))
         }
         if counts.meetings > 0 {
-            parts.append("\(counts.meetings) \(counts.meetings == 1 ? String(localized: "meeting") : String(localized: "meetings"))")
+            parts.append(counts.meetings == 1 ? String(localized: "1 meeting") : String(localized: "\(counts.meetings) meetings"))
         }
         return "\(counts.total) (\(parts.joined(separator: ", ")))"
     }

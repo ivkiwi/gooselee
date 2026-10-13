@@ -28,9 +28,6 @@
 "Sync failed: %@" = "Ошибка синхронизации: %@";
 "iCloud sync is off." = "Синхронизация iCloud выключена.";
 "%@ up, %@ down" = "отпр. %@, получ. %@";
-"dictation" = "дикт.";
-"dictations" = "дикт.";
-"meeting" = "встр.";
 
 // Model selection / calendar
 "Meeting model unavailable" = "Модель для встреч недоступна";
@@ -130,3 +127,4 @@
 "The model could not finish downloading. Check your connection and retry." = "Модель не догрузилась. Проверьте подключение и повторите.";
 "GooseLee could not access the microphone. Check Microphone permission and try again." = "У GooseLee нет доступа к микрофону. Проверьте разрешение и повторите.";
 "Dictation could not start. Try again in a moment." = "Диктовка не запустилась. Повторите чуть позже.";
+"1 dictation" = "1 диктовка";

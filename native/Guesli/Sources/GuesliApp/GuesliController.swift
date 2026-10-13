@@ -456,6 +456,7 @@ public final class GuesliController: NSObject {
     private let dictationLatencyTimestampFormatter = ISO8601DateFormatter()
     private let indicator: FloatingIndicatorController
     private let calendarMonitor = CalendarMonitor()
+    private let meetingPreparationScheduler = MeetingPreparationScheduler()
     private let meetingMonitor = MeetingMonitor()
     private let meetingNotification = MeetingNotificationController()
     private let meetingSourceWindowLocator = MeetingSourceWindowLocator()
@@ -952,6 +953,7 @@ public final class GuesliController: NSObject {
         meetingRecordingHotkeyMonitor.stop()
         meetingBookmarkHotkeyMonitor.stop()
         calendarMonitor.stop()
+        meetingPreparationScheduler.cancel()
         calendarCheckTimer?.invalidate()
         calendarCheckTimer = nil
         removeCalendarPersistentRefreshObservers()
@@ -1481,6 +1483,7 @@ public final class GuesliController: NSObject {
         syncMeetingDetectionMonitor()
         syncAutoRecordWakes()
         updateMeetingNotificationVisibility()
+        syncMeetingPreparationNotifications()
         syncDictationRecorderWarmup(intent: .idlePrewarm(.configChange))
         syncMeetSpeakerBridge()
         if appleCloudCapabilities.canUseCloudKit && !wasICloudSyncEnabled && config.iCloudSyncEnabled {
@@ -2395,6 +2398,7 @@ public final class GuesliController: NSObject {
         }
 
         appState.upcomingCalendarEvents = ekEvents
+        syncMeetingPreparationNotifications()
         DiagnosticsLog.write("[calendar] refresh reason=\(reason) eventkit_auth=\(CalendarMonitor.authorizationStatusLabel) eventkit_events=\(eventKitCount) google_authenticated=\(googleCalAuth.isAuthenticated) google_events=\(googleCount) total=\(ekEvents.count) disabled_calendars=\(disabledIDs.count)")
         syncAutoRecordWakes()
 
@@ -2522,6 +2526,7 @@ public final class GuesliController: NSObject {
             calendarMonitoringStarted = true
         } else if !shouldRun && calendarMonitoringStarted {
             calendarMonitor.stop()
+            meetingPreparationScheduler.cancel()
             calendarCheckTimer?.invalidate()
             calendarCheckTimer = nil
             removeCalendarPersistentRefreshObservers()
@@ -2700,7 +2705,34 @@ public final class GuesliController: NSObject {
     }
 
     private var shouldRunCalendarMonitor: Bool {
-        config.resolvedOnboardingUseCase.includesMeetings || shouldRunMeetingFeatureMonitors
+        config.resolvedOnboardingUseCase.includesMeetings || shouldRunMeetingFeatureMonitors || config.showMeetingPreparationNotifications
+    }
+
+    private func syncMeetingPreparationNotifications() {
+        meetingPreparationScheduler.sync(
+            store: dictationStore,
+            events: appState.upcomingCalendarEvents,
+            hiddenEventIDs: appState.hiddenCalendarEventIDs,
+            enabled: meetingFeatureMonitorsAllowed && config.showMeetingPreparationNotifications
+        ) { [weak self] notification, predecessorID in
+            guard let self, !self.isMeetingRecording(), !self.isStartingMeetingRecording,
+                  !self.meetingNotification.isVisible else { return false }
+            self.isShowingCalendarNotification = true
+            let shown = self.meetingNotification.show(
+                title: notification.title,
+                subtitle: String(localized: "Previous decisions and tasks"),
+                actionLabel: String(localized: "Open"),
+                dismissAfter: 30,
+                onStartRecording: { [weak self] in self?.showMeetingDocument(id: predecessorID) },
+                onClose: { [weak self] in
+                    self?.isShowingCalendarNotification = false
+                    self?.showPendingMeetingCompletionNotificationIfPossible()
+                },
+                body: notification.body
+            )
+            if !shown { self.isShowingCalendarNotification = false }
+            return shown
+        }
     }
 
     private func syncMeetingDetectionMonitor() {
@@ -5471,18 +5503,24 @@ public final class GuesliController: NSObject {
         }
         let templateSnapshot = defaultMeetingTemplate()
         let resolvedCalendarEventID = calendarOccurrence?.eventID ?? calendarEventID
+        let startTime = Date()
+        let resolvedPreviousMeetingNotes: String?
         let meetingID: Int64
         do {
+            let predecessor = try RecurringMeetingContext.predecessor(
+                in: dictationStore, occurrence: followUpToID == nil ? calendarOccurrence : nil, before: startTime
+            )
+            resolvedPreviousMeetingNotes = previousMeetingNotes ?? predecessor.flatMap { MeetingFollowUpPolicy.carriedContext(from: $0) }
             meetingID = try dictationStore.createLiveMeeting(
                 title: title,
                 calendarEventID: resolvedCalendarEventID,
-                startTime: Date(),
+                startTime: startTime,
                 selectedTemplateID: templateSnapshot.id,
                 selectedTemplateName: templateSnapshot.name,
                 selectedTemplateKind: templateSnapshot.kind,
                 selectedTemplatePrompt: templateSnapshot.prompt,
                 folderID: inheritedFolderID,
-                followUpToID: followUpToID,
+                followUpToID: followUpToID ?? predecessor?.id,
                 calendarOccurrence: calendarOccurrence
             )
             activeMeetingID = meetingID
@@ -5564,7 +5602,7 @@ public final class GuesliController: NSObject {
                     backend: meetingBackend,
                     templateSnapshot: templateSnapshot,
                     endDate: endDate,
-                    previousMeetingNotes: previousMeetingNotes
+                    previousMeetingNotes: resolvedPreviousMeetingNotes
                 )
                 didStart = true
             } catch is CancellationError {
@@ -5658,6 +5696,10 @@ public final class GuesliController: NSObject {
             fputs("[guesli-native] failed to resolve meeting thread for \(meetingID): \(error)\n", stderr)
             return nil
         }
+    }
+
+    func previousRecurringMeeting(for meetingID: Int64) -> MeetingRecord? {
+        try? RecurringMeetingContext.predecessor(in: dictationStore, beforeMeetingID: meetingID)
     }
 
     func resumeFinishedMeeting(meetingID: Int64) {

@@ -87,6 +87,7 @@ struct MeetingDetailView: View {
     @State private var newFolderName = ""
     @State private var threadContext: MeetingThreadContext?
     @State private var recordingSeekRequest: MeetingRecordingSeekRequest?
+    @State private var previousMeeting: MeetingRecord?
 
     init(
         meeting: MeetingRecord?,
@@ -116,6 +117,12 @@ struct MeetingDetailView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     header(meeting)
 
+                    if let predecessor = previousMeeting {
+                        PreviousMeetingContextView(meeting: predecessor) {
+                            controller.showMeetingDocument(id: predecessor.id)
+                        }
+                    }
+
                     Divider()
                         .background(GuesliTheme.surfaceBorder)
 
@@ -139,11 +146,15 @@ struct MeetingDetailView: View {
                 .background(GuesliTheme.backgroundBase)
                 .onAppear {
                     threadContext = controller.meetingThreadContext(for: meeting.id)
+                    previousMeeting = threadContext?.predecessor ?? controller.previousRecurringMeeting(for: meeting.id)
                 }
                 .onChange(of: meeting.id) { _, _ in
                     syncLocalState(with: meeting)
                 }
                 .onChange(of: meeting.status) { _, _ in
+                    syncLocalState(with: meeting)
+                }
+                .onChange(of: meeting.followUpToID) { _, _ in
                     syncLocalState(with: meeting)
                 }
                 .onChange(of: meeting.manualNotes) { _, _ in
@@ -1630,6 +1641,7 @@ struct MeetingDetailView: View {
         let meetingChanged = previousMeetingID != meeting?.id
         loadedMeetingID = meeting?.id
         threadContext = meeting.flatMap { controller.meetingThreadContext(for: $0.id) }
+        previousMeeting = threadContext?.predecessor ?? meeting.flatMap { controller.previousRecurringMeeting(for: $0.id) }
         editableTitle = meeting?.title ?? ""
         if meetingChanged || !isEditingNotes {
             editableNotes = meeting.map { Self.notesContent(for: $0) } ?? ""

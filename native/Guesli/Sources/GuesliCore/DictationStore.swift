@@ -760,6 +760,59 @@ public final class DictationStore {
         return makeMeetingRecord(statement)
     }
 
+    public func previousMeetingInCalendarSeries(
+        _ occurrence: CalendarOccurrenceReference,
+        before startTime: Date
+    ) throws -> MeetingRecord? {
+        guard let prefix = occurrence.recurringSeriesKeyPrefix else { return nil }
+        let db = try openDatabase()
+        defer { sqlite3_close(db) }
+        return try previousMeetingInCalendarSeries(prefix: prefix, before: formatISODate(startTime), db: db)
+    }
+
+    public func previousMeetingInCalendarSeries(beforeMeetingID id: Int64) throws -> MeetingRecord? {
+        let db = try openDatabase()
+        defer { sqlite3_close(db) }
+        let sql = "SELECT calendar_occurrence_key, start_time FROM meetings WHERE id = ? AND deleted_at IS NULL"
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { throw lastError(db) }
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_int64(statement, 1, id)
+        let result = sqlite3_step(statement)
+        guard result == SQLITE_ROW else {
+            if result != SQLITE_DONE { throw lastError(db) }
+            return nil
+        }
+        guard let keyText = sqlite3_column_text(statement, 0),
+              let startText = sqlite3_column_text(statement, 1),
+              let prefix = CalendarRecurringSeries.keyPrefix(from: String(cString: keyText)) else { return nil }
+        return try previousMeetingInCalendarSeries(prefix: prefix, before: String(cString: startText), db: db)
+    }
+
+    private func previousMeetingInCalendarSeries(prefix: String, before startString: String, db: OpaquePointer?) throws -> MeetingRecord? {
+        let sql = """
+        SELECT \(Self.meetingColumns)
+        FROM meetings
+        WHERE deleted_at IS NULL
+          AND substr(calendar_occurrence_key, 1, length(?)) = ?
+          AND start_time < ?
+        ORDER BY start_time DESC, id DESC
+        LIMIT 1
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { throw lastError(db) }
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_text(statement, 1, (prefix as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(statement, 2, (prefix as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(statement, 3, (startString as NSString).utf8String, -1, nil)
+        let result = sqlite3_step(statement)
+        guard result == SQLITE_ROW else {
+            if result != SQLITE_DONE { throw lastError(db) }
+            return nil
+        }
+        return makeMeetingRecord(statement)
+    }
+
     @discardableResult
     public func insertMeeting(
         title: String,

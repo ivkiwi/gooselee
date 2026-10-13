@@ -1032,6 +1032,14 @@ struct SettingsView: View {
                 }
                 settingsDescription("Show notifications for calendar meetings with a join link.")
 
+                Divider().background(GuesliTheme.surfaceBorder)
+                settingsRow(String(localized: "Recurring meeting preparation")) {
+                    settingsSwitch(isOn: appState.config.showMeetingPreparationNotifications) { newValue in
+                        controller.updateConfig { $0.showMeetingPreparationNotifications = newValue }
+                    }
+                }
+                settingsDescription(String(localized: "Show previous decisions and tasks 15 minutes before recurring meetings."))
+
                 if appState.config.showScheduledMeetingNotifications {
                     Divider().background(GuesliTheme.surfaceBorder)
 

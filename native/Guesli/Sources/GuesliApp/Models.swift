@@ -1089,6 +1089,7 @@ struct AppConfig: Codable {
     var meetingBookmarkHotkey: HotkeyConfig = .meetingBookmarkDefault
     var enableMeetingBookmarkHotkey: Bool = false
     var enableVoiceCommands: Bool = true
+    var showMeetingPreparationNotifications: Bool = true
 
     enum CodingKeys: String, CodingKey {
         case dictationHotkey = "dictation_hotkey"
@@ -1189,6 +1190,7 @@ struct AppConfig: Codable {
         case meetingBookmarkHotkey = "meeting_bookmark_hotkey"
         case enableMeetingBookmarkHotkey = "enable_meeting_bookmark_hotkey"
         case enableVoiceCommands = "enable_voice_commands"
+        case showMeetingPreparationNotifications = "show_meeting_preparation_notifications"
     }
 
     init() {}
@@ -1359,6 +1361,7 @@ struct AppConfig: Codable {
         meetingBookmarkHotkey = (try? c.decode(HotkeyConfig.self, forKey: .meetingBookmarkHotkey)) ?? defaults.meetingBookmarkHotkey
         enableMeetingBookmarkHotkey = (try? c.decode(Bool.self, forKey: .enableMeetingBookmarkHotkey)) ?? defaults.enableMeetingBookmarkHotkey
         enableVoiceCommands = (try? c.decode(Bool.self, forKey: .enableVoiceCommands)) ?? defaults.enableVoiceCommands
+        showMeetingPreparationNotifications = (try? c.decode(Bool.self, forKey: .showMeetingPreparationNotifications)) ?? defaults.showMeetingPreparationNotifications
     }
 
     var resolvedNemotron35Language: Nemotron35Language {

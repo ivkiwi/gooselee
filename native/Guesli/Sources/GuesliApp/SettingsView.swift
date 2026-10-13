@@ -694,6 +694,16 @@ struct SettingsView: View {
             }
 
             settingsSection("Advanced") {
+                settingsRow(
+                    String(localized: "Voice commands"),
+                    description: String(localized: "Hold the dictation shortcut with Shift to give an instruction. Selected text will be rewritten using your cleanup provider. Screen text is included; external providers receive this context.")
+                ) {
+                    settingsSwitch(isOn: appState.config.enableVoiceCommands) { newValue in
+                        controller.updateConfig { $0.enableVoiceCommands = newValue }
+                    }
+                    .help("Choose a dictation shortcut without Shift to use voice commands.")
+                }
+                Divider().background(GuesliTheme.surfaceBorder)
                 settingsRow("Pause media during dictation") {
                     settingsSwitch(isOn: appState.config.pauseMediaDuringDictation) { newValue in
                         controller.updateConfig { $0.pauseMediaDuringDictation = newValue }

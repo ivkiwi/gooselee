@@ -3,7 +3,7 @@ import ApplicationServices
 
 // MARK: - Dictation context (Accessibility API — deterministic, low-token)
 
-struct DictationContext {
+struct DictationContext: Sendable {
     let appName: String
     let bundleID: String
     let documentContext: String
@@ -15,7 +15,7 @@ enum DictationContextCapture {
 
     /// Captures focused app name + text context via Accessibility API.
     /// Lightweight and deterministic — no screenshots, no OCR.
-    static func capture() -> DictationContext {
+    static func capture(forVoiceCommand: Bool = false) -> DictationContext {
         let app = NSWorkspace.shared.frontmostApplication
         let appName = app?.localizedName ?? "Unknown"
         let bundleID = app?.bundleIdentifier ?? ""
@@ -26,11 +26,16 @@ enum DictationContextCapture {
         if let app, AXIsProcessTrusted(), let focusedElement = focusedUIElement(for: app) {
             docContext = textBeforeCursor(focusedElement, maxChars: 200)
             selectedText = axStringValue(focusedElement, attribute: kAXSelectedTextAttribute as String)
+            if forVoiceCommand {
+                docContext = VoiceCommandScreenContext.windowText(app: app, focusedElement: focusedElement, fallback: docContext)
+            }
         }
 
         let url = browserURL(for: app)
 
-        fputs("[guesli-native] dictation context: app=\(appName) docContext=\(docContext.count) chars selectedText=\(selectedText.count) chars url=\(url ?? "none")\n", stderr)
+        if !forVoiceCommand {
+            fputs("[guesli-native] dictation context: app=\(appName) docContext=\(docContext.count) chars selectedText=\(selectedText.count) chars url=\(url ?? "none")\n", stderr)
+        }
 
         return DictationContext(
             appName: appName,

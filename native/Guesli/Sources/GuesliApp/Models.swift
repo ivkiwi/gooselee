@@ -1088,6 +1088,7 @@ struct AppConfig: Codable {
     var iCloudSyncEnabled: Bool = false
     var meetingBookmarkHotkey: HotkeyConfig = .meetingBookmarkDefault
     var enableMeetingBookmarkHotkey: Bool = false
+    var enableVoiceCommands: Bool = true
 
     enum CodingKeys: String, CodingKey {
         case dictationHotkey = "dictation_hotkey"
@@ -1187,6 +1188,7 @@ struct AppConfig: Codable {
         case iCloudSyncEnabled = "icloud_sync_enabled"
         case meetingBookmarkHotkey = "meeting_bookmark_hotkey"
         case enableMeetingBookmarkHotkey = "enable_meeting_bookmark_hotkey"
+        case enableVoiceCommands = "enable_voice_commands"
     }
 
     init() {}
@@ -1356,6 +1358,7 @@ struct AppConfig: Codable {
         autoExportFileFormat = MeetingAutoExportFileFormat(rawValue: decodedAutoExportFileFormat)?.rawValue ?? defaults.autoExportFileFormat
         meetingBookmarkHotkey = (try? c.decode(HotkeyConfig.self, forKey: .meetingBookmarkHotkey)) ?? defaults.meetingBookmarkHotkey
         enableMeetingBookmarkHotkey = (try? c.decode(Bool.self, forKey: .enableMeetingBookmarkHotkey)) ?? defaults.enableMeetingBookmarkHotkey
+        enableVoiceCommands = (try? c.decode(Bool.self, forKey: .enableVoiceCommands)) ?? defaults.enableVoiceCommands
     }
 
     var resolvedNemotron35Language: Nemotron35Language {

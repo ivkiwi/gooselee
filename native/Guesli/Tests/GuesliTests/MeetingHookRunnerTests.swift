@@ -86,6 +86,41 @@ struct MeetingHookRunnerTests {
         #expect(log.contains("timed out: id=201"))
     }
 
+    @Test("a background child holding stderr does not block the runner")
+    func backgroundChildHoldingStandardErrorDoesNotBlock() async throws {
+        let directory = makeTemporaryDirectory()
+        let pidURL = directory.appendingPathComponent("child.pid")
+        let scriptURL = try makeScript(
+            directory: directory,
+            name: "leave-child.sh",
+            body: """
+            #!/bin/sh
+            sleep 30 &
+            echo $! > "\(pidURL.path)"
+            exit 0
+            """
+        )
+        let runner = MeetingHookRunner(supportDirectory: directory)
+        var config = AppConfig()
+        config.meetingHookEnabled = true
+        config.meetingHookPath = scriptURL.path
+        config.meetingHookTimeoutSeconds = 5
+
+        let started = ContinuousClock.now
+        await Task.detached {
+            runner.executeIfConfigured(event: makeEvent(id: 401), config: config)
+        }.value
+        let elapsed = ContinuousClock.now - started
+        if let pid = Int32((try? String(contentsOf: pidURL, encoding: .utf8))?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "") {
+            kill(pid, SIGKILL)
+        }
+
+        #expect(elapsed < .seconds(10))
+        let log = try String(contentsOf: runner.logURL, encoding: .utf8)
+        #expect(log.contains("completed: id=401"))
+    }
+
     @Test("non-zero exit logs failure")
     func nonZeroExitLogsFailure() async throws {
         let directory = makeTemporaryDirectory()

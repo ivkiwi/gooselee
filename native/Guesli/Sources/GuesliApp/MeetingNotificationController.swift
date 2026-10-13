@@ -23,6 +23,8 @@ final class MeetingNotificationController {
     private(set) var isVisible = false
     private(set) var currentPromptID: String?
     private(set) var shownAt: Date?
+    /// Bumped on every show, so a fade that outlives its panel cannot close the next one.
+    private var showGeneration = 0
 
     private static let dismissDuration: TimeInterval = 15
 
@@ -82,6 +84,7 @@ final class MeetingNotificationController {
         // doesn't fire its callback (e.g. resetting isShowingCalendarNotification).
         self.onClose = nil
         close()
+        showGeneration += 1
 
         let duration = dismissAfter ?? Self.dismissDuration
         self.onStartRecording = onStartRecording
@@ -140,7 +143,7 @@ final class MeetingNotificationController {
             height: height,
             margin: margin
         ) else {
-            Self.logger.error("notification_frame_unavailable title=\(title, privacy: .public)")
+            Self.logger.error("notification_frame_unavailable")
             return false
         }
         self.onClose = onClose
@@ -382,8 +385,8 @@ final class MeetingNotificationController {
 
     private func autoDismissNow() {
         guard !isDismissPaused else { return }
-        animateOut { [weak self] in
-            guard let self else { return }
+        animateOut { [weak self] isCurrent in
+            guard let self, isCurrent else { return }
             let wasPaused = self.isDismissPaused
             let autoDismiss = self.onAutoDismiss
             let shouldFireAutoDismiss = Self.firesAutoDismissCallbackAfterFade(wasDismissPaused: wasPaused)
@@ -427,34 +430,38 @@ final class MeetingNotificationController {
         progressLayer.beginTime = resumeHostTime - pausedTime
     }
 
-    private func animateOut(completion: @escaping () -> Void) {
-        guard let panel else { completion(); return }
+    /// `isCurrent` is false when another notification was shown while this one faded out.
+    private func animateOut(completion: @escaping (_ isCurrent: Bool) -> Void) {
+        guard let panel else { completion(true); return }
+        let generation = showGeneration
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.2
             panel.animator().alphaValue = 0
-        }, completionHandler: completion)
+        }, completionHandler: { [weak self] in
+            completion(self?.showGeneration == generation)
+        })
     }
 
     @objc private func handleStartRecording() {
         let action = onStartRecording
-        animateOut { [weak self] in
-            self?.close()
+        animateOut { [weak self] isCurrent in
+            if isCurrent { self?.close() }
             action?()
         }
     }
 
     @objc private func handleJoinAndRecord() {
         let action = onJoinAndRecord
-        animateOut { [weak self] in
-            self?.close()
+        animateOut { [weak self] isCurrent in
+            if isCurrent { self?.close() }
             action?()
         }
     }
 
     @objc private func handleJoinOnly() {
         let action = onJoinOnly
-        animateOut { [weak self] in
-            self?.close()
+        animateOut { [weak self] isCurrent in
+            if isCurrent { self?.close() }
             action?()
         }
     }
@@ -485,8 +492,8 @@ final class MeetingNotificationController {
 
     @objc private func handleDismiss() {
         let action = onDismiss
-        animateOut { [weak self] in
-            self?.close()
+        animateOut { [weak self] isCurrent in
+            if isCurrent { self?.close() }
             action?()
         }
     }

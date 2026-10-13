@@ -123,6 +123,14 @@ struct MeetingDetailView: View {
                         summaryFailureBanner(message: summaryError, meeting: meeting)
                     }
 
+                    if meeting.status == .failed {
+                        MeetingProcessingFailedBanner(
+                            canRetry: Self.showsRetranscribeAction(for: meeting),
+                            isRetrying: isRetranscribing,
+                            onRetry: { startRetranscription(for: meeting) }
+                        )
+                    }
+
                     content(for: meeting)
                 }
                 .background(GuesliTheme.backgroundBase)
@@ -383,7 +391,18 @@ struct MeetingDetailView: View {
                 }
             } else {
                 let isManualNotesEditable = canEditManualNotes(for: meeting)
+                let isProcessing = meeting.status == .processing
                 VStack(alignment: .leading, spacing: GuesliTheme.spacing12) {
+                    if isProcessing {
+                        MeetingProcessingDraftSection(
+                            appState: appState,
+                            meetingID: meeting.id,
+                            transcriptPrefix: meeting.rawTranscript
+                        )
+                    }
+
+                    // Manual notes are read-only while processing; hide the empty editor so the draft gets the space.
+                    if !isProcessing || !editableManualNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     manualNotesToolbar(for: meeting)
                         .disabled(!isManualNotesEditable)
 
@@ -404,6 +423,7 @@ struct MeetingDetailView: View {
                         RoundedRectangle(cornerRadius: GuesliTheme.cornerSmall)
                             .strokeBorder(GuesliTheme.surfaceBorder, lineWidth: 1)
                     )
+                    }
                 }
                 .padding(.horizontal, 40)
                 .padding(.top, 12)

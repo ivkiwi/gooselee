@@ -132,6 +132,7 @@ final class AppState {
     var modelPreparationProgress: Double?
     var isModelPreparingAfterDownload: Bool = false
     var modelPreparationIsComplete: Bool = false
+    var meetingProcessingStages: [Int64: MeetingProcessingStage] = [:]
 
     // Dictation pagination & filtering
     var dictationPageSize: Int = 50

@@ -6739,6 +6739,9 @@ public final class GuesliController: NSObject {
         let processingGeneration = backgroundMeetingProcessingCount + 1
         sessionToStop.onProgress = { [weak self] stage in
             Task { @MainActor [weak self] in
+                if let self, let liveMeetingID {
+                    self.appState.meetingProcessingStages[liveMeetingID] = stage
+                }
                 guard let self,
                       !self.isMeetingRecording(),
                       !self.isStartingMeetingRecording,
@@ -6844,6 +6847,9 @@ public final class GuesliController: NSObject {
                     self.resolveLiveMeetingAfterStopFailure(id: finalFailedLiveMeetingID)
                 } else if let liveMeetingID {
                     self.pendingResumePriorTranscript[liveMeetingID] = nil
+                }
+                if let liveMeetingID {
+                    self.appState.meetingProcessingStages[liveMeetingID] = nil
                 }
                 if !self.isMeetingRecording() && !self.isStartingMeetingRecording && self.backgroundMeetingProcessingCount == 0 {
                     self.setState(.idle)

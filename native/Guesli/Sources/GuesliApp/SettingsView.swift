@@ -72,7 +72,6 @@ struct SettingsView: View {
 
     private enum SettingsPane: String, CaseIterable, Identifiable {
         case general
-        case sync
         case dictation
         case meetings
         case appearance
@@ -82,7 +81,6 @@ struct SettingsView: View {
         var title: String {
             switch self {
             case .general: return String(localized: "General")
-            case .sync: return String(localized: "Sync")
             case .dictation: return String(localized: "Dictation")
             case .meetings: return String(localized: "Meetings")
             case .appearance: return String(localized: "Appearance")
@@ -379,17 +377,11 @@ struct SettingsView: View {
 
     private let customIndicatorPositionLabel = "Custom (drag to reposition)"
 
-    private var availableSettingsPanes: [SettingsPane] {
-        SettingsPane.allCases.filter { pane in
-            pane != .sync || appState.canUseICloudSync
-        }
-    }
-
     private var settingsPanePicker: some View {
         HStack {
             Spacer()
             Picker("", selection: $selectedPane) {
-                ForEach(availableSettingsPanes) { pane in
+                ForEach(SettingsPane.allCases) { pane in
                     Text(pane.title).tag(pane)
                 }
             }
@@ -405,8 +397,6 @@ struct SettingsView: View {
         switch selectedPane {
         case .general:
             generalSettingsPane
-        case .sync:
-            syncSettingsPane
         case .dictation:
             dictationSettingsPane
         case .meetings:
@@ -486,82 +476,6 @@ struct SettingsView: View {
         .padding(.leading, GuesliTheme.spacing16)
         .padding(.trailing, GuesliTheme.spacing16)
         .padding(.bottom, GuesliTheme.spacing8)
-    }
-
-    private var syncSettingsPane: some View {
-        VStack(alignment: .leading, spacing: GuesliTheme.spacing24) {
-            settingsSection("iCloud Text Sync") {
-                settingsRow("Private iCloud sync") {
-                    settingsSwitch(isOn: appState.config.iCloudSyncEnabled) { newValue in
-                        controller.setICloudSyncEnabledFromSettings(newValue)
-                    }
-                }
-                settingsDescription("Sync dictation text, meeting transcripts, notes, summaries, and manual notes through your private iCloud account. Audio recordings are never synced.")
-
-                Divider().background(GuesliTheme.surfaceBorder)
-
-                HStack(spacing: GuesliTheme.spacing12) {
-                    VStack(alignment: .leading, spacing: GuesliTheme.spacing4) {
-                        Text(syncStatusText)
-                            .font(GuesliTheme.body())
-                            .foregroundStyle(GuesliTheme.textPrimary)
-                            .fixedSize(horizontal: false, vertical: true)
-                        if let lastSyncedText = syncLastSyncedText {
-                            Text("Last synced: \(lastSyncedText)")
-                                .font(GuesliTheme.caption())
-                                .foregroundStyle(GuesliTheme.textTertiary)
-                        }
-                        if let linkedDeviceText = syncLinkedDeviceText {
-                            Text(linkedDeviceText)
-                                .font(GuesliTheme.caption())
-                                .foregroundStyle(GuesliTheme.textTertiary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                    Spacer(minLength: GuesliTheme.spacing16)
-                    actionButton("Sync now", systemImage: "arrow.triangle.2.circlepath") {
-                        controller.performICloudSync()
-                    }
-                    .frame(width: controlWidth)
-                    .disabled(!appState.config.iCloudSyncEnabled)
-                }
-            }
-
-        }
-    }
-
-    private var syncStatusText: String {
-        if !appState.config.iCloudSyncEnabled {
-            return String(localized: "Sync is off. Turn it on to keep text records in your private iCloud account.")
-        }
-        return appState.iCloudSyncStatus ?? String(localized: "Private iCloud text sync is ready.")
-    }
-
-    private var syncLastSyncedText: String? {
-        guard let date = appState.iCloudLastSyncedAt else { return nil }
-        return DateFormatter.localizedString(from: date, dateStyle: .medium, timeStyle: .short)
-    }
-
-    private var syncLinkedDeviceText: String? {
-        guard appState.config.iCloudSyncEnabled else { return nil }
-        if let remoteDeviceName = appState.iCloudBridgeCompanionDeviceName {
-            if let platform = appState.iCloudBridgeRemoteDevicePlatform {
-                return String(localized: "Linked \(syncDeviceLabel(for: platform)): \(remoteDeviceName)")
-            }
-            return String(localized: "Linked device: \(remoteDeviceName)")
-        }
-        return String(localized: "No linked device yet.")
-    }
-
-    private func syncDeviceLabel(for platform: String) -> String {
-        switch platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "ios":
-            return "iPhone"
-        case "ipados":
-            return "iPad"
-        default:
-            return platform
-        }
     }
 
     private var dictationSettingsPane: some View {

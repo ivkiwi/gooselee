@@ -1095,7 +1095,6 @@ struct AppConfig: Codable {
     var autoExportMarkdownFolderPath: String = ""
     var autoExportMarkdownContent: String = MeetingExportContent.notes.rawValue
     var autoExportFileFormat: String = MeetingAutoExportFileFormat.markdown.rawValue
-    var iCloudSyncEnabled: Bool = false
     var meetingBookmarkHotkey: HotkeyConfig = .meetingBookmarkDefault
     var enableMeetingBookmarkHotkey: Bool = false
     var enableVoiceCommands: Bool = true
@@ -1196,7 +1195,6 @@ struct AppConfig: Codable {
         case autoExportMarkdownFolderPath = "auto_export_markdown_folder_path"
         case autoExportMarkdownContent = "auto_export_markdown_content"
         case autoExportFileFormat = "auto_export_file_format"
-        case iCloudSyncEnabled = "icloud_sync_enabled"
         case meetingBookmarkHotkey = "meeting_bookmark_hotkey"
         case enableMeetingBookmarkHotkey = "enable_meeting_bookmark_hotkey"
         case enableVoiceCommands = "enable_voice_commands"
@@ -1252,7 +1250,6 @@ struct AppConfig: Codable {
             .resolved(try? c.decode(String.self, forKey: .meetingRecordingFileFormat))
             .rawValue
         darkMode = (try? c.decode(Bool.self, forKey: .darkMode)) ?? defaults.darkMode
-        iCloudSyncEnabled = (try? c.decode(Bool.self, forKey: .iCloudSyncEnabled)) ?? defaults.iCloudSyncEnabled
         enableDoubleTapDictation = (try? c.decode(Bool.self, forKey: .enableDoubleTapDictation)) ?? defaults.enableDoubleTapDictation
         pasteShortcut = (try? c.decode(PasteShortcut.self, forKey: .pasteShortcut)) ?? defaults.pasteShortcut
         hotkeyTriggerThresholdMS = HotkeyTriggerTiming.clampedMilliseconds(

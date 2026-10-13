@@ -1,6 +1,5 @@
 import AppKit
 import AVFoundation
-import CloudKit
 import CoreAudio
 import FluidAudio
 import Foundation
@@ -117,19 +116,6 @@ enum MeetingCompletionNotificationPolicy {
         !hasPresentedMeetingCandidate
             && !isShowingCalendarNotification
             && !isMeetingNotificationVisible
-    }
-}
-
-enum GuesliBridgeDeviceRefreshPolicy {
-    static func shouldForceRefresh(
-        userInitiated: Bool,
-        bridgeActivationPending: Bool,
-        bridgeDiscoveryTriggered: Bool,
-        hasKnownCompanionDevice: Bool
-    ) -> Bool {
-        userInitiated
-            || bridgeActivationPending
-            || (bridgeDiscoveryTriggered && !hasKnownCompanionDevice)
     }
 }
 
@@ -540,8 +526,6 @@ public final class GuesliController: NSObject {
     private var voiceCommandContextTask: Task<DictationContext, Never>?
     private var workspaceObserver: NSObjectProtocol?
     private var dataDidChangeObserver: NSObjectProtocol?
-    private var iCloudAppActiveObserver: NSObjectProtocol?
-    private var iCloudWakeObserver: NSObjectProtocol?
     private var isStartingMeetingRecording = false
     private var meetingStartStatus: String?
     private var isShowingCalendarNotification = false
@@ -576,21 +560,7 @@ public final class GuesliController: NSObject {
     private var importSessionID: UUID?
     private var canceledMeetingStartIDs = Set<Int64>()
     private var meetingStartOrigins: [Int64: MeetingRecordingStartOrigin] = [:]
-    private var iCloudSyncTask: Task<Void, Never>?
-    private var iCloudSyncGeneration = 0
-    private var iCloudSyncRestartAfterCancellation = false
-    private var iCloudSyncDebounceTask: Task<Void, Never>?
-    private var iCloudSubscriptionTask: Task<Void, Never>?
-    private var hasEnsuredICloudSubscription = false
-    private var bridgeActivationPending = false
-    private var bridgeDiscoveryPending = false
-    private var bridgeDiscoveryFollowUpPending = false
     private var hasStarted = false
-    private let appleCloudCapabilities: AppleCloudCapabilities
-
-    var canReceiveRemoteNotifications: Bool {
-        appleCloudCapabilities.canReceiveRemoteNotifications
-    }
 
     init(
         runtime: RuntimePaths,
@@ -601,8 +571,7 @@ public final class GuesliController: NSObject {
         meetingTranscriptCleaner: any MeetingTranscriptCleaning = ChatGPTMeetingTranscriptCleaner(),
         launchAtLoginManager: LaunchAtLoginManaging = SystemLaunchAtLoginManager(),
         audioDuckingController: AudioDuckingManaging = AudioDuckingController(),
-        dictationAudioRoutingController: DictationAudioRouting = DictationAudioRouteController(),
-        appleCloudCapabilities: AppleCloudCapabilities = .current
+        dictationAudioRoutingController: DictationAudioRouting = DictationAudioRouteController()
     ) {
         try? GuesliPaths.migrateHistoricalCacheDirectoryIfNeeded()
         self.configStore = configStore
@@ -621,7 +590,6 @@ public final class GuesliController: NSObject {
         self.launchAtLoginCoordinator = LaunchAtLoginCoordinator(manager: launchAtLoginManager)
         self.audioDuckingController = audioDuckingController
         self.dictationAudioRoutingController = dictationAudioRoutingController
-        self.appleCloudCapabilities = appleCloudCapabilities
         self.dictationAudioRoutingController.selectedInputDeviceUID = loadedConfig.dictationInputDeviceUID
         self.config = loadedConfig
         if loadedConfig.recordingColorHex != "1e1e2e" {
@@ -650,7 +618,6 @@ public final class GuesliController: NSObject {
         super.init()
         indicator.configureMeetingQuickActions(appState: appState)
         appState.meetingQuickActions.meetingRecordProvider = { [weak self] id in self?.meeting(id: id) }
-        appState.canUseICloudSync = appleCloudCapabilities.canUseCloudKit
         Task { [weak self] in
             guard let self else { return }
             await self.transcriptionCoordinator.setTranscriptCleanupWarningHandler { [weak self] warning in
@@ -804,9 +771,6 @@ public final class GuesliController: NSObject {
                 self.syncAppState()
             }
         }
-        if appleCloudCapabilities.canUseCloudKit {
-            installICloudPersistentSyncObservers()
-        }
 
         statusBarController = StatusBarController(controller: self, runtime: runtime)
         preferencesWindowController = PreferencesWindowController(controller: self)
@@ -818,10 +782,6 @@ public final class GuesliController: NSObject {
             }
         }
         refreshUI()
-        if appleCloudCapabilities.canUseCloudKit && config.iCloudSyncEnabled {
-            enableICloudPersistentSync()
-            scheduleICloudSync(delay: 0.5, userInitiated: false)
-        }
 
         meetingMonitor.calendarEventProvider = { [weak self] in
             self?.currentOrNearbyCachedCalendarEvent()
@@ -947,19 +907,6 @@ public final class GuesliController: NSObject {
             DistributedNotificationCenter.default().removeObserver(dataDidChangeObserver)
             self.dataDidChangeObserver = nil
         }
-        if let iCloudAppActiveObserver {
-            NotificationCenter.default.removeObserver(iCloudAppActiveObserver)
-            self.iCloudAppActiveObserver = nil
-        }
-        if let iCloudWakeObserver {
-            NSWorkspace.shared.notificationCenter.removeObserver(iCloudWakeObserver)
-            self.iCloudWakeObserver = nil
-        }
-        cancelActiveICloudSyncTask()
-        iCloudSyncDebounceTask?.cancel()
-        iCloudSyncDebounceTask = nil
-        iCloudSubscriptionTask?.cancel()
-        iCloudSubscriptionTask = nil
         hotkeyMonitor.stop()
         meetingRecordingHotkeyMonitor.stop()
         meetingBookmarkHotkeyMonitor.stop()
@@ -1064,11 +1011,6 @@ public final class GuesliController: NSObject {
         syncAppState()
     }
 
-    private func refreshICloudBridgeDeviceState() {
-        appState.iCloudBridgeRemoteDeviceName = GuesliBridgeDeviceIdentity.remoteDeviceDisplayName
-        appState.iCloudBridgeRemoteDevicePlatform = GuesliBridgeDeviceIdentity.remoteDevicePlatform
-    }
-
     func syncAppState() {
         let rows = (try? dictationStore.recentDictations(
             limit: appState.dictationPageSize,
@@ -1113,8 +1055,6 @@ public final class GuesliController: NSObject {
         appState.isGoogleCalendarAvailable = googleCalAuth.isAvailable
         appState.isGoogleCalendarVerified = googleCalAuth.isVerified
         appState.isGoogleCalendarAuthenticated = googleCalAuth.isAuthenticated
-        refreshICloudBridgeDeviceState()
-        refreshICloudBridgeStateForConfig()
         // Keep appState in sync with persisted hidden event IDs
         let persisted = Set(config.hiddenCalendarEventIDs)
         if appState.hiddenCalendarEventIDs != persisted {
@@ -1136,19 +1076,13 @@ public final class GuesliController: NSObject {
         let fallbackPartial = fallbackRetainedRecordingPartial(for: meetings)
         for meeting in meetings {
             do {
-                if try recoverPostMeetingTrackPartialsIfNeeded(for: meeting) {
-                    scheduleICloudSyncAfterLocalChange()
-                }
-                if try recoverRetainedRecordingPartialIfNeeded(
+                _ = try recoverPostMeetingTrackPartialsIfNeeded(for: meeting)
+                _ = try recoverRetainedRecordingPartialIfNeeded(
                     for: meeting,
                     fallbackCandidate: fallbackPartial
-                ) {
-                    scheduleICloudSyncAfterLocalChange()
-                }
+                )
                 let recovered = try dictationStore.recoverLiveMeetingFromTranscriptCheckpoints(id: meeting.id)
-                if recovered {
-                    scheduleICloudSyncAfterLocalChange()
-                } else {
+                if !recovered {
                     try updateMeetingStatusAndScheduleSyncThrowing(id: meeting.id, status: .failed)
                 }
                 staleLiveMeetingRecoveryFailures.remove(meeting.id)
@@ -1412,7 +1346,6 @@ public final class GuesliController: NSObject {
     }
 
     func updateConfig(_ mutate: (inout AppConfig) -> Void) {
-        let wasICloudSyncEnabled = config.iCloudSyncEnabled
         let previousHotkeyTriggerThresholdMS = config.hotkeyTriggerThresholdMS
         let previousMeetingRecordingHotkeyTriggerThresholdMS = config.meetingRecordingHotkeyTriggerThresholdMS
         let previousEnableDictionaryCorrectionPrompts = config.enableDictionaryCorrectionPrompts
@@ -1497,391 +1430,6 @@ public final class GuesliController: NSObject {
         syncMeetingPreparationNotifications()
         syncDictationRecorderWarmup(intent: .idlePrewarm(.configChange))
         syncMeetSpeakerBridge()
-        if appleCloudCapabilities.canUseCloudKit && !wasICloudSyncEnabled && config.iCloudSyncEnabled {
-            enableICloudPersistentSync()
-            scheduleICloudSync(delay: 0.2, userInitiated: false)
-        } else if wasICloudSyncEnabled && !config.iCloudSyncEnabled {
-            disableICloudSyncRuntimeState()
-        }
-    }
-
-    func performICloudSync() {
-        guard appleCloudCapabilities.canUseCloudKit else { return }
-        startICloudSync(userInitiated: true)
-    }
-
-    func setICloudSyncEnabledFromSettings(_ enabled: Bool) {
-        guard appleCloudCapabilities.canUseCloudKit else { return }
-        if enabled {
-            enableICloudSync()
-        } else if config.iCloudSyncEnabled {
-            updateConfig { $0.iCloudSyncEnabled = false }
-        } else {
-            disableICloudSyncRuntimeState()
-        }
-    }
-
-    func enableICloudSync() {
-        guard appleCloudCapabilities.canUseCloudKit else { return }
-        if config.iCloudSyncEnabled {
-            performICloudSync()
-            return
-        }
-
-        bridgeActivationPending = true
-        appState.isICloudBridgeActivationPending = true
-        appState.iCloudSyncStatus = String(localized: "Checking iCloud...")
-        appState.iCloudBridgeState = .checkingICloud
-        appState.iCloudBridgeMessage = nil
-
-        iCloudSyncGeneration += 1
-        let generation = iCloudSyncGeneration
-        iCloudSubscriptionTask?.cancel()
-        iCloudSubscriptionTask = Task { [weak self] in
-            do {
-                try await GuesliICloudSyncEngine().ensureTextRecordSubscription()
-                await MainActor.run {
-                    guard let self, self.iCloudSyncGeneration == generation else { return }
-                    self.iCloudSubscriptionTask = nil
-                    self.hasEnsuredICloudSubscription = true
-                    self.appState.iCloudSyncStatus = String(localized: "Setting up private iCloud sync...")
-                    self.appState.iCloudBridgeState = .syncing
-                    self.appState.iCloudBridgeMessage = nil
-                    self.updateConfig { $0.iCloudSyncEnabled = true }
-                }
-            } catch is CancellationError {
-                await MainActor.run {
-                    guard let self, self.iCloudSyncGeneration == generation else { return }
-                    self.iCloudSubscriptionTask = nil
-                    self.bridgeActivationPending = false
-                    self.appState.isICloudBridgeActivationPending = false
-                    self.refreshICloudBridgeStateForConfig()
-                }
-            } catch {
-                await MainActor.run {
-                    guard let self, self.iCloudSyncGeneration == generation else { return }
-                    self.iCloudSubscriptionTask = nil
-                    self.bridgeActivationPending = false
-                    self.appState.isICloudBridgeActivationPending = false
-                    let message = error.localizedDescription
-                    self.appState.iCloudSyncStatus = String(localized: "Sync needs iCloud: \(message)")
-                    if GuesliICloudSyncEngine.isICloudAccountAvailabilityError(error) {
-                        self.appState.iCloudBridgeState = .needsICloud
-                    } else {
-                        self.appState.iCloudBridgeState = .error
-                    }
-                    self.appState.iCloudBridgeMessage = message
-                }
-            }
-        }
-    }
-
-    func handleICloudRemoteNotification(userInfo: [AnyHashable: Any]) {
-        guard appleCloudCapabilities.canUseCloudKit,
-              config.iCloudSyncEnabled,
-              GuesliICloudSyncEngine.isTextRecordSubscriptionNotification(userInfo) else {
-            return
-        }
-        scheduleICloudSync(delay: 0.2, userInitiated: false)
-    }
-
-    private func installICloudPersistentSyncObservers() {
-        guard appleCloudCapabilities.canUseCloudKit,
-              iCloudAppActiveObserver == nil else { return }
-        iCloudAppActiveObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.didBecomeActiveNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.scheduleICloudSync(
-                    delay: 0.5,
-                    userInitiated: false,
-                    bridgeDiscoveryTriggered: true
-                )
-            }
-        }
-        iCloudWakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didWakeNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.scheduleICloudSync(
-                    delay: 0.5,
-                    userInitiated: false,
-                    bridgeDiscoveryTriggered: true
-                )
-            }
-        }
-    }
-
-    private func enableICloudPersistentSync() {
-        guard appleCloudCapabilities.canUseCloudKit,
-              config.iCloudSyncEnabled else { return }
-        ensureICloudSubscription()
-    }
-
-    private func ensureICloudSubscription() {
-        guard appleCloudCapabilities.canUseCloudKit,
-              !hasEnsuredICloudSubscription,
-              iCloudSubscriptionTask == nil else {
-            return
-        }
-        iCloudSubscriptionTask = Task { [weak self] in
-            do {
-                try await GuesliICloudSyncEngine().ensureTextRecordSubscription()
-                await MainActor.run {
-                    self?.hasEnsuredICloudSubscription = true
-                    self?.iCloudSubscriptionTask = nil
-                }
-            } catch {
-                fputs("[guesli-native] failed to ensure iCloud sync subscription: \(error)\n", stderr)
-                await MainActor.run {
-                    self?.iCloudSubscriptionTask = nil
-                }
-            }
-        }
-    }
-
-    private func scheduleICloudSyncAfterLocalChange() {
-        guard Thread.isMainThread else {
-            DispatchQueue.main.async { [weak self] in
-                self?.scheduleICloudSyncAfterLocalChange()
-            }
-            return
-        }
-        scheduleICloudSync(delay: 2.0, userInitiated: false)
-    }
-
-    private func scheduleICloudSync(
-        delay: TimeInterval,
-        userInitiated: Bool,
-        bridgeDiscoveryTriggered: Bool = false
-    ) {
-        guard appleCloudCapabilities.canUseCloudKit,
-              config.iCloudSyncEnabled else { return }
-        enableICloudPersistentSync()
-        if bridgeDiscoveryTriggered {
-            bridgeDiscoveryPending = true
-        }
-        iCloudSyncDebounceTask?.cancel()
-        let milliseconds = max(Int(delay * 1_000), 0)
-        iCloudSyncDebounceTask = Task { [weak self] in
-            if milliseconds > 0 {
-                try? await Task.sleep(for: .milliseconds(milliseconds))
-            }
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                self?.iCloudSyncDebounceTask = nil
-                self?.startICloudSync(userInitiated: userInitiated)
-            }
-        }
-    }
-
-    private func startICloudSync(userInitiated: Bool) {
-        guard appleCloudCapabilities.canUseCloudKit else { return }
-        guard config.iCloudSyncEnabled else {
-            if userInitiated {
-                appState.iCloudSyncStatus = String(localized: "Turn on iCloud sync first.")
-            }
-            appState.iCloudBridgeState = .notConfigured
-            appState.iCloudBridgeMessage = nil
-            return
-        }
-        guard iCloudSyncTask == nil else {
-            if iCloudSyncTask?.isCancelled == true { iCloudSyncRestartAfterCancellation = true }
-            appState.isICloudSyncInProgress = true
-            appState.iCloudBridgeState = .syncing
-            appState.iCloudBridgeMessage = nil
-            if userInitiated {
-                appState.iCloudSyncStatus = String(localized: "Sync already in progress.")
-            }
-            if bridgeDiscoveryPending {
-                bridgeDiscoveryFollowUpPending = true
-            }
-            return
-        }
-        if userInitiated {
-            iCloudSyncDebounceTask?.cancel()
-            iCloudSyncDebounceTask = nil
-        }
-        enableICloudPersistentSync()
-        appState.isICloudSyncInProgress = true
-        appState.iCloudSyncStatus = String(localized: "Syncing with private iCloud...")
-        appState.iCloudBridgeState = .syncing
-        appState.iCloudBridgeMessage = nil
-        let store = dictationStore
-        iCloudSyncGeneration += 1
-        let generation = iCloudSyncGeneration
-        let bridgeActivationPendingAtStart = bridgeActivationPending
-        let bridgeDiscoveryTriggeredAtStart = bridgeDiscoveryPending
-        bridgeDiscoveryPending = false
-        let hasKnownCompanionDeviceAtStart = GuesliBridgeDeviceIdentity.hasCompanionRemoteDevice()
-        iCloudSyncTask = Task { [weak self] in
-            defer {
-                self?.iCloudSyncTask = nil
-                self?.appState.isICloudSyncInProgress = false
-                let shouldRestart = self?.iCloudSyncRestartAfterCancellation == true
-                self?.iCloudSyncRestartAfterCancellation = false
-                if shouldRestart, self?.config.iCloudSyncEnabled == true {
-                    self?.scheduleICloudSync(delay: 0.2, userInitiated: false)
-                }
-            }
-            do {
-                let forceBridgeDeviceRefresh = GuesliBridgeDeviceRefreshPolicy.shouldForceRefresh(
-                    userInitiated: userInitiated,
-                    bridgeActivationPending: bridgeActivationPendingAtStart,
-                    bridgeDiscoveryTriggered: bridgeDiscoveryTriggeredAtStart,
-                    hasKnownCompanionDevice: hasKnownCompanionDeviceAtStart
-                )
-                let result = try await GuesliICloudSyncEngine().sync(
-                    store: store,
-                    forceBridgeDeviceRefresh: forceBridgeDeviceRefresh
-                )
-                try Task.checkCancellation()
-                do {
-                    _ = try store.purgeSoftDeletedTextRecords()
-                } catch {
-                    fputs("[guesli-native] failed to purge old iCloud tombstones: \(error)\n", stderr)
-                }
-                await MainActor.run {
-                    guard let self, self.iCloudSyncGeneration == generation else { return }
-                    self.appState.isICloudSyncInProgress = false
-                    let summary = self.formatICloudSyncSummary(result)
-                    self.refreshICloudBridgeDeviceState()
-                    let remoteDeviceName = GuesliBridgeDeviceIdentity.remoteDeviceDisplayName ?? "iPhone"
-                    self.appState.iCloudSyncStatus = result.downloaded.total > 0
-                        ? String(localized: "Synced with \(remoteDeviceName).")
-                        : String(localized: "All text is up to date.")
-                    self.appState.iCloudBridgeState = .active
-                    self.appState.iCloudBridgeMessage = nil
-                    self.appState.iCloudLastSyncSummary = summary
-                    self.appState.iCloudLastSyncedAt = result.syncedAt
-                    if self.bridgeActivationPending {
-                        self.bridgeActivationPending = false
-                        self.appState.isICloudBridgeActivationPending = false
-                    }
-                    if result.syncZoneWasRecreated {
-                        self.resetICloudSubscriptionState()
-                        self.ensureICloudSubscription()
-                    }
-                    self.refreshUI()
-                    let shouldRunBridgeDiscoveryFollowUp = self.bridgeDiscoveryFollowUpPending
-                    self.bridgeDiscoveryFollowUpPending = false
-                    if result.hasPendingUploads || shouldRunBridgeDiscoveryFollowUp {
-                        self.scheduleICloudSync(
-                            delay: 0.2,
-                            userInitiated: false,
-                            bridgeDiscoveryTriggered: shouldRunBridgeDiscoveryFollowUp
-                        )
-                    }
-                }
-            } catch is CancellationError {
-                await MainActor.run {
-                    guard let self, self.iCloudSyncGeneration == generation else { return }
-                    self.appState.isICloudSyncInProgress = false
-                    self.bridgeDiscoveryFollowUpPending = false
-                    if self.bridgeActivationPending {
-                        self.bridgeActivationPending = false
-                        self.appState.isICloudBridgeActivationPending = false
-                    }
-                    self.refreshICloudBridgeStateForConfig()
-                }
-            } catch {
-                await MainActor.run {
-                    guard let self, self.iCloudSyncGeneration == generation else { return }
-                    self.appState.isICloudSyncInProgress = false
-                    self.bridgeDiscoveryFollowUpPending = false
-                    let message = error.localizedDescription
-                    self.appState.iCloudSyncStatus = String(localized: "Sync failed: \(message)")
-                    if GuesliICloudSyncEngine.isICloudAccountAvailabilityError(error) {
-                        self.appState.iCloudBridgeState = .needsICloud
-                    } else {
-                        self.appState.iCloudBridgeState = .error
-                    }
-                    self.appState.iCloudBridgeMessage = message
-                    if self.bridgeActivationPending {
-                        self.bridgeActivationPending = false
-                        self.appState.isICloudBridgeActivationPending = false
-                    }
-                }
-            }
-        }
-    }
-
-    private func cancelActiveICloudSyncTask() {
-        iCloudSyncGeneration += 1
-        iCloudSyncRestartAfterCancellation = false
-        iCloudSyncTask?.cancel()
-        appState.isICloudSyncInProgress = false
-        resetBridgeDiscoveryRuntimeState()
-        refreshICloudBridgeStateForConfig()
-    }
-
-    private func disableICloudSyncRuntimeState() {
-        cancelActiveICloudSyncTask()
-        iCloudSyncDebounceTask?.cancel()
-        iCloudSyncDebounceTask = nil
-        iCloudSubscriptionTask?.cancel()
-        iCloudSubscriptionTask = nil
-        resetICloudSubscriptionState()
-        resetBridgeDiscoveryRuntimeState()
-        appState.iCloudSyncStatus = String(localized: "iCloud sync is off.")
-        appState.iCloudBridgeState = .notConfigured
-        appState.iCloudBridgeMessage = nil
-    }
-
-    private func resetBridgeDiscoveryRuntimeState() {
-        bridgeActivationPending = false
-        bridgeDiscoveryPending = false
-        bridgeDiscoveryFollowUpPending = false
-        appState.isICloudBridgeActivationPending = false
-    }
-
-    private func resetICloudSubscriptionState() {
-        iCloudSubscriptionTask?.cancel()
-        iCloudSubscriptionTask = nil
-        hasEnsuredICloudSubscription = false
-    }
-
-    private func refreshICloudBridgeStateForConfig() {
-        if appState.isICloudBridgeActivationPending {
-            appState.iCloudBridgeState = .checkingICloud
-            return
-        }
-        if appState.isICloudSyncInProgress {
-            appState.iCloudBridgeState = .syncing
-            return
-        }
-        if !config.iCloudSyncEnabled {
-            appState.iCloudBridgeState = .notConfigured
-            appState.iCloudBridgeMessage = nil
-            return
-        }
-        switch appState.iCloudBridgeState {
-        case .needsICloud, .error:
-            return
-        case .notConfigured, .checkingICloud, .syncing, .active:
-            appState.iCloudBridgeState = .active
-            appState.iCloudBridgeMessage = nil
-        }
-    }
-
-    private func formatICloudSyncSummary(_ result: ICloudSyncResult) -> String {
-        String(localized: "\(formatICloudSyncCounts(result.uploaded)) up, \(formatICloudSyncCounts(result.downloaded)) down")
-    }
-
-    private func formatICloudSyncCounts(_ counts: ICloudSyncKindCounts) -> String {
-        guard counts.total > 0 else { return "0" }
-        var parts: [String] = []
-        if counts.dictations > 0 {
-            parts.append(counts.dictations == 1 ? String(localized: "1 dictation") : String(localized: "\(counts.dictations) dictations"))
-        }
-        if counts.meetings > 0 {
-            parts.append(counts.meetings == 1 ? String(localized: "1 meeting") : String(localized: "\(counts.meetings) meetings"))
-        }
-        return "\(counts.total) (\(parts.joined(separator: ", ")))"
     }
 
     func cachedDictationInputDevices() -> [AudioInputDeviceInfo] {
@@ -4195,7 +3743,6 @@ public final class GuesliController: NSObject {
                 self.meetingSummaryRequestGate.finish(requestID, meetingID: meeting.id)
                 self.meetingSummaryTasks.removeValue(forKey: meeting.id)
                 await MainActor.run {
-                    self.scheduleICloudSyncAfterLocalChange()
                     self.syncAppState()
                     self.historyWindowController?.reload()
                     completion(.success(()))
@@ -4214,7 +3761,6 @@ public final class GuesliController: NSObject {
                             id: meeting.id,
                             message: error.localizedDescription
                         )
-                        self.scheduleICloudSyncAfterLocalChange()
                         self.syncAppState()
                         self.historyWindowController?.reload()
                     } catch {
@@ -4342,7 +3888,6 @@ public final class GuesliController: NSObject {
                     throw MeetingRetranscriptionError.failedToSave(underlying: error)
                 }
 
-                self.scheduleICloudSyncAfterLocalChange()
                 self.syncAppState()
                 self.historyWindowController?.reload()
                 completion(.success(()))
@@ -4857,7 +4402,6 @@ public final class GuesliController: NSObject {
         do {
             try dictationStore.updateMeetingTitle(id: id, title: title)
             liveMeetingTitleCache[id] = nil
-            scheduleICloudSyncAfterLocalChange()
         } catch {
             fputs("[guesli-native] failed to update meeting title \(id): \(error)\n", stderr)
         }
@@ -4870,14 +4414,12 @@ public final class GuesliController: NSObject {
 
     func updateMeetingNotes(id: Int64, notes: String) {
         try? dictationStore.updateMeetingNotes(id: id, formattedNotes: notes)
-        scheduleICloudSyncAfterLocalChange()
         syncAppState()
     }
 
     func updateMeetingTranscript(id: Int64, transcript: String) {
         do {
             try dictationStore.updateMeetingTranscript(id: id, rawTranscript: transcript)
-            scheduleICloudSyncAfterLocalChange()
         } catch {
             fputs("[guesli-native] failed to update meeting transcript \(id): \(error)\n", stderr)
         }
@@ -4904,7 +4446,6 @@ public final class GuesliController: NSObject {
                 selectedTemplateKind: meeting.selectedTemplateKind ?? .auto,
                 selectedTemplatePrompt: meeting.selectedTemplatePrompt ?? ""
             )
-            scheduleICloudSyncAfterLocalChange()
         } catch {
             fputs("[guesli-native] failed to rename speaker in meeting \(id): \(error)\n", stderr)
         }
@@ -4918,7 +4459,6 @@ public final class GuesliController: NSObject {
         do {
             try dictationStore.updateMeetingManualNotes(id: id, manualNotes: notes)
             markMeetingManualNotesPersisted(id: id, notes: notes)
-            scheduleICloudSyncAfterLocalChange()
         } catch {
             fputs("[guesli-native] failed to update manual notes for \(id): \(error)\n", stderr)
         }
@@ -4987,7 +4527,6 @@ public final class GuesliController: NSObject {
         do {
             try dictationStore.updateMeetingManualNotes(id: id, manualNotes: notes)
             markMeetingManualNotesPersisted(id: id, notes: notes)
-            scheduleICloudSyncAfterLocalChange()
         } catch {
             fputs("[guesli-native] failed to persist manual notes for \(id): \(error)\n", stderr)
         }
@@ -5018,7 +4557,6 @@ public final class GuesliController: NSObject {
         do {
             try dictationStore.updateMeetingTitle(id: id, title: title)
             liveMeetingTitleCache[id] = nil
-            scheduleICloudSyncAfterLocalChange()
         } catch {
             fputs("[guesli-native] failed to flush cached meeting title \(id): \(error)\n", stderr)
         }
@@ -5162,7 +4700,6 @@ public final class GuesliController: NSObject {
             if let folderID {
                 try? dictationStore.moveMeeting(id: meetingID, toFolder: folderID)
             }
-            scheduleICloudSyncAfterLocalChange()
             syncAppState()
             fputs("[guesli-native] created meeting from calendar event (folder=\(folderID.map(String.init) ?? "none"))\n", stderr)
         } catch {
@@ -5204,7 +4741,6 @@ public final class GuesliController: NSObject {
 
     func deleteDictation(id: Int64) {
         try? dictationStore.deleteDictation(id: id)
-        scheduleICloudSyncAfterLocalChange()
         syncAppState()
     }
 
@@ -5220,7 +4756,6 @@ public final class GuesliController: NSObject {
                 try deleteSavedMeetingRecording(at: savedRecordingPath)
             }
             try dictationStore.deleteMeeting(id: id)
-            scheduleICloudSyncAfterLocalChange()
         } catch let error as MeetingLifecycleError {
             presentErrorAlert(title: String(localized: "Couldn't Delete Meeting"), message: error.localizedDescription)
             return
@@ -5250,7 +4785,6 @@ public final class GuesliController: NSObject {
 
     func clearDictationHistory() {
         try? dictationStore.clearDictations()
-        scheduleICloudSyncAfterLocalChange()
         statusBarController?.refresh()
         historyWindowController?.reload()
         syncAppState()
@@ -5300,7 +4834,6 @@ public final class GuesliController: NSObject {
         }
 
         try? dictationStore.clearMeetings()
-        scheduleICloudSyncAfterLocalChange()
         clearAllCachedMeetingManualNotes()
         clearAllCachedMeetingTitles()
         appState.selectedMeetingID = nil
@@ -5995,7 +5528,6 @@ public final class GuesliController: NSObject {
             summaryError: summaryError,
             source: .audioImport
         )
-        scheduleICloudSyncAfterLocalChange()
         return meetingID
     }
 
@@ -6785,7 +6317,6 @@ public final class GuesliController: NSObject {
     private func deleteMeetingDraftAndScheduleSync(id: Int64) {
         do {
             try dictationStore.deleteMeeting(id: id)
-            scheduleICloudSyncAfterLocalChange()
         } catch {
             fputs("[guesli-native] failed to delete meeting draft \(id): \(error)\n", stderr)
         }
@@ -6801,7 +6332,6 @@ public final class GuesliController: NSObject {
 
     private func updateMeetingStatusAndScheduleSyncThrowing(id: Int64, status: MeetingStatus) throws {
         try dictationStore.updateMeetingStatus(id: id, status: status)
-        scheduleICloudSyncAfterLocalChange()
     }
 
     func dismissDiagnosticIncidentPrompt() {
@@ -7164,7 +6694,6 @@ public final class GuesliController: NSObject {
             )
             throw error
         }
-        scheduleICloudSyncAfterLocalChange()
         return CompletedMeetingPersistenceResult(meetingID: meetingID, recordingSaveError: recordingSaveError)
     }
 
@@ -7493,7 +7022,6 @@ public final class GuesliController: NSObject {
                 systemAudioPath: systemURL?.path,
                 savedRecordingPath: mixedURL?.path
             )
-            scheduleICloudSyncAfterLocalChange()
             DiagnosticsLog.write(
                 "[meeting-stop] linked_post_recording meeting_id=\(meetingID) mic=\(micURL?.path ?? "nil") system=\(systemURL?.path ?? "nil") mixed=\(mixedURL?.path ?? "nil")"
             )
@@ -8963,7 +8491,6 @@ public final class GuesliController: NSObject {
             savedText = DictationTextRecovery.save(cleaned, insert: { text in
                 _ = try self.dictationStore.insertDictation(text: text, durationSeconds: duration, startedAt: startedAt, endedAt: Date())
             }, copyToClipboard: copyToClipboard)
-            if savedText { scheduleICloudSyncAfterLocalChange() }
         }
 
         statusBarController?.refresh()
@@ -9052,8 +8579,7 @@ public final class GuesliController: NSObject {
                     startedAt: startedAt,
                     endedAt: Date()
                 )) != nil
-                if savedText { self.scheduleICloudSyncAfterLocalChange() }
-                else {
+                if !savedText {
                     // Preserve the recognized text even if history storage is unavailable.
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(text, forType: .string)
@@ -9159,7 +8685,6 @@ public final class GuesliController: NSObject {
                     let savedText = DictationTextRecovery.save(text, insert: { text in
                         _ = try self.dictationStore.insertDictation(text: text, durationSeconds: duration, appContext: storageContext, startedAt: startedAt, endedAt: Date())
                     }, copyToClipboard: self.copyToClipboard)
-                    if savedText { self.scheduleICloudSyncAfterLocalChange() }
                     self.clearCapturedDictationSessionContext()
                     self.statusBarController?.refresh()
                     self.historyWindowController?.reload()
@@ -9223,7 +8748,6 @@ public final class GuesliController: NSObject {
                         let preserved = recognizedCommand.isEmpty ? VoiceCommandPrompt.defaultRewrite : recognizedCommand
                         self.copyToClipboard(preserved)
                         _ = try? self.dictationStore.insertDictation(text: preserved, durationSeconds: duration, appContext: storageContext, startedAt: startedAt, endedAt: Date())
-                        self.scheduleICloudSyncAfterLocalChange()
                         self.historyWindowController?.reload()
                         self.presentErrorAlert(title: String(localized: "Voice command failed"), message: VoiceCommandProcessor.failureMessage(error))
                     } else if self.isDictationTestMode {

@@ -19,12 +19,6 @@
 "Callback port 1456 is already in use" = "Порт 1456 уже занят";
 "Google Calendar request failed: %@" = "Ошибка запроса к Google Календарю: %@";
 
-// iCloud sync (GuesliICloudSyncEngine.swift)
-"Sign in to iCloud on this Mac to sync text records." = "Войдите в iCloud на этом Mac для синхронизации.";
-"iCloud is restricted for this Mac." = "iCloud на этом Mac ограничен.";
-"iCloud is temporarily unavailable. Try syncing again shortly." = "iCloud временно недоступен. Повторите позже.";
-"Couldn't determine iCloud account status." = "Не удалось узнать статус iCloud.";
-
 // Audio capture (CoreAudioSystemRecorder.swift, DictationAudioSessionManager.swift, MeetingSession.swift)
 "Could not create output file" = "Не удалось создать файл";
 "No default audio output device found" = "Нет устройства вывода звука";

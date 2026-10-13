@@ -4,7 +4,6 @@
 "This will permanently remove all saved meetings, notes, transcripts, and retained audio recordings. This cannot be undone." = "Все встречи, заметки, расшифровки и аудиозаписи будут удалены навсегда. Это необратимо.";
 "Clear Dictations" = "Очистить диктовки";
 "Clear Meetings" = "Очистить встречи";
-"Sync" = "Синхронизация";
 "Appearance" = "Оформление";
 "Runs on the downloaded local cleanup model." = "Работает на загруженной локальной модели.";
 "Uses your ChatGPT subscription." = "Использует вашу подписку ChatGPT.";
@@ -31,16 +30,6 @@
 "Stop the current meeting recording before clearing meeting history." = "Сначала остановите запись встречи.";
 "Requires approval in System Settings" = "Нужно разрешение в Системных настройках";
 "Open Login Items in System Settings" = "Открыть «Объекты входа» в Системных настройках";
-"iCloud Text Sync" = "Синхронизация iCloud";
-"Private iCloud sync" = "Личный iCloud";
-"Sync dictation text, meeting transcripts, notes, summaries, and manual notes through your private iCloud account. Audio recordings are never synced." = "Диктовки, расшифровки, итоги и заметки синхронизируются через ваш iCloud. Аудио — никогда.";
-"Last synced: %@" = "Синхронизировано: %@";
-"Sync now" = "Синхронизировать";
-"Sync is off. Turn it on to keep text records in your private iCloud account." = "Синхронизация выключена. Включите, чтобы хранить тексты в iCloud.";
-"Private iCloud text sync is ready." = "Синхронизация iCloud готова.";
-"Linked %@: %@" = "Связан %@: %@";
-"Linked device: %@" = "Связано: %@";
-"No linked device yet." = "Связанных устройств нет.";
 "Transcription" = "Распознавание";
 "Dictation model" = "Модель диктовки";
 "Automatic uses system input, or Mac mic with AirPods." = "«Авто» — системный вход или микрофон Mac при AirPods.";

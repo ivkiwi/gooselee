@@ -69,42 +69,6 @@ struct StorageConfigAndCancellationTests {
             #expect(store.load() == nil)
         }
     }
-
-    @Test("Cancellation cancels the operation and rejects a late successful completion")
-    func cancelsInFlightOperation() async throws {
-        let operation = BlockOperation()
-        let completion = TestLockedBox<CheckedContinuation<Int, Error>?>(nil)
-        let startedSignal = TestLockedBox<AsyncStream<Void>.Continuation?>(nil)
-        let started = AsyncStream<Void> { signal in startedSignal.withLock { $0 = signal } }
-        let task = Task<Int, Error> {
-            try await ICloudCancellableOperation.run(operation) { continuation in
-                completion.withLock { $0 = continuation }
-                startedSignal.withLock { $0?.yield(()); $0?.finish() }
-            }
-        }
-        var iterator = started.makeAsyncIterator()
-        _ = await iterator.next()
-        task.cancel()
-        #expect(operation.isCancelled)
-        completion.withLock { $0?.resume(returning: 1); $0 = nil }
-        do { _ = try await task.value; Issue.record("Cancelled operation returned success") }
-        catch is CancellationError { }
-    }
-
-    @Test("An already cancelled sync cannot submit the next operation")
-    func cancelledTaskDoesNotStartOperation() async throws {
-        let started = TestLockedBox(false)
-        let task = Task<Int, Error> {
-            withUnsafeCurrentTask { $0?.cancel() }
-            return try await ICloudCancellableOperation.run(BlockOperation()) { continuation in
-                started.withLock { $0 = true }
-                continuation.resume(returning: 1)
-            }
-        }
-        do { _ = try await task.value; Issue.record("Cancelled task started another operation") }
-        catch is CancellationError { }
-        #expect(!started.withLock { $0 })
-    }
 }
 
 private final class ConfigBackupFailureFileManager: FileManager {

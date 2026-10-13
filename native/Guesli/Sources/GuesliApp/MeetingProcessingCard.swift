@@ -15,16 +15,18 @@ extension MeetingProcessingStage {
 // processing, so MeetingDetailView.body does not re-render on every chunk.
 struct MeetingProcessingDraftSection: View {
     let appState: AppState
+    let controller: GuesliController
     let meetingID: Int64
     let transcriptPrefix: String
+    @State private var checkpointDraft: String?
 
     var body: some View {
         let stage = appState.meetingProcessingStages[meetingID] ?? .transcribingAudio
         let ownsLiveTranscript = appState.liveMeetingTranscriptOwnerID == meetingID
         let prior = transcriptPrefix.trimmingCharacters(in: .whitespacesAndNewlines)
-        let live = ownsLiveTranscript
-            ? appState.liveMeetingTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-            : ""
+        // Another recording took over the live buffer; fall back to this meeting's saved checkpoints.
+        let live = (ownsLiveTranscript ? appState.liveMeetingTranscript : checkpointDraft ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
         let transcript = [prior, live].filter { !$0.isEmpty }.joined(separator: "\n\n— Resumed —\n\n")
         VStack(alignment: .leading, spacing: GuesliTheme.spacing8) {
             HStack(spacing: GuesliTheme.spacing8) {
@@ -53,6 +55,10 @@ struct MeetingProcessingDraftSection: View {
             )
         }
         .frame(maxWidth: 980, maxHeight: .infinity, alignment: .topLeading)
+        // Checkpoints stop growing once the owner switches, so one read per meeting is enough.
+        .task(id: ownsLiveTranscript ? nil : meetingID) {
+            checkpointDraft = ownsLiveTranscript ? nil : controller.liveTranscriptCheckpointDraft(meetingID: meetingID)
+        }
     }
 }
 

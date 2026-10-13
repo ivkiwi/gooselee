@@ -5560,6 +5560,15 @@ public final class GuesliController: NSObject {
         )
     }
 
+    func liveTranscriptCheckpointDraft(meetingID: Int64) -> String? {
+        do {
+            return try dictationStore.liveTranscriptCheckpointText(meetingID: meetingID)
+        } catch {
+            fputs("[guesli-native] failed to read live transcript checkpoints for meeting \(meetingID): \(error)\n", stderr)
+            return nil
+        }
+    }
+
     func meetingThreadContext(for meetingID: Int64) -> MeetingThreadContext? {
         do {
             let ids = try dictationStore.meetingThreadIDs(containing: meetingID)

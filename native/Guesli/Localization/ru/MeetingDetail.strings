@@ -44,6 +44,5 @@
 "Edit Transcript" = "Править расшифровку";
 "Edit Notes" = "Править заметки";
 "Apply Template" = "Применить шаблон";
-"%@  •  %@  •  %lld words" = "%@  •  %@  •  слов: %lld";
 "Meeting Title" = "Название встречи";
 "No transcript available" = "Расшифровки нет";

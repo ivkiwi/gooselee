@@ -10,6 +10,7 @@ Usage: scripts/l10n_coverage.py [--missing] [--exclude File.swift ...]
 """
 import argparse
 import itertools
+import plistlib
 import re
 import sys
 from pathlib import Path
@@ -194,6 +195,10 @@ def fragment_keys():
     for path in sorted(FRAGMENTS.glob("*.strings")):
         for m in pattern.finditer(path.read_text(encoding="utf-8")):
             keys[unescape_strings(m.group(1))] = path.name
+    plurals = FRAGMENTS / "Localizable.stringsdict"
+    if plurals.exists():
+        with plurals.open("rb") as handle:
+            keys.update(dict.fromkeys(plistlib.load(handle), plurals.name))
     return keys
 
 

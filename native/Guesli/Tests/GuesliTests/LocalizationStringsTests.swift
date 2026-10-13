@@ -35,6 +35,38 @@ struct LocalizationStringsTests {
         }
     }
 
+    @Test("stringsdict parses, every plural has one/few/many/other, and its keys are not repeated in fragments")
+    func pluralsAreValid() throws {
+        let data = try Data(contentsOf: Self.directory.appendingPathComponent("Localizable.stringsdict"))
+        let plist = try PropertyListSerialization.propertyList(from: data, format: nil)
+        let entries = try #require(plist as? [String: [String: Any]], "Localizable.stringsdict is not a dictionary of entries")
+        #expect(!entries.isEmpty)
+
+        var fragmentKeys: Set<String> = []
+        for url in try Self.fragmentURLs() {
+            let table = try PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil) as? [String: String]
+            fragmentKeys.formUnion((table ?? [:]).keys)
+        }
+
+        for (key, entry) in entries {
+            #expect(!fragmentKeys.contains(key), "\"\(key)\" is translated in both the stringsdict and a .strings fragment")
+            let format = try #require(entry["NSStringLocalizedFormatKey"] as? String, "\"\(key)\" has no NSStringLocalizedFormatKey")
+            let variables = entry.filter { $0.key != "NSStringLocalizedFormatKey" }
+            #expect(!variables.isEmpty, "\"\(key)\" has no plural variable")
+            for (name, value) in variables {
+                #expect(format.contains("@\(name)@"), "\"\(key)\" does not use variable \(name)")
+                let rule = try #require(value as? [String: String], "\"\(key)\" variable \(name) is not a rule")
+                #expect(rule["NSStringFormatSpecTypeKey"] == "NSStringPluralRuleType")
+                for form in ["one", "few", "many", "other"] {
+                    #expect(
+                        !(rule[form] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                        "\"\(key)\" variable \(name) is missing the \(form) form"
+                    )
+                }
+            }
+        }
+    }
+
     @Test("format specifier extraction handles positional and literal percent")
     func formatSpecifierExtraction() {
         #expect(Self.formatSpecifiers(in: "Saved %lld of %@") == [1: "lld", 2: "@"])
@@ -43,13 +75,14 @@ struct LocalizationStringsTests {
         #expect(Self.formatSpecifiers(in: "%d") != Self.formatSpecifiers(in: "%lld"))
     }
 
+    private static let directory = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("Localization/ru", isDirectory: true)
+
     private static func fragmentURLs() throws -> [URL] {
-        let directory = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .appendingPathComponent("Localization/ru", isDirectory: true)
-        return try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
             .filter { $0.pathExtension == "strings" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }

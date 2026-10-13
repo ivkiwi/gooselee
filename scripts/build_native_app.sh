@@ -170,6 +170,14 @@ cp "$ROOT/native/Guesli/ThirdPartyLicenses/FluidAudio-Apache-2.0.txt" \
 if [[ -d "$ROOT/assets/fonts" ]]; then
   ditto "$ROOT/assets/fonts" "$STAGED_APP_DIR/Contents/Resources/fonts"
 fi
+# Localization: English is the source language; Russian is merged from per-area fragments.
+mkdir -p "$STAGED_APP_DIR/Contents/Resources/en.lproj" "$STAGED_APP_DIR/Contents/Resources/ru.lproj"
+: > "$STAGED_APP_DIR/Contents/Resources/en.lproj/Localizable.strings"
+: > "$STAGED_APP_DIR/Contents/Resources/ru.lproj/Localizable.strings"
+while IFS= read -r fragment; do
+  cat "$fragment" >> "$STAGED_APP_DIR/Contents/Resources/ru.lproj/Localizable.strings"
+  echo >> "$STAGED_APP_DIR/Contents/Resources/ru.lproj/Localizable.strings"
+done < <(find "$ROOT/native/Guesli/Localization/ru" -maxdepth 1 -name "*.strings" -type f | LC_ALL=C sort)
 cat > "$STAGED_APP_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -191,6 +199,13 @@ cat > "$STAGED_APP_DIR/Contents/Info.plist" <<PLIST
   <string>APPL</string>
   <key>CFBundleIconFile</key>
   <string>gooselee.icns</string>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
+  <key>CFBundleLocalizations</key>
+  <array>
+    <string>en</string>
+    <string>ru</string>
+  </array>
   <key>GuesliSupportDirectoryName</key>
   <string>$APP_SUPPORT_DIR_NAME</string>
   <key>LSUIElement</key>

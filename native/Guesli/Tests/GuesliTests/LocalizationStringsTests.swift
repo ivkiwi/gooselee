@@ -1,0 +1,90 @@
+import Foundation
+import Testing
+
+@Suite("Localization strings fragments", .guesliHermeticSupport)
+struct LocalizationStringsTests {
+    @Test("every ru fragment parses, has unique keys, non-empty values and matching format specifiers")
+    func fragmentsAreValid() throws {
+        let fragments = try Self.fragmentURLs()
+        #expect(!fragments.isEmpty)
+
+        var keyOwners: [String: String] = [:]
+        for url in fragments {
+            let name = url.lastPathComponent
+            let data = try Data(contentsOf: url)
+            let text = try #require(String(data: data, encoding: .utf8), "\(name) is not UTF-8")
+
+            // PropertyListSerialization keeps the last duplicate silently, so scan raw lines for keys.
+            for key in Self.rawKeys(in: text) {
+                if let owner = keyOwners[key] {
+                    Issue.record("duplicate key \"\(key)\" in \(name), first seen in \(owner)")
+                } else {
+                    keyOwners[key] = name
+                }
+            }
+
+            let plist = try PropertyListSerialization.propertyList(from: data, format: nil)
+            let table = try #require(plist as? [String: String], "\(name) is not a strings table")
+            for (key, value) in table {
+                #expect(!value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, "empty value for \"\(key)\" in \(name)")
+                #expect(
+                    Self.formatSpecifiers(in: key) == Self.formatSpecifiers(in: value),
+                    "format specifiers differ for \"\(key)\" in \(name)"
+                )
+            }
+        }
+    }
+
+    @Test("format specifier extraction handles positional and literal percent")
+    func formatSpecifierExtraction() {
+        #expect(Self.formatSpecifiers(in: "Saved %lld of %@") == [1: "lld", 2: "@"])
+        #expect(Self.formatSpecifiers(in: "%2$@ сохранено: %1$lld") == [1: "lld", 2: "@"])
+        #expect(Self.formatSpecifiers(in: "100%% done") == [:])
+        #expect(Self.formatSpecifiers(in: "%d") != Self.formatSpecifiers(in: "%lld"))
+    }
+
+    private static func fragmentURLs() throws -> [URL] {
+        let directory = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Localization/ru", isDirectory: true)
+        return try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "strings" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+
+    /// Keys as written on `"key" = ...` lines, still escaped; enough to detect duplicates.
+    private static func rawKeys(in text: String) -> [String] {
+        let regex = try! NSRegularExpression(pattern: #"^\s*"((?:[^"\\]|\\.)*)"\s*="#)
+        return text.components(separatedBy: .newlines).compactMap { line in
+            let range = NSRange(line.startIndex..., in: line)
+            guard let match = regex.firstMatch(in: line, range: range),
+                  let keyRange = Range(match.range(at: 1), in: line) else { return nil }
+            return String(line[keyRange])
+        }
+    }
+
+    /// Argument position → length modifier + conversion, e.g. [1: "lld", 2: "@"].
+    static func formatSpecifiers(in string: String) -> [Int: String] {
+        let regex = try! NSRegularExpression(
+            pattern: #"%(?:%|(?:(\d+)\$)?[-+ #0']*\d*(?:\.\d+)?(hh|h|ll|l|q|z|t|j|L)?([@dDiuUxXoOfFeEgGcCsSpaA]))"#
+        )
+        var result: [Int: String] = [:]
+        var nextPosition = 1
+        let range = NSRange(string.startIndex..., in: string)
+        for match in regex.matches(in: string, range: range) {
+            guard let conversionRange = Range(match.range(at: 3), in: string) else { continue } // "%%"
+            let length = Range(match.range(at: 2), in: string).map { String(string[$0]) } ?? ""
+            let position: Int
+            if let positionRange = Range(match.range(at: 1), in: string), let explicit = Int(string[positionRange]) {
+                position = explicit
+            } else {
+                position = nextPosition
+                nextPosition += 1
+            }
+            result[position] = length + String(string[conversionRange])
+        }
+        return result
+    }
+}

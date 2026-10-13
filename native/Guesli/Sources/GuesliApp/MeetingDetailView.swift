@@ -1957,7 +1957,7 @@ struct TranscriptChatBubble: View {
                                 .foregroundStyle(GuesliTheme.textTertiary)
                         }
                         .buttonStyle(.plain)
-                        .help("Переименовать…")
+                        .help("Rename Speaker…")
                     } else {
                         Text(metadata)
                             .font(.system(size: 10, weight: .medium))

@@ -1,0 +1,4 @@
+/* Manual speaker rename in the meeting transcript. */
+"Rename Speaker" = "Имя говорящего";
+"Rename Speaker…" = "Переименовать…";
+"Replaces “%@” in every line of this transcript. No colons, up to %lld characters." = "Заменит «%@» во всей расшифровке. Без двоеточий, до %lld символов.";

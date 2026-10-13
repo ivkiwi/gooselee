@@ -437,6 +437,8 @@ struct SettingsView: View {
                 }
             }
 
+            LanguageSettingsSection(appState: appState, controller: controller)
+
             permissionsSection
 
             settingsSection("Data") {

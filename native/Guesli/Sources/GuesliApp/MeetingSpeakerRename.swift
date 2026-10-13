@@ -51,25 +51,25 @@ private struct SpeakerRenameAlertModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .alert(
-                "Переименовать говорящего",
+                "Rename Speaker",
                 isPresented: Binding(
                     get: { speaker != nil },
                     set: { if !$0 { speaker = nil } }
                 )
             ) {
-                TextField("Имя", text: $draft)
-                Button("Переименовать") {
+                TextField("Name", text: $draft)
+                Button("Rename") {
                     if let speaker {
                         onRename(speaker, draft)
                     }
                     speaker = nil
                 }
                 .disabled(MeetingSpeakerRename.validatedName(draft) == nil)
-                Button("Отмена", role: .cancel) {
+                Button("Cancel", role: .cancel) {
                     speaker = nil
                 }
             } message: {
-                Text("Имя заменит «\(speaker ?? "")» во всех репликах этой расшифровки. Без двоеточия, до \(MeetingSpeakerRename.maxNameLength) символов.")
+                Text("Replaces “\(speaker ?? "")” in every line of this transcript. No colons, up to \(MeetingSpeakerRename.maxNameLength) characters.")
             }
             .onChange(of: speaker) { _, newValue in
                 draft = newValue ?? ""

@@ -1,0 +1,6 @@
+/* In-app interface language picker. Language names are autonyms and are not translated. */
+"Interface" = "Интерфейс";
+"Restart" = "Перезапустить";
+"Restart GooseLee to apply." = "Перезапустите GooseLee.";
+"Stop the meeting recording to restart." = "Остановите запись для перезапуска.";
+"System" = "Системный";

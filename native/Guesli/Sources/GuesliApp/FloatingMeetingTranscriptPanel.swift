@@ -33,6 +33,7 @@ final class FloatingMeetingTranscriptModel {
     var partialOthers = ""
     var isPaused = false
     var didCopy = false
+    var isRecording = false
 
     var hasContent: Bool {
         !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -60,6 +61,7 @@ final class FloatingMeetingTranscriptModel {
         partialOthers = ""
         isPaused = false
         didCopy = false
+        isRecording = false
     }
 }
 
@@ -69,16 +71,19 @@ final class FloatingMeetingTranscriptPanelController {
     private let onHoverChanged: (Bool) -> Void
     private let onOpenNotes: () -> Void
     private let onDismiss: () -> Void
+    private let onBookmark: () -> Void
     private var panel: NSPanel?
 
     init(
         onHoverChanged: @escaping (Bool) -> Void,
         onOpenNotes: @escaping () -> Void,
-        onDismiss: @escaping () -> Void
+        onDismiss: @escaping () -> Void,
+        onBookmark: @escaping () -> Void
     ) {
         self.onHoverChanged = onHoverChanged
         self.onOpenNotes = onOpenNotes
         self.onDismiss = onDismiss
+        self.onBookmark = onBookmark
     }
 
     var isVisible: Bool { panel?.isVisible == true }
@@ -92,6 +97,10 @@ final class FloatingMeetingTranscriptPanelController {
 
     func setPaused(_ paused: Bool) {
         model.isPaused = paused
+    }
+
+    func setRecording(_ recording: Bool) {
+        model.isRecording = recording
     }
 
     func show(beside indicatorFrame: NSRect) {
@@ -122,7 +131,8 @@ final class FloatingMeetingTranscriptPanelController {
             model: model,
             onHoverChanged: onHoverChanged,
             onOpenNotes: onOpenNotes,
-            onDismiss: onDismiss
+            onDismiss: onDismiss,
+            onBookmark: onBookmark
         )
         let panel = NSPanel(
             contentRect: NSRect(origin: .zero, size: FloatingMeetingTranscriptPlacement.panelSize),
@@ -147,6 +157,7 @@ private struct FloatingMeetingTranscriptPanelView: View {
     let onHoverChanged: (Bool) -> Void
     let onOpenNotes: () -> Void
     let onDismiss: () -> Void
+    let onBookmark: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -161,6 +172,11 @@ private struct FloatingMeetingTranscriptPanelView: View {
                 Text(model.isPaused ? "Paused" : "Live")
                     .font(GuesliTheme.caption())
                     .foregroundStyle(GuesliTheme.textSecondary)
+                Button("⭐ Метка", action: onBookmark)
+                    .buttonStyle(.plain)
+                    .font(GuesliTheme.caption())
+                    .disabled(!model.isRecording)
+                    .help("Отметить важный момент в заметках встречи")
                 Button(action: model.copyToPasteboard) {
                     Image(systemName: model.didCopy ? "checkmark" : "doc.on.doc")
                 }

@@ -185,6 +185,7 @@ final class FloatingIndicatorController: NSObject {
     var onCancelToggleDictation: (() -> Void)?
     var onPositionSaved: ((CGPoint) -> Void)?
     var onOpenMeetingNotes: (() -> Void)?
+    var onAddMeetingBookmark: (() -> Void)?
     var isToggleDictation = false
     private var stopLayer: CALayer?
     private var transcribingTitle = "Transcribing"
@@ -200,6 +201,9 @@ final class FloatingIndicatorController: NSObject {
         },
         onDismiss: { [weak self] in
             self?.dismissMeetingTranscript()
+        },
+        onBookmark: { [weak self] in
+            self?.onAddMeetingBookmark?()
         }
     )
 
@@ -341,6 +345,7 @@ final class FloatingIndicatorController: NSObject {
     func setMeetingRecording(_ recording: Bool, config: AppConfig) {
         isMeetingRecording = recording
         recordingWaveformMode = .level
+        meetingTranscriptPanel.setRecording(recording)
         if !recording {
             isMeetingRecordingPaused = false
             isMeetingTranscriptManuallyDismissed = false

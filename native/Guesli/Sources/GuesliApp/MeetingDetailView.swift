@@ -1607,7 +1607,9 @@ struct MeetingDetailView: View {
 
     private func syncManualNotesState(with meeting: MeetingRecord?) {
         let persistedManualNotes = meeting?.manualNotes ?? ""
-        if manualNotesSaveStatus == .saving, editableManualNotes != persistedManualNotes {
+        // A controller-side write (e.g. a bookmark) makes the persisted notes the latest value.
+        if manualNotesSaveStatus == .saving, editableManualNotes != persistedManualNotes,
+           meeting.map({ controller.manualNotesForLiveMeeting(id: $0.id) }) != persistedManualNotes {
             return
         }
         editableManualNotes = persistedManualNotes

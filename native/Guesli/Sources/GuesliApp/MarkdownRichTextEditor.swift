@@ -153,6 +153,9 @@ struct MarkdownRichTextEditor: NSViewRepresentable {
 
         func apply(markdown: String, to textView: NSTextView) {
             let selectedRanges = textView.selectedRanges
+            // External markdown supersedes a pending local publish, which would otherwise revert it.
+            bindingPublishWorkItem?.cancel()
+            bindingPublishWorkItem = nil
             isApplying = true
             usesMarkdownStyling = Self.markdownNeedsRichRendering(markdown)
             textView.textStorage?.setAttributedString(attributedString(from: markdown))

@@ -903,6 +903,12 @@ struct HotkeyConfig: Codable, Equatable {
         combinationModifiers: UInt(NSEvent.ModifierFlags([.command, .shift]).rawValue),
         combinationKeyCode: 15
     )
+    static let meetingBookmarkDefault = HotkeyConfig(
+        keyCode: UInt16.max,
+        label: "⌃⌥B",
+        combinationModifiers: UInt(NSEvent.ModifierFlags([.control, .option]).rawValue),
+        combinationKeyCode: 11
+    )
 
 }
 
@@ -1080,6 +1086,8 @@ struct AppConfig: Codable {
     var autoExportMarkdownContent: String = MeetingExportContent.notes.rawValue
     var autoExportFileFormat: String = MeetingAutoExportFileFormat.markdown.rawValue
     var iCloudSyncEnabled: Bool = false
+    var meetingBookmarkHotkey: HotkeyConfig = .meetingBookmarkDefault
+    var enableMeetingBookmarkHotkey: Bool = false
 
     enum CodingKeys: String, CodingKey {
         case dictationHotkey = "dictation_hotkey"
@@ -1177,6 +1185,8 @@ struct AppConfig: Codable {
         case autoExportMarkdownContent = "auto_export_markdown_content"
         case autoExportFileFormat = "auto_export_file_format"
         case iCloudSyncEnabled = "icloud_sync_enabled"
+        case meetingBookmarkHotkey = "meeting_bookmark_hotkey"
+        case enableMeetingBookmarkHotkey = "enable_meeting_bookmark_hotkey"
     }
 
     init() {}
@@ -1344,6 +1354,8 @@ struct AppConfig: Codable {
         autoExportMarkdownContent = MeetingExportContent(rawValue: decodedAutoExportMarkdownContent)?.rawValue ?? defaults.autoExportMarkdownContent
         let decodedAutoExportFileFormat = (try? c.decode(String.self, forKey: .autoExportFileFormat)) ?? defaults.autoExportFileFormat
         autoExportFileFormat = MeetingAutoExportFileFormat(rawValue: decodedAutoExportFileFormat)?.rawValue ?? defaults.autoExportFileFormat
+        meetingBookmarkHotkey = (try? c.decode(HotkeyConfig.self, forKey: .meetingBookmarkHotkey)) ?? defaults.meetingBookmarkHotkey
+        enableMeetingBookmarkHotkey = (try? c.decode(Bool.self, forKey: .enableMeetingBookmarkHotkey)) ?? defaults.enableMeetingBookmarkHotkey
     }
 
     var resolvedNemotron35Language: Nemotron35Language {

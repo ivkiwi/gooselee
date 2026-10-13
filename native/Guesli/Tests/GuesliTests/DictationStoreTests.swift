@@ -1,5 +1,4 @@
 import Testing
-import CloudKit
 import Foundation
 import GuesliCore
 import SQLite3
@@ -936,143 +935,6 @@ struct DictationStoreTests {
         #expect(!remainingDirty.contains { $0.id == outbound.id })
     }
 
-    @Test("deleted sync cloud records omit text content fields")
-    func deletedSyncCloudRecordsOmitTextContentFields() throws {
-        let deletedAt = Date(timeIntervalSince1970: 1_770_000_000)
-        let record = SyncTextRecord(
-            id: "meeting-deleted-content",
-            kind: .meeting,
-            title: "Sensitive title",
-            text: "Sensitive transcript",
-            speakerTranscript: "Speaker 1: Sensitive transcript",
-            summaryText: "Sensitive summary",
-            manualNotes: "Sensitive notes",
-            source: "ios",
-            meetingStatus: .completed,
-            engineIdentifier: "engine",
-            createdAt: deletedAt.addingTimeInterval(-120),
-            updatedAt: deletedAt,
-            startedAt: deletedAt.addingTimeInterval(-120),
-            endedAt: deletedAt,
-            durationSeconds: 120,
-            wordCount: 2,
-            isDeleted: true
-        )
-
-        let cloud = GuesliICloudSyncEngine.syncZoneCloudRecord(from: record)
-
-        #expect(cloud["isDeleted"] as? NSNumber == true)
-        #expect(cloud["kind"] as? String == SyncTextRecordKind.meeting.rawValue)
-        #expect(cloud["source"] as? String == "ios")
-        #expect(cloud["meetingStatus"] as? String == MeetingStatus.completed.rawValue)
-        #expect(cloud["text"] == nil)
-        #expect(cloud["title"] == nil)
-        #expect(cloud["speakerTranscript"] == nil)
-        #expect(cloud["summaryText"] == nil)
-        #expect(cloud["manualNotes"] == nil)
-        let changedKeys = Set(cloud.changedKeys())
-        #expect(changedKeys.isSuperset(of: ["title", "text", "speakerTranscript", "summaryText", "manualNotes"]))
-    }
-
-    @Test("sync cloud record can update an existing server record")
-    func syncCloudRecordCanUpdateExistingServerRecord() throws {
-        let updatedAt = Date(timeIntervalSince1970: 1_770_000_000)
-        let recordID = CKRecord.ID(
-            recordName: "dictation-existing-record",
-            zoneID: CKRecordZone.ID(zoneName: "GuesliSyncZone", ownerName: CKCurrentUserDefaultName)
-        )
-        let baseRecord = CKRecord(recordType: "GuesliTextRecord", recordID: recordID)
-        baseRecord["text"] = "Server text" as NSString
-        baseRecord["updatedAt"] = updatedAt.addingTimeInterval(-60) as NSDate
-
-        let cloud = GuesliICloudSyncEngine.syncZoneCloudRecord(
-            from: SyncTextRecord(
-                id: recordID.recordName,
-                kind: .dictation,
-                text: "Local dirty text",
-                source: "macos",
-                createdAt: updatedAt.addingTimeInterval(-60),
-                updatedAt: updatedAt,
-                durationSeconds: 2,
-                wordCount: 3
-            ),
-            baseRecord: baseRecord
-        )
-
-        #expect(cloud === baseRecord)
-        #expect(cloud.recordID == recordID)
-        #expect(cloud["text"] as? String == "Local dirty text")
-        #expect(cloud["updatedAt"] as? Date == updatedAt)
-    }
-
-    @Test("dirty upload resolution applies newer fetched remote")
-    func dirtyUploadResolutionAppliesNewerFetchedRemote() throws {
-        let localUpdatedAt = Date(timeIntervalSince1970: 1_770_000_000)
-        let remoteUpdatedAt = localUpdatedAt.addingTimeInterval(30)
-        let local = SyncTextRecord(
-            id: "dictation-upload-conflict",
-            kind: .dictation,
-            text: "Local stale text",
-            source: "macos",
-            createdAt: localUpdatedAt,
-            updatedAt: localUpdatedAt,
-            durationSeconds: 2,
-            wordCount: 3,
-            cloudChangeTag: "tag-old"
-        )
-        let remote = SyncTextRecord(
-            id: "dictation-upload-conflict",
-            kind: .dictation,
-            text: "Remote newer text",
-            source: "ios",
-            createdAt: localUpdatedAt,
-            updatedAt: remoteUpdatedAt,
-            durationSeconds: 2,
-            wordCount: 3,
-            cloudChangeTag: "tag-new"
-        )
-
-        #expect(GuesliICloudSyncEngine.shouldApplyFetchedRemoteBeforeDirtyUpload(
-            local: local,
-            remote: remote,
-            fetchedChangeTag: "tag-new"
-        ))
-    }
-
-    @Test("dirty upload resolution keeps newer local edit")
-    func dirtyUploadResolutionKeepsNewerLocalEdit() throws {
-        let remoteUpdatedAt = Date(timeIntervalSince1970: 1_770_000_000)
-        let localUpdatedAt = remoteUpdatedAt.addingTimeInterval(30)
-        let local = SyncTextRecord(
-            id: "dictation-upload-local-wins",
-            kind: .dictation,
-            text: "Local newer text",
-            source: "macos",
-            createdAt: remoteUpdatedAt,
-            updatedAt: localUpdatedAt,
-            durationSeconds: 2,
-            wordCount: 3,
-            cloudChangeTag: "tag-old"
-        )
-        let remote = SyncTextRecord(
-            id: "dictation-upload-local-wins",
-            kind: .dictation,
-            text: "Remote older text",
-            source: "ios",
-            createdAt: remoteUpdatedAt,
-            updatedAt: remoteUpdatedAt,
-            durationSeconds: 2,
-            wordCount: 3,
-            cloudChangeTag: "tag-new"
-        )
-
-        #expect(!GuesliICloudSyncEngine.shouldApplyFetchedRemoteBeforeDirtyUpload(
-            local: local,
-            remote: remote,
-            fetchedChangeTag: "tag-new"
-        ))
-    }
-
     @Test("synced iOS meeting preserves source and excludes audio")
     func syncedIOSMeetingPreservesSourceAndExcludesAudio() throws {
         let store = try makeStore()
@@ -1108,29 +970,6 @@ struct DictationStoreTests {
         #expect(meeting.systemAudioPath == nil)
         #expect(meeting.savedRecordingPath == nil)
         #expect(try store.textRecordsNeedingSync().isEmpty)
-    }
-
-    @Test("CloudKit expired change token errors are detected")
-    func cloudKitExpiredChangeTokenErrorsAreDetected() {
-        #expect(GuesliICloudSyncEngine.isChangeTokenExpired(CKError(.changeTokenExpired)))
-        #expect(!GuesliICloudSyncEngine.isChangeTokenExpired(CKError(.networkUnavailable)))
-    }
-
-    @Test("CloudKit server record changed errors are detected")
-    func cloudKitServerRecordChangedErrorsAreDetected() {
-        let recordID = CKRecord.ID(
-            recordName: "dictation-conflict",
-            zoneID: CKRecordZone.ID(zoneName: "GuesliSyncZone", ownerName: CKCurrentUserDefaultName)
-        )
-        let partialFailure = CKError(.partialFailure, userInfo: [
-            CKPartialErrorsByItemIDKey: [
-                recordID: CKError(.serverRecordChanged),
-            ],
-        ])
-
-        #expect(GuesliICloudSyncEngine.isServerRecordChangedError(CKError(.serverRecordChanged)))
-        #expect(GuesliICloudSyncEngine.isServerRecordChangedError(partialFailure))
-        #expect(!GuesliICloudSyncEngine.isServerRecordChangedError(CKError(.networkUnavailable)))
     }
 
     @Test("unknown meeting source falls back to meeting")

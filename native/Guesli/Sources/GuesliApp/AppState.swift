@@ -36,15 +36,6 @@ enum GoogleCalendarListLoadState: Equatable {
     case failed(String)
 }
 
-enum ICloudBridgeState: Equatable {
-    case notConfigured
-    case checkingICloud
-    case syncing
-    case active
-    case needsICloud
-    case error
-}
-
 struct ActiveMeetingAudioWarning: Equatable {
     let meetingID: Int64
     let message: String
@@ -108,29 +99,6 @@ final class AppState {
     var googleCalendarListLoadState: GoogleCalendarListLoadState = .idle
     var sparkleUpdateStatus: SparkleUpdateStatus = .idle
     var sparkleLastCheckedAt: Date?
-    var canUseICloudSync: Bool = false
-    var iCloudSyncStatus: String?
-    var isICloudSyncInProgress: Bool = false
-    var isICloudBridgeActivationPending: Bool = false
-    var iCloudBridgeState: ICloudBridgeState = .notConfigured
-    var iCloudBridgeMessage: String?
-    var iCloudBridgeRemoteDeviceName: String?
-    var iCloudBridgeRemoteDevicePlatform: String?
-    var iCloudBridgeCompanionDeviceName: String? {
-        guard isICloudBridgeCompanionPlatform else { return nil }
-        return iCloudBridgeRemoteDeviceName
-    }
-    var isICloudBridgeCompanionPlatform: Bool {
-        guard let platform = iCloudBridgeRemoteDevicePlatform else { return false }
-        switch platform.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "ios", "ipados":
-            return true
-        default:
-            return false
-        }
-    }
-    var iCloudLastSyncSummary: String?
-    var iCloudLastSyncedAt: Date?
     var modelPreparationTitle: String?
     var modelPreparationDetail: String?
     var modelPreparationProgress: Double?

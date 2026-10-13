@@ -90,6 +90,8 @@ private struct MeetingFollowUpEmailSheet: View {
     @State private var errorMessage: String?
     @State private var generationTask: Task<Void, Never>?
     @State private var didCopy = false
+    @State private var generatedDraft = ""
+    @State private var showRegenerateConfirmation = false
 
     private var isGenerating: Bool { generationTask != nil }
 
@@ -114,7 +116,11 @@ private struct MeetingFollowUpEmailSheet: View {
                 Spacer()
                 if isBackendConfigured && !isGenerating {
                     Button(draft.isEmpty ? "Повторить" : "Сгенерировать заново") {
-                        generate()
+                        if draft == generatedDraft {
+                            generate()
+                        } else {
+                            showRegenerateConfirmation = true
+                        }
                     }
                 }
                 Button(didCopy ? "Скопировано" : "Скопировать") {
@@ -132,6 +138,14 @@ private struct MeetingFollowUpEmailSheet: View {
             if isBackendConfigured && draft.isEmpty && !isGenerating {
                 generate()
             }
+        }
+        .alert("Сгенерировать письмо заново?", isPresented: $showRegenerateConfirmation) {
+            Button("Сгенерировать", role: .destructive) {
+                generate()
+            }
+            Button("Отмена", role: .cancel) {}
+        } message: {
+            Text("Ваши правки в черновике будут заменены новым письмом.")
         }
         .onDisappear {
             generationTask?.cancel()
@@ -202,6 +216,7 @@ private struct MeetingFollowUpEmailSheet: View {
                     errorMessage = "Модель вернула пустой ответ."
                 } else {
                     draft = email
+                    generatedDraft = email
                 }
             } catch {
                 guard !Task.isCancelled, !(error is CancellationError) else { return }

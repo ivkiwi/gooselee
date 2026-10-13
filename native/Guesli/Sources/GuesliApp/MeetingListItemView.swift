@@ -187,7 +187,7 @@ struct MeetingListItemView: View {
         .help("Move to folder")
         .popover(isPresented: $showFolderPopover, arrowEdge: .leading) {
             VStack(alignment: .leading, spacing: 0) {
-                folderPopoverRow(icon: "tray", label: String(localized: "Unfiled"), isActive: record.folderID == nil) {
+                folderPopoverRow(icon: "tray", label: "Unfiled", isActive: record.folderID == nil) {
                     onMove(nil)
                     showFolderPopover = false
                 }
@@ -205,7 +205,7 @@ struct MeetingListItemView: View {
                 }
                 if onCreateFolderAndMove != nil {
                     Divider().padding(.vertical, 4)
-                    folderPopoverRow(icon: "folder.badge.plus", label: String(localized: "New Folder...")) {
+                    folderPopoverRow(icon: "folder.badge.plus", label: "New Folder...") {
                         showFolderPopover = false
                         newFolderName = ""
                         showNewFolderPrompt = true
@@ -235,7 +235,7 @@ struct MeetingListItemView: View {
                 Image(systemName: icon)
                     .font(.system(size: 11))
                     .frame(width: 16)
-                Text(label)
+                Text(LocalizedStringKey(label))
                     .font(GuesliTheme.callout())
                 Spacer()
                 if isActive {
@@ -288,10 +288,10 @@ struct MeetingListItemView: View {
             return AnyView(SyncOriginBadge(label: label))
         }
         if isImportedAudio {
-            return AnyView(sourceBadge(icon: "square.and.arrow.down", label: String(localized: "Imported"), help: String(localized: "Imported audio")))
+            return AnyView(sourceBadge(icon: "square.and.arrow.down", label: "Imported", help: String(localized: "Imported audio")))
         }
         if hasSavedRecording {
-            return AnyView(sourceBadge(icon: "waveform", label: String(localized: "Recording"), help: String(localized: "Saved recording available")))
+            return AnyView(sourceBadge(icon: "waveform", label: "Recording", help: String(localized: "Saved recording available")))
         }
         return nil
     }
@@ -316,7 +316,7 @@ struct MeetingListItemView: View {
         HStack(spacing: 4) {
             Image(systemName: icon)
                 .font(.system(size: 10, weight: .semibold))
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(.system(size: 10, weight: .semibold))
         }
         .foregroundStyle(isImportedAudio ? GuesliTheme.accent : GuesliTheme.textSecondary)

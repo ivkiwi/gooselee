@@ -936,7 +936,7 @@ struct MeetingDetailView: View {
             )
         }
         .buttonStyle(.plain)
-        .help(label)
+        .help(LocalizedStringKey(label))
     }
 
     @ViewBuilder
@@ -1024,7 +1024,7 @@ struct MeetingDetailView: View {
         HStack(spacing: 8) {
             Image(systemName: isSelected ? "checkmark" : systemImage)
                 .frame(width: 12)
-            Text(title)
+            Text(LocalizedStringKey(title))
         }
     }
 
@@ -1034,7 +1034,7 @@ struct MeetingDetailView: View {
             HStack(spacing: 4) {
                 Image(systemName: systemImage)
                     .font(.system(size: 10))
-                Text(label)
+                Text(LocalizedStringKey(label))
                     .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
@@ -1197,7 +1197,7 @@ struct MeetingDetailView: View {
                 if let predecessor = threadContext.predecessor {
                     threadLink(
                         icon: "arrow.turn.left.up",
-                        text: "Follow-up to: \(predecessor.title)",
+                        text: String(localized: "Follow-up to: \(predecessor.title)"),
                         targetID: predecessor.id
                     )
                 }
@@ -1207,7 +1207,7 @@ struct MeetingDetailView: View {
                 ForEach(threadContext.successors) { successor in
                     threadLink(
                         icon: "arrow.turn.left.down",
-                        text: "Followed by: \(successor.title)",
+                        text: String(localized: "Followed by: \(successor.title)"),
                         targetID: successor.id
                     )
                 }
@@ -1299,7 +1299,7 @@ struct MeetingDetailView: View {
                 Image(systemName: icon)
                     .font(.system(size: 11))
                     .frame(width: 16)
-                Text(label)
+                Text(LocalizedStringKey(label))
                     .font(GuesliTheme.callout())
                 Spacer()
                 if isActive {
@@ -1385,23 +1385,23 @@ struct MeetingDetailView: View {
     }
 
     private var primarySummaryActionLabel: String {
-        guard let meeting else { return "Re-summarize" }
+        guard let meeting else { return String(localized: "Re-summarize") }
         return primarySummaryActionLabel(for: meeting)
     }
 
     private var copyButtonLabel: String {
-        "Copy"
+        String(localized: "Copy")
     }
 
     private var editButtonLabel: String {
         if isEditingNotes || isEditingTranscript {
-            return "Done"
+            return String(localized: "Done")
         }
-        return documentMode == .transcript ? "Edit Transcript" : "Edit Notes"
+        return documentMode == .transcript ? String(localized: "Edit Transcript") : String(localized: "Edit Notes")
     }
 
     private func primarySummaryActionLabel(for meeting: MeetingRecord) -> String {
-        hasPendingTemplateChange(for: meeting) ? "Apply Template" : "Re-summarize"
+        hasPendingTemplateChange(for: meeting) ? String(localized: "Apply Template") : String(localized: "Re-summarize")
     }
 
     private func activeCopyText(for meeting: MeetingRecord) -> String {
@@ -1649,20 +1649,20 @@ struct MeetingDetailView: View {
     private func formatMeta(_ meeting: MeetingRecord) -> String {
         let time = MeetingBrowserLogic.formatStartTime(meeting.startTime)
         let duration = formatDuration(meeting.durationSeconds)
-        return "\(time)  \u{2022}  \(duration)  \u{2022}  \(meeting.wordCount) words"
+        return String(localized: "\(time)  \u{2022}  \(duration)  \u{2022}  \(meeting.wordCount) words")
     }
 
     private func formatDuration(_ seconds: Double) -> String {
         let rounded = Int(seconds.rounded())
         if rounded >= 3600 {
-            return "\(rounded / 3600)h \((rounded % 3600) / 60)m"
+            return String(localized: "\(rounded / 3600)h \((rounded % 3600) / 60)m")
         }
         if rounded >= 60 {
             let m = rounded / 60
             let s = rounded % 60
-            return s == 0 ? "\(m)m" : "\(m)m \(s)s"
+            return s == 0 ? String(localized: "\(m)m") : String(localized: "\(m)m \(s)s")
         }
-        return "\(rounded)s"
+        return String(localized: "\(rounded)s")
     }
 }
 

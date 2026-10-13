@@ -101,6 +101,7 @@ struct GoogleCalendarFetchResult {
 enum GoogleCalendarClientError: Error, LocalizedError {
     case requestFailed(String)
     case staleRequest
+    case calendarListAccessMissing
 
     var errorDescription: String? {
         switch self {
@@ -108,6 +109,8 @@ enum GoogleCalendarClientError: Error, LocalizedError {
             return String(localized: "Google Calendar request failed: \(message)")
         case .staleRequest:
             return "Google Calendar request was superseded"
+        case .calendarListAccessMissing:
+            return String(localized: "Reconnect Google Calendar to allow reading your calendar list.")
         }
     }
 }
@@ -166,6 +169,8 @@ final class GoogleCalendarClient {
     /// so calendars added in the Google web UI get picked up automatically.
     private var cachedCalendarList: [GoogleCalendarSummary] = []
     private var upcomingEventsFetchGeneration = 0
+    /// Bumped by `resetSync()` so calendar-list requests started before sign-out are dropped.
+    private var syncResetGeneration = 0
 
     /// Fetch upcoming events from every Google calendar the user can read,
     /// minus any in `disabledCalendarIDs`. Refreshes the calendar list on each
@@ -264,6 +269,7 @@ final class GoogleCalendarClient {
             .values
             .flatMap { $0.values }
             .filter { $0.endDate > now && $0.startDate < future }
+        try ensureCurrentFetch(fetchGeneration)
         return GoogleCalendarFetchResult(
             events: merged.sorted { $0.startDate < $1.startDate },
             wasComplete: completedAllFetches
@@ -314,8 +320,17 @@ final class GoogleCalendarClient {
             var request = URLRequest(url: components.url!)
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-            let (data, response) = try await URLSession.shared.data(for: request)
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            var (data, response) = try await URLSession.shared.data(for: request)
+            var statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+
+            // Retry in place: `continue` would end the repeat loop on the first page without a result.
+            if statusCode == 401 && !tokenRetried {
+                tokenRetried = true
+                token = try await auth.validAccessToken()
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                (data, response) = try await URLSession.shared.data(for: request)
+                statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            }
 
             if statusCode == 410 {
                 guard !isRetry else {
@@ -335,16 +350,11 @@ final class GoogleCalendarClient {
                 )
             }
 
-            if statusCode == 401 && !tokenRetried {
-                tokenRetried = true
-                token = try await auth.validAccessToken()
-                continue
-            }
-
             guard statusCode == 200 else {
                 let body = String(data: data, encoding: .utf8) ?? ""
                 fputs("[google-cal] API error \(statusCode) for \(calendarID): \(body.prefix(200))\n", stderr)
-                if statusCode == 401 || statusCode == 403 {
+                // 403 means missing permission or quota for this calendar, not an invalid token.
+                if statusCode == 401 {
                     throw GoogleCalendarAuthError.notAuthenticated
                 }
                 throw GoogleCalendarClientError.requestFailed("events returned \(statusCode)")
@@ -389,6 +399,7 @@ final class GoogleCalendarClient {
     /// Enumerate every Google calendar the authenticated user can read.
     /// Does not touch the event cache — purely descriptive.
     func fetchCalendarList() async throws -> [GoogleCalendarSummary] {
+        let resetGeneration = syncResetGeneration
         var token = try await auth.validAccessToken()
         var pageToken: String? = nil
         var tokenRetried = false
@@ -408,20 +419,30 @@ final class GoogleCalendarClient {
             var request = URLRequest(url: components.url!)
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
 
-            let (data, response) = try await URLSession.shared.data(for: request)
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            var (data, response) = try await URLSession.shared.data(for: request)
+            var statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
 
+            // Retry in place: `continue` would end the repeat loop on the first page with an empty list.
             if statusCode == 401 && !tokenRetried {
                 tokenRetried = true
                 token = try await auth.validAccessToken()
-                continue
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                (data, response) = try await URLSession.shared.data(for: request)
+                statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            }
+            guard resetGeneration == syncResetGeneration else {
+                throw GoogleCalendarClientError.staleRequest
             }
 
             guard statusCode == 200 else {
                 let body = String(data: data, encoding: .utf8) ?? ""
                 fputs("[google-cal] calendarList error \(statusCode): \(body.prefix(200))\n", stderr)
-                if statusCode == 401 || statusCode == 403 {
+                if statusCode == 401 {
                     throw GoogleCalendarAuthError.notAuthenticated
+                }
+                // Grants made before the calendarlist scope was requested still answer 403.
+                if statusCode == 403 {
+                    throw GoogleCalendarClientError.calendarListAccessMissing
                 }
                 throw GoogleCalendarClientError.requestFailed("calendarList returned \(statusCode)")
             }
@@ -464,6 +485,9 @@ final class GoogleCalendarClient {
 
     /// Clear cached state (call on sign-out).
     func resetSync() {
+        // In-flight fetches must not refill the cache or publish events after sign-out.
+        upcomingEventsFetchGeneration += 1
+        syncResetGeneration += 1
         syncTokens.removeAll()
         cachedEventsByCalendar.removeAll()
         cachedEventScopesByCalendar.removeAll()
@@ -641,12 +665,18 @@ final class GoogleCalendarClient {
         google: [UnifiedCalendarEvent]
     ) -> [UnifiedCalendarEvent] {
         var merged = eventKit
+        var matchedEventKitIndices = Set<Int>()
 
         for gEvent in google {
-            if let idx = merged.firstIndex(where: { ekEvent in
-                ekEvent.title.lowercased() == gEvent.title.lowercased()
+            // Only an unmatched EventKit copy can duplicate a Google event; two Google events stay distinct.
+            if let idx = eventKit.indices.first(where: { index in
+                let ekEvent = eventKit[index]
+                return !matchedEventKitIndices.contains(index)
+                    && ekEvent.title.lowercased() == gEvent.title.lowercased()
                     && abs(ekEvent.startDate.timeIntervalSince(gEvent.startDate)) < 300
+                    && !hasDifferentMeetingRooms(ekEvent, gEvent)
             }) {
+                matchedEventKitIndices.insert(idx)
                 // Prefer Google Calendar's meetingURL when EventKit doesn't have one
                 if merged[idx].meetingURL == nil, gEvent.meetingURL != nil {
                     merged[idx].meetingURL = gEvent.meetingURL
@@ -660,5 +690,13 @@ final class GoogleCalendarClient {
         }
 
         return merged.sorted { $0.startDate < $1.startDate }
+    }
+
+    private static func hasDifferentMeetingRooms(_ lhs: UnifiedCalendarEvent, _ rhs: UnifiedCalendarEvent) -> Bool {
+        guard let lhsURL = lhs.meetingURL, let rhsURL = rhs.meetingURL else { return false }
+        let identity = { (url: URL) in
+            MeetingURLNormalizer.normalize(url.absoluteString)?.id ?? url.absoluteString.lowercased()
+        }
+        return identity(lhsURL) != identity(rhsURL)
     }
 }

@@ -34,10 +34,13 @@ final class GoogleCalendarAuthManager {
     private static let authURL = "https://accounts.google.com/o/oauth2/v2/auth"
     private static let tokenURL = "https://oauth2.googleapis.com/token"
     private static let redirectURI = "http://localhost:1456/auth/callback"
-    private static let scopes = "https://www.googleapis.com/auth/calendar.events.readonly"
+    // calendarList.list needs its own scope; events.readonly alone answers it with 403.
+    private static let scopes = "https://www.googleapis.com/auth/calendar.events.readonly https://www.googleapis.com/auth/calendar.calendarlist.readonly"
     private static let callbackTimeoutSeconds: TimeInterval = 300
 
     private let credentials: GoogleCalendarCredentials?
+    /// Bumped on sign-out and sign-in so a refresh that finishes afterwards cannot restore old tokens.
+    private var authGeneration = 0
 
     private var tokenFileURL: URL {
         AppIdentity.supportDirectoryURL.appendingPathComponent("google-calendar-auth.json")
@@ -76,6 +79,7 @@ final class GoogleCalendarAuthManager {
             codeVerifier: verifier,
             credentials: credentials
         )
+        authGeneration += 1
         saveTokens(tokens, reason: "save")
         fputs("[google-cal] signed in successfully\n", stderr)
     }
@@ -102,10 +106,14 @@ final class GoogleCalendarAuthManager {
             guard let refreshToken = tokenRead(key: "refresh_token") else {
                 throw GoogleCalendarAuthError.notAuthenticated
             }
+            let generation = authGeneration
             let tokens = try await refreshAccessToken(
                 refreshToken: refreshToken,
                 credentials: credentials
             )
+            guard generation == authGeneration else {
+                throw GoogleCalendarAuthError.notAuthenticated
+            }
             saveTokens(tokens, reason: "save")
             return tokens.accessToken
         }
@@ -391,6 +399,7 @@ final class GoogleCalendarAuthManager {
     }
 
     private func deleteTokens() {
+        authGeneration += 1
         tokenStore.signOut()
     }
 }

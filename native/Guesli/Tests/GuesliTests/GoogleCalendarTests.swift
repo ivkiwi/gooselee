@@ -292,6 +292,31 @@ struct GoogleCalendarTests {
         #expect(merged.count == 2)
     }
 
+    @Test("two Google events with the same title and time stay separate")
+    func keepsDistinctGoogleEvents() {
+        let google = [
+            UnifiedCalendarEvent(id: "g1", title: "Standup", startDate: date("2026-04-10T09:00:00Z"), endDate: date("2026-04-10T09:15:00Z"), isAllDay: false, source: .googleCalendar, calendarID: "team-a"),
+            UnifiedCalendarEvent(id: "g2", title: "Standup", startDate: date("2026-04-10T09:02:00Z"), endDate: date("2026-04-10T09:15:00Z"), isAllDay: false, source: .googleCalendar, calendarID: "team-b"),
+        ]
+
+        let merged = GoogleCalendarClient.mergeEvents(eventKit: [], google: google)
+        #expect(merged.map(\.id) == ["g1", "g2"])
+    }
+
+    @Test("events with different meeting rooms are not deduplicated")
+    func keepsDifferentMeetingRooms() {
+        let ek = [
+            UnifiedCalendarEvent(id: "ek1", title: "Standup", startDate: date("2026-04-10T09:00:00Z"), endDate: date("2026-04-10T09:15:00Z"), isAllDay: false, source: .eventKit, meetingURL: URL(string: "https://meet.google.com/abc-defg-hij")),
+        ]
+        let google = [
+            UnifiedCalendarEvent(id: "g1", title: "Standup", startDate: date("2026-04-10T09:00:00Z"), endDate: date("2026-04-10T09:15:00Z"), isAllDay: false, source: .googleCalendar, meetingURL: URL(string: "https://meet.google.com/xyz-wxyz-xyz")),
+            UnifiedCalendarEvent(id: "g2", title: "Standup", startDate: date("2026-04-10T09:01:00Z"), endDate: date("2026-04-10T09:15:00Z"), isAllDay: false, source: .googleCalendar, meetingURL: URL(string: "https://meet.google.com/abc-defg-hij?authuser=0")),
+        ]
+
+        let merged = GoogleCalendarClient.mergeEvents(eventKit: ek, google: google)
+        #expect(Set(merged.map(\.id)) == ["ek1", "g1"])
+    }
+
     @Test("merged events are sorted by start date")
     func mergedSortedByStartDate() {
         let ek = [

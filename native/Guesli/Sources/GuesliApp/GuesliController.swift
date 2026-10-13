@@ -2344,6 +2344,8 @@ public final class GuesliController: NSObject {
         } catch GoogleCalendarAuthError.refreshFailed(let message) {
             DiagnosticsLog.write("[guesli-native] Google Calendar token refresh failed while loading calendar list: \(message)")
             appState.googleCalendarListLoadState = .failed(String(localized: "Token refresh failed: \(message)"))
+        } catch GoogleCalendarClientError.staleRequest {
+            return
         } catch {
             DiagnosticsLog.write("[guesli-native] Google calendarList fetch failed: \(error.localizedDescription)")
             appState.googleCalendarListLoadState = .failed(error.localizedDescription)

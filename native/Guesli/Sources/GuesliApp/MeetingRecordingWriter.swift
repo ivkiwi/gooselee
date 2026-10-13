@@ -2,6 +2,7 @@ import Foundation
 import os
 
 final class MeetingRecordingWriter {
+    var onRecordingFailed: ((Error) -> Void)?
     static let minimumRecoverableDuration: TimeInterval = 1
     private static let sampleRate = 16_000
     // ponytail: callbacks have no timestamps; keep one second for re-alignment and timestamp chunks if tighter sync is needed.
@@ -17,6 +18,7 @@ final class MeetingRecordingWriter {
         var pendingSystem: [Int16] = []
         var micWasMissing = false
         var systemWasMissing = false
+        var recordingFailure: Error?
     }
 
     private let lock = OSAllocatedUnfairLock(initialState: State())
@@ -40,7 +42,7 @@ final class MeetingRecordingWriter {
                 userInfo: [NSLocalizedDescriptionKey: "Could not open retained meeting recording file for writing."]
             )
         }
-        fileHandle.write(Self.wavHeader(dataSize: 0))
+        try fileHandle.write(contentsOf: Self.wavHeader(dataSize: 0))
         lock.withLock {
             $0 = State(fileHandle: fileHandle, fileURL: fileURL)
         }
@@ -55,31 +57,37 @@ final class MeetingRecordingWriter {
     }
 
     func stop() -> URL? {
-        lock.withLock { state in
+        let (result, failure) = lock.withLock { state -> (URL?, Error?) in
+            let hadFailure = state.recordingFailure != nil
             writeMixedSamples(state: &state, flushAll: true)
-            guard let fileHandle = state.fileHandle, let fileURL = state.fileURL else { return nil }
-
-            fileHandle.seek(toFileOffset: 0)
-            fileHandle.write(Self.wavHeader(dataSize: UInt32(state.bytesWritten)))
-            fileHandle.closeFile()
+            let failure = hadFailure ? nil : state.recordingFailure
+            guard let fileURL = state.fileURL else { return (nil, failure) }
+            if let fileHandle = state.fileHandle {
+                RecordingWAVFileIO.finalizePreservingFile(fileHandle)
+            }
 
             let outputURL = fileURL
             let bytesWritten = state.bytesWritten
             state = State()
             if bytesWritten == 0 {
                 try? FileManager.default.removeItem(at: outputURL)
-                return nil
+                return (nil, failure)
             }
-            return outputURL
+            return (outputURL, failure)
         }
+        if let failure { onRecordingFailed?(failure) }
+        return result
     }
 
     func markPauseBoundary() {
-        lock.withLock { state in
+        let failure = lock.withLock { state -> Error? in
+            guard state.fileHandle != nil else { return nil }
             writeMixedSamples(state: &state, flushAll: true)
             state.micWasMissing = false
             state.systemWasMissing = false
+            return state.recordingFailure
         }
+        if let failure { onRecordingFailed?(failure) }
     }
 
     func cancel() {
@@ -143,6 +151,7 @@ final class MeetingRecordingWriter {
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         let fileSize = (attributes[.size] as? NSNumber)?.intValue ?? 0
         let dataSize = max(fileSize - 44, 0)
+        try RecordingWAVFileIO.validateDataSize(dataSize)
         guard Double(dataSize) / Double(sampleRate * bytesPerSample) > minimumRecoverableDuration else {
             return false
         }
@@ -150,7 +159,7 @@ final class MeetingRecordingWriter {
         let handle = try FileHandle(forUpdating: url)
         defer { try? handle.close() }
         try handle.seek(toOffset: 0)
-        handle.write(wavHeader(dataSize: UInt32(dataSize)))
+        try handle.write(contentsOf: wavHeader(dataSize: UInt32(clamping: dataSize)))
         return true
     }
 
@@ -166,6 +175,14 @@ final class MeetingRecordingWriter {
         }
     }
 
+    func failWritesForTesting() throws {
+        try lock.withLock { state in
+            guard let handle = state.fileHandle, let url = state.fileURL else { return }
+            try RecordingWAVFileIO.finalize(handle)
+            state.fileHandle = try FileHandle(forReadingFrom: url)
+        }
+    }
+
     func pendingSampleCountsForTesting() -> (mic: Int, system: Int) {
         lock.withLock { ($0.pendingMic.count, $0.pendingSystem.count) }
     }
@@ -173,7 +190,8 @@ final class MeetingRecordingWriter {
 
     private func append(_ samples: [Int16], toMic: Bool) {
         guard !samples.isEmpty else { return }
-        lock.withLock { state in
+        let failure = lock.withLock { state -> Error? in
+            guard state.fileHandle != nil else { return nil }
             if toMic {
                 var samplesToAppend = samples[...]
                 if state.micWasMissing {
@@ -192,7 +210,9 @@ final class MeetingRecordingWriter {
                 state.pendingSystem.append(contentsOf: samplesToAppend)
             }
             writeMixedSamples(state: &state, flushAll: false)
+            return state.recordingFailure
         }
+        if let failure { onRecordingFailed?(failure) }
     }
 
     private func writeMixedSamples(state: inout State, flushAll: Bool) {
@@ -216,7 +236,7 @@ final class MeetingRecordingWriter {
     }
 
     private func writeSamples(state: inout State, count: Int) {
-        guard count > 0 else { return }
+        guard count > 0, let fileHandle = state.fileHandle else { return }
 
         let mixedSamples = Self.mix(
             mic: Array(state.pendingMic.prefix(count)),
@@ -226,8 +246,18 @@ final class MeetingRecordingWriter {
         state.pendingSystem.removeFirst(min(count, state.pendingSystem.count))
 
         let pcmData = mixedSamples.withUnsafeBufferPointer { Data(buffer: $0) }
-        state.fileHandle?.write(pcmData)
-        state.bytesWritten += pcmData.count
+        do {
+            try RecordingWAVFileIO.append(pcmData, to: fileHandle, bytesWritten: state.bytesWritten)
+            state.bytesWritten += pcmData.count
+        } catch {
+            if let count = RecordingWAVFileIO.finalizePreservingFile(fileHandle) {
+                state.bytesWritten = count
+            }
+            state.fileHandle = nil
+            state.pendingMic.removeAll()
+            state.pendingSystem.removeAll()
+            state.recordingFailure = error
+        }
     }
 
     private static func mix(mic: [Int16], system: [Int16]) -> [Int16] {
@@ -254,11 +284,11 @@ final class MeetingRecordingWriter {
         let bitsPerSample: UInt16 = 16
         let byteRate = sampleRate * UInt32(channels) * UInt32(bitsPerSample / 8)
         let blockAlign = channels * (bitsPerSample / 8)
-        let chunkSize = 36 + dataSize
+        let (chunkSize, overflow) = dataSize.addingReportingOverflow(36)
 
         var header = Data()
         header.append(contentsOf: "RIFF".utf8)
-        header.append(contentsOf: withUnsafeBytes(of: chunkSize.littleEndian) { Array($0) })
+        header.append(contentsOf: withUnsafeBytes(of: (overflow ? UInt32.max : chunkSize).littleEndian) { Array($0) })
         header.append(contentsOf: "WAVE".utf8)
         header.append(contentsOf: "fmt ".utf8)
         header.append(contentsOf: withUnsafeBytes(of: UInt32(16).littleEndian) { Array($0) })
@@ -292,6 +322,7 @@ struct MeetingSourceTrackRecoveryCandidate: Sendable {
 }
 
 final class MeetingDualTrackRecordingWriter {
+    var onRecordingFailed: ((Error) -> Void)?
     static let minimumRecoverableDuration: TimeInterval = 1
     private static let sampleRate = 16_000
     private static let bytesPerSample = MemoryLayout<Int16>.size
@@ -476,13 +507,14 @@ final class MeetingDualTrackRecordingWriter {
 
     private func append(_ samples: [Int16], toMic: Bool, now: Date) {
         guard !samples.isEmpty else { return }
-        lock.withLock { state in
+        let failure = lock.withLock { state -> Error? in
             if toMic {
-                Self.write(samples, to: &state.mic, now: now)
+                return Self.write(samples, to: &state.mic, now: now)
             } else {
-                Self.write(samples, to: &state.system, now: now)
+                return Self.write(samples, to: &state.system, now: now)
             }
         }
+        if let failure { onRecordingFailed?(failure) }
     }
 
     private static func openTrack(url: URL) throws -> TrackState {
@@ -494,22 +526,32 @@ final class MeetingDualTrackRecordingWriter {
                 userInfo: [NSLocalizedDescriptionKey: "Could not open post-meeting source track for writing."]
             )
         }
-        fileHandle.write(WavWriter.header(dataSize: 0))
+        try fileHandle.write(contentsOf: WavWriter.header(dataSize: 0))
         return TrackState(fileHandle: fileHandle, fileURL: url)
     }
 
-    private static func write(_ samples: [Int16], to track: inout TrackState, now: Date) {
+    private static func write(_ samples: [Int16], to track: inout TrackState, now: Date) -> Error? {
+        guard let fileHandle = track.fileHandle else { return nil }
         track.firstAppendAt = track.firstAppendAt ?? now
         let pcmData = samples.withUnsafeBufferPointer { Data(buffer: $0) }
-        track.fileHandle?.write(pcmData)
-        track.bytesWritten += pcmData.count
+        do {
+            try RecordingWAVFileIO.append(pcmData, to: fileHandle, bytesWritten: track.bytesWritten)
+            track.bytesWritten += pcmData.count
+            return nil
+        } catch {
+            if let count = RecordingWAVFileIO.finalizePreservingFile(fileHandle) {
+                track.bytesWritten = count
+            }
+            track.fileHandle = nil
+            return error
+        }
     }
 
     private static func finalize(track: inout TrackState) -> (url: URL?, firstAppendAt: Date?) {
-        guard let fileHandle = track.fileHandle, let fileURL = track.fileURL else { return (nil, nil) }
-        fileHandle.seek(toFileOffset: 0)
-        fileHandle.write(WavWriter.header(dataSize: track.bytesWritten))
-        fileHandle.closeFile()
+        guard let fileURL = track.fileURL else { return (nil, nil) }
+        if let fileHandle = track.fileHandle {
+            RecordingWAVFileIO.finalizePreservingFile(fileHandle)
+        }
 
         let bytesWritten = track.bytesWritten
         let firstAppendAt = track.firstAppendAt
@@ -526,13 +568,14 @@ final class MeetingDualTrackRecordingWriter {
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         let fileSize = (attributes[.size] as? NSNumber)?.intValue ?? 0
         let dataSize = max(fileSize - 44, 0)
+        try RecordingWAVFileIO.validateDataSize(dataSize)
         guard Double(dataSize) / Double(sampleRate * bytesPerSample) > minimumRecoverableDuration else {
             return nil
         }
         let handle = try FileHandle(forUpdating: url)
         defer { try? handle.close() }
         try handle.seek(toOffset: 0)
-        handle.write(WavWriter.header(dataSize: dataSize))
+        try handle.write(contentsOf: WavWriter.header(dataSize: dataSize))
         return url
     }
 

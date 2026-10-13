@@ -122,6 +122,34 @@ struct MeetingNeuralAecTests {
         #expect(aec.diagnosticsSnapshot.bufferedSystemSamples <= retentionSamples + chunkSize)
     }
 
+    @Test("system history stays bounded after mic stops with a partial frame")
+    func systemHistoryBoundedWithStalledMicTail() {
+        let aec = MeetingNeuralAec(preloadedProcessor: PassthroughAecProcessor(frameSize: 256))
+        aec.resetForStreaming()
+        aec.feedSystemSamples(Array(repeating: 0.2, count: 257))
+        _ = aec.processStreamingMic(Array(repeating: 0.1, count: 257))
+        #expect(aec.diagnosticsSnapshot.bufferedMicSamples == 1)
+        let estimator = MeetingAecDelayEstimator()
+        let retention = estimator.windowSamples + estimator.maxCandidateDelaySamples + 48_000
+        let chunk = [Float](repeating: 0.2, count: 1_600)
+        for _ in 0..<(retention * 5 / chunk.count) {
+            aec.feedSystemSamples(chunk)
+        }
+        #expect(aec.diagnosticsSnapshot.bufferedSystemSamples <= retention + chunk.count)
+    }
+
+    @Test("meeting preload does not allow model downloads")
+    func preloadDoesNotDownloadModels() async {
+        let aec = MeetingNeuralAec(selection: .localVQEStrict)
+        var allowedDownload: Bool?
+        await aec.preload { allowDownload in
+            allowedDownload = allowDownload
+            throw NSError(domain: "MissingLocalModel", code: 1)
+        }
+        #expect(allowedDownload == false)
+        #expect(!aec.isReady)
+    }
+
     @Test("delay estimator exposes finer shared candidate grid")
     func delayEstimatorCandidateGridIncludesFineRange() {
         let candidates = MeetingAecDelayEstimator.defaultCandidateDelaysMs

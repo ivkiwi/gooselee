@@ -6,6 +6,7 @@ import os
 
 final class SystemAudioRecorder: NSObject, SCStreamOutput, SystemAudioCapturing, SystemAudioDiagnosticsProviding {
     var onPCMSamples: (([Int16]) -> Void)?
+    var onRecordingFailed: ((Error) -> Void)?
 
     private var stream: SCStream?
     private var outputFile: FileHandle?
@@ -67,7 +68,7 @@ final class SystemAudioRecorder: NSObject, SCStreamOutput, SystemAudioCapturing,
                 NSLocalizedDescriptionKey: "Could not open output file",
             ])
         }
-        file.write(WavWriter.header(dataSize: 0))
+        try file.write(contentsOf: WavWriter.header(dataSize: 0))
         outputFile = file
         outputURL = url
         totalBytesWritten = 0
@@ -120,10 +121,7 @@ final class SystemAudioRecorder: NSObject, SCStreamOutput, SystemAudioCapturing,
 
         // Finalize WAV
         if let outputFile {
-            let header = WavWriter.header(dataSize: totalBytesWritten)
-            outputFile.seek(toFileOffset: 0)
-            outputFile.write(header)
-            outputFile.closeFile()
+            RecordingWAVFileIO.finalizePreservingFile(outputFile)
         }
         outputFile = nil
         let writtenBytes = totalBytesWritten
@@ -254,8 +252,7 @@ final class SystemAudioRecorder: NSObject, SCStreamOutput, SystemAudioCapturing,
             let bytesToWrite = int16Data.count
             let preConversionSamples = preConversion
 
-            outputFile?.write(int16Data)
-            totalBytesWritten += bytesToWrite
+            guard writeAudioData(int16Data) else { return }
             diagnosticsLock.withLock { state in
                 state.bytesWritten += bytesToWrite
                 state.preConversion.addFloats(preConversionSamples)
@@ -292,14 +289,27 @@ final class SystemAudioRecorder: NSObject, SCStreamOutput, SystemAudioCapturing,
                 }
             }
             let int16Data = int16Samples.withUnsafeBufferPointer { Data(buffer: $0) }
-            outputFile?.write(int16Data)
-            totalBytesWritten += int16Data.count
+            guard writeAudioData(int16Data) else { return }
             diagnosticsLock.withLock { state in
                 state.bytesWritten += int16Data.count
                 state.preConversion.addInt16(interleavedSamples)
                 state.postConversion.addInt16(int16Samples)
             }
             onPCMSamples?(int16Samples)
+        }
+    }
+
+    private func writeAudioData(_ data: Data) -> Bool {
+        guard let file = outputFile else { return false }
+        do {
+            try RecordingWAVFileIO.append(data, to: file, bytesWritten: totalBytesWritten)
+            totalBytesWritten += data.count
+            return true
+        } catch {
+            RecordingWAVFileIO.finalizePreservingFile(file)
+            outputFile = nil
+            onRecordingFailed?(error)
+            return false
         }
     }
 

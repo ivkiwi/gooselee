@@ -441,6 +441,7 @@ final class MeetingSession {
     private var chunkTimingTracker = MeetingChunkTimingTracker()
     private var systemChunkTimingTracker = MeetingChunkTimingTracker()
     private var systemChunkRecorder: PCMChunkRecorder?
+    private var collectorDrainInactivityTimeout: TimeInterval = 120
     var onProgress: ((MeetingProcessingStage) -> Void)?
     var onMicHealthChanged: ((MeetingMicHealthSnapshot) -> Void)?
     var manualNotesProvider: (() async -> String?)?
@@ -451,6 +452,8 @@ final class MeetingSession {
     var onPostMeetingRecordingReady: ((PostMeetingRecordingFinalizeRequest) async throws -> PersistedPostMeetingRecording?)?
     var onChunkTranscribed: (([SpeechSegment], String) -> Void)?
     var onLivePartialsChanged: ((String, String) -> Void)?
+    var onRecordingFailed: ((Error) -> Void)?
+    private let recordingFailure = OSAllocatedUnfairLock<Error?>(initialState: nil)
     private struct LivePartialsState {
         var generation: UInt64 = 0
         var preparationTask: Task<Void, Never>?
@@ -580,6 +583,12 @@ final class MeetingSession {
         systemAudioRecorder.onCaptureFailure = { [weak systemAudioWatchdog] error in
             systemAudioWatchdog?.noteCaptureFailure(reason: "rebuild_exhausted: \(error.localizedDescription)")
         }
+        meetingMicRecorder.onRecordingFailed = { [weak self] error in
+            self?.reportRecordingFailure(error)
+        }
+        systemAudioRecorder.onRecordingFailed = { [weak self] error in
+            self?.reportRecordingFailure(error)
+        }
     }
 
     func recordSpeakerObservation(_ observation: MeetSpeakerObservation) {
@@ -598,6 +607,15 @@ final class MeetingSession {
 
     private func currentBackend() -> BackendOption {
         backendLock.withLock { $0 }
+    }
+
+    private func reportRecordingFailure(_ error: Error) {
+        let shouldReport = recordingFailure.withLock { failure in
+            guard failure == nil else { return false }
+            failure = error
+            return true
+        }
+        if shouldReport { onRecordingFailed?(error) }
     }
 
     static func liveChunkingConfiguration(for backend: BackendOption) -> LiveMeetingChunkingConfiguration {
@@ -639,10 +657,16 @@ final class MeetingSession {
     func setRetainedRecordingWriterForTesting(_ writer: MeetingRecordingWriter?) {
         retainedRecordingWriter = writer
         retainedRecordingWriterError = nil
+        writer?.onRecordingFailed = { [weak self] error in self?.reportRecordingFailure(error) }
     }
 
     func setRetainedRecordingWriterFactoryForTesting(_ factory: @escaping (Int64?) throws -> MeetingRecordingWriter) {
         retainedRecordingWriterFactory = factory
+    }
+
+    func addPendingMicChunkForTesting(_ task: Task<[SpeechSegment], Never>, drainTimeout: TimeInterval) {
+        _ = micChunkCollector.add(task)
+        collectorDrainInactivityTimeout = drainTimeout
     }
 
     var stopIntakeRequestedForTesting: Bool {
@@ -909,6 +933,7 @@ final class MeetingSession {
     func start() async throws {
         let now = Date()
         diagnostics = MeetingSessionDiagnostics(title: title, startedAt: now)
+        recordingFailure.withLock { $0 = nil }
         stopIntakeRequested.store(false, ordering: .releasing)
 
         if config.resolvedMeetingProcessingMode == .post {
@@ -935,6 +960,7 @@ final class MeetingSession {
             try setupRetainedRecordingWriterIfNeeded()
             let captureStartGeneration = try await startSystemAudioWithTimeout()
             try startMicrophoneIfCaptureStartIsCurrent(captureStartGeneration)
+            if let failure = recordingFailure.withLock({ $0 }) { throw failure }
             startSystemAudioWatchdog()
         } catch {
             cancelPendingCaptureStart()
@@ -984,6 +1010,9 @@ final class MeetingSession {
 
         do {
             postModeTrackWriter = try postModeTrackWriterFactory(liveMeetingID, now)
+            postModeTrackWriter?.onRecordingFailed = { [weak self] error in
+                self?.reportRecordingFailure(error)
+            }
             meetingMicRecorder.onRawPCMSamples = { [weak self] samples in
                 self?.enqueuePostModeMicSamples(samples)
             }
@@ -993,6 +1022,7 @@ final class MeetingSession {
             try meetingMicRecorder.prepare()
             let captureStartGeneration = try await startSystemAudioWithTimeout()
             try startMicrophoneIfCaptureStartIsCurrent(captureStartGeneration)
+            if let failure = recordingFailure.withLock({ $0 }) { throw failure }
             startSystemAudioWatchdog()
         } catch {
             cancelPendingCaptureStart()
@@ -1166,6 +1196,12 @@ final class MeetingSession {
             }
         }
 
+        if let failure = recordingFailure.withLock({ $0 }) {
+            micChunkCollector.cancelAll()
+            systemChunkCollector.cancelAll()
+            throw failure
+        }
+
         writeStopCountersOnce()
 
         // Transcribe last mic chunk
@@ -1249,6 +1285,7 @@ final class MeetingSession {
         ) {
             var droppedChunkCount = 0
             let segments = await self.micChunkCollector.closeAndDrainSortedSegments(
+                inactivityTimeout: self.collectorDrainInactivityTimeout,
                 logger: { DiagnosticsLog.write($0) },
                 onDrainTimeoutDroppedChunkCount: { droppedChunkCount += $0 }
             )
@@ -1271,6 +1308,7 @@ final class MeetingSession {
         ) {
             var droppedChunkCount = 0
             let segments = await self.systemChunkCollector.closeAndDrainSortedSegments(
+                inactivityTimeout: self.collectorDrainInactivityTimeout,
                 logger: { DiagnosticsLog.write($0) },
                 onDrainTimeoutDroppedChunkCount: { droppedChunkCount += $0 }
             )
@@ -1472,9 +1510,7 @@ final class MeetingSession {
             retainedRecordingSavedURL: retainedRecordingSavedURL,
             systemRecordingURL: systemAudioURL,
             templateSnapshot: templateSnapshot,
-            liveCollectorDrainTimeoutDroppedChunkCount: liveChunkingConfiguration.deduplicatesText
-                ? drainTimeoutDroppedChunkCount
-                : 0
+            liveCollectorDrainTimeoutDroppedChunkCount: drainTimeoutDroppedChunkCount
         )
     }
 
@@ -1517,6 +1553,10 @@ final class MeetingSession {
             }
         }
 
+        if let failure = recordingFailure.withLock({ $0 }) {
+            stopLiveStreamingPartials()
+            throw failure
+        }
         let mixedTempURL = try MeetingDualTrackRecordingWriter.writeMixedTemporaryWAV(from: sourceTracks)
         let persistedRecording = await finalizePostMeetingRecording(
             sourceTracks: sourceTracks,
@@ -2337,7 +2377,7 @@ final class MeetingSession {
                     backend: backend,
                 )
                 if !result.text.isEmpty {
-                    fputs("[meeting] system chunk transcribed: \"\(String(result.text.prefix(60)))...\"\n", stderr)
+                    fputs("[meeting] system chunk transcribed characters=\(result.text.count)\n", stderr)
                     let normalizedSegments = self.normalizeSystemTranscription(
                         result: result,
                         startTime: chunkOffset,
@@ -2378,6 +2418,9 @@ final class MeetingSession {
 
         do {
             retainedRecordingWriter = try retainedRecordingWriterFactory(liveMeetingID)
+            retainedRecordingWriter?.onRecordingFailed = { [weak self] error in
+                self?.reportRecordingFailure(error)
+            }
         } catch {
             retainedRecordingWriterError = error
             fputs("[meeting] failed to prepare retained recording writer: \(error)\n", stderr)
@@ -2563,6 +2606,12 @@ final class MeetingSession {
             directoryName: AppTemporaryDirectories.meetingSystemChunks,
             overlapSampleCount: liveChunkingConfiguration.overlapSampleCount
         )
+        rawMicChunkRecorder?.onRecordingFailed = { [weak self] error in
+            self?.reportRecordingFailure(error)
+        }
+        systemChunkRecorder?.onRecordingFailed = { [weak self] error in
+            self?.reportRecordingFailure(error)
+        }
         configureRealtimeAudioCallbacks(vadManager: vadManager)
     }
 
@@ -2751,7 +2800,7 @@ final class MeetingSession {
                 backend: currentBackend(),
             )
             if !result.text.isEmpty {
-                fputs("[meeting] mic chunk transcribed (raw): \"\(String(result.text.prefix(60)))...\"\n", stderr)
+                fputs("[meeting] mic chunk transcribed (raw) characters=\(result.text.count)\n", stderr)
                 let normalizedSegments = MicTurnNormalizer.normalize(
                     result: result,
                     startTime: chunkOffset,

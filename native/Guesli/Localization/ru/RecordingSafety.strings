@@ -1,0 +1,3 @@
+"Recording reached the WAV size limit" = "Достигнут предел размера WAV";
+"Recording file header is incomplete" = "Заголовок записи повреждён";
+"Some transcript chunks could not finish. The transcript may be incomplete." = "Часть реплик не обработана. Расшифровка может быть неполной.";

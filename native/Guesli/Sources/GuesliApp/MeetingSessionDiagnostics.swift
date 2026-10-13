@@ -200,7 +200,7 @@ final class MeetingSessionDiagnostics {
             GuesliPaths.preconditionSafeForTestWrite(cleanedURL)
             FileManager.default.createFile(atPath: cleanedURL.path, contents: nil)
             let file = FileHandle(forWritingAtPath: cleanedURL.path)
-            file?.write(WavWriter.header(dataSize: 0))
+            try file?.write(contentsOf: WavWriter.header(dataSize: 0))
             outputDirectory = runDirectory
             cleanedMicURL = cleanedURL
             cleanedMicFile = file
@@ -217,8 +217,16 @@ final class MeetingSessionDiagnostics {
         guard enabled, !samples.isEmpty else { return }
         let data = samples.withUnsafeBufferPointer { Data(buffer: $0) }
         lock.withLock { state in
-            guard !state.isClosed else { return }
-            cleanedMicFile?.write(data)
+            guard !state.isClosed, let cleanedMicFile else { return }
+            do {
+                try RecordingWAVFileIO.append(data, to: cleanedMicFile, bytesWritten: state.bytesWritten)
+            } catch {
+                RecordingWAVFileIO.finalizePreservingFile(cleanedMicFile)
+                state.isClosed = true
+                self.cleanedMicFile = nil
+                fputs("[meeting-diagnostics] audio write failed: \(error)\n", stderr)
+                return
+            }
             state.bytesWritten += data.count
             state.stats.addInt16(samples)
         }
@@ -302,9 +310,8 @@ final class MeetingSessionDiagnostics {
             state.isClosed = true
             return state
         }
-        cleanedMicFile.seek(toFileOffset: 0)
-        cleanedMicFile.write(WavWriter.header(dataSize: UInt32(finalState.bytesWritten)))
-        cleanedMicFile.closeFile()
+        RecordingWAVFileIO.finalizePreservingFile(cleanedMicFile)
+        self.cleanedMicFile = nil
         return finalState.stats.snapshot()
     }
 

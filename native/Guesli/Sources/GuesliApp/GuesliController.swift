@@ -330,11 +330,13 @@ struct PreparedMeetingRecordingSave {
     let path: String?
     let error: MeetingLifecycleError?
     let preservesTemporaryRecording: Bool
+    var discardAfterPersistenceURLs: [URL]
 
-    init(path: String?, error: MeetingLifecycleError?, preservesTemporaryRecording: Bool = false) {
+    init(path: String?, error: MeetingLifecycleError?, preservesTemporaryRecording: Bool = false, discardAfterPersistenceURLs: [URL] = []) {
         self.path = path
         self.error = error
         self.preservesTemporaryRecording = preservesTemporaryRecording
+        self.discardAfterPersistenceURLs = discardAfterPersistenceURLs
     }
 
     static let none = PreparedMeetingRecordingSave(path: nil, error: nil)
@@ -499,6 +501,7 @@ public final class GuesliController: NSObject {
     private var activeMeetingSession: MeetingSession?
     private var activeMeetingID: Int64?
     private var pendingResumePriorTranscript: [Int64: String] = [:]
+    private var pendingResumePriorMeetings: [Int64: MeetingRecord] = [:]
     private var activeMeetingAudioWarning: ActiveMeetingAudioWarning?
     private var pendingMeetSpeakerObservations: [MeetSpeakerObservation] = []
     private var meetSpeakerBridgeStats = MeetSpeakerBridgeRoutingStats()
@@ -5726,6 +5729,7 @@ public final class GuesliController: NSObject {
         }
 
         pendingResumePriorTranscript[meetingID] = priorTranscript
+        pendingResumePriorMeetings[meetingID] = meeting
         activeMeetingID = meetingID
         activeMeetingAudioWarning = nil
         syncAppState()
@@ -6110,6 +6114,17 @@ public final class GuesliController: NSObject {
                 meetingSession.onPostMeetingRecordingReady = { [weak self] request in
                     guard let self else { return nil }
                     return try await self.persistPostMeetingRecording(request, meetingID: meetingID)
+                }
+                meetingSession.onRetainedRecordingReady = { [weak self] request in
+                    guard let self else { return nil }
+                    return try await self.persistRetainedMeetingRecording(request, meetingID: meetingID)
+                }
+                meetingSession.onRecordingFailed = { [weak self, weak meetingSession] _ in
+                    Task { @MainActor in
+                        guard let self, let meetingSession,
+                              self.activeMeetingSession === meetingSession else { return }
+                        self.stopMeetingRecording()
+                    }
                 }
                 meetingSession.onChunkTranscribed = { [weak self, weak meetingSession] segments, speaker in
                     Task { @MainActor [weak self, weak meetingSession] in
@@ -6627,6 +6642,7 @@ public final class GuesliController: NSObject {
             return false
         }
         pendingResumePriorTranscript[id] = nil
+        pendingResumePriorMeetings[id] = nil
         clearCachedMeetingManualNotes(id: id)
         clearCachedMeetingTitle(id: id)
         if activeMeetingID == id { activeMeetingID = nil }
@@ -6707,40 +6723,42 @@ public final class GuesliController: NSObject {
         syncAppState()
     }
 
-    private func resolveLiveMeetingAfterStopFailure(id: Int64) {
-        if restoreResumedMeetingIfNeeded(id: id) { return }
+    func resolveLiveMeetingAfterStopFailure(id: Int64) {
         if let meeting = try? dictationStore.meeting(id: id),
-           [meeting.savedRecordingPath, meeting.micAudioPath, meeting.systemAudioPath].contains(where: {
-               $0?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-           }) {
-            flushCachedMeetingTitle(id: id)
-            flushCachedMeetingManualNotes(id: id, sync: false)
-            updateMeetingStatusAndScheduleSync(id: id, status: .failed)
-            clearCachedMeetingManualNotes(id: id)
-            clearCachedMeetingTitle(id: id)
-            if activeMeetingAudioWarning?.meetingID == id {
-                activeMeetingAudioWarning = nil
+           let tracks = MeetingDualTrackRecordingWriter.recoveryCandidates(forMeetingID: id).first {
+            do {
+                try dictationStore.updateMeetingAudioPaths(
+                    id: id,
+                    micAudioPath: meeting.micAudioPath ?? tracks.micURL?.path,
+                    systemAudioPath: meeting.systemAudioPath ?? tracks.systemURL?.path,
+                    savedRecordingPath: meeting.savedRecordingPath
+                )
+            } catch {
+                fputs("[meeting-stop] source track recovery failed meeting_id=\(id): \(error)\n", stderr)
             }
-            syncAppState()
-            return
         }
-        let manualNotes = manualNotesForLiveMeeting(id: id)
-        if manualNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            deleteMeetingDraftAndScheduleSync(id: id)
-            clearCachedMeetingManualNotes(id: id)
-            clearCachedMeetingTitle(id: id)
-            if appState.selectedMeetingID == id {
-                appState.selectedMeetingID = nil
-                appState.selectedMeetingRecord = nil
-                appState.meetingsNavigationState = .browser
+        if let meeting = try? dictationStore.meeting(id: id),
+           meeting.savedRecordingPath == nil,
+           let candidate = MeetingRecordingWriter.recoveryCandidates(forMeetingID: id).first {
+            let retainedURL = moveRetainedRecordingPartialToRecovered(candidate, meetingID: id) ?? candidate
+            do {
+                try dictationStore.updateMeetingSavedRecordingPath(id: id, path: retainedURL.path)
+            } catch {
+                recordUnpersistedRecordingForRecovery(path: retainedURL.path, existingMeetingID: id, error: error)
             }
-        } else {
-            flushCachedMeetingTitle(id: id)
-            flushCachedMeetingManualNotes(id: id, sync: false)
-            updateMeetingStatusAndScheduleSync(id: id, status: .failed)
-            clearCachedMeetingManualNotes(id: id)
-            clearCachedMeetingTitle(id: id)
         }
+        do {
+            _ = try dictationStore.recoverLiveMeetingFromTranscriptCheckpoints(id: id)
+        } catch {
+            fputs("[meeting-stop] checkpoint recovery failed meeting_id=\(id): \(error)\n", stderr)
+        }
+        flushCachedMeetingTitle(id: id)
+        flushCachedMeetingManualNotes(id: id, sync: false)
+        updateMeetingStatusAndScheduleSync(id: id, status: .failed)
+        clearCachedMeetingManualNotes(id: id)
+        clearCachedMeetingTitle(id: id)
+        pendingResumePriorTranscript[id] = nil
+        pendingResumePriorMeetings[id] = nil
         if activeMeetingAudioWarning?.meetingID == id {
             activeMeetingAudioWarning = nil
         }
@@ -6933,12 +6951,16 @@ public final class GuesliController: NSObject {
                     await MainActor.run {
                         _ = self.recordDiagnosticIncident(
                             kind: .meetingProcessingFailed,
-                            stage: "live_gigaam_collector_drain_timeout",
+                            stage: "live_collector_drain_timeout",
                             backend: self.selectedMeetingTranscriptionBackend,
                             error: NSError(
                                 domain: "MeetingChunkCollector",
                                 code: result.liveCollectorDrainTimeoutDroppedChunkCount
                             )
+                        )
+                        self.presentErrorAlert(
+                            title: String(localized: "Meeting Recording"),
+                            message: String(localized: "Some transcript chunks could not finish. The transcript may be incomplete.")
                         )
                     }
                 }
@@ -6974,6 +6996,7 @@ public final class GuesliController: NSObject {
                 }
             } catch {
                 fputs("[guesli-native] meeting transcription failed: \(error)\n", stderr)
+                preservesTemporaryRecording = true
                 await MainActor.run {
                     _ = self.recordDiagnosticIncident(
                         kind: .meetingProcessingFailed,
@@ -7004,6 +7027,7 @@ public final class GuesliController: NSObject {
                     self.resolveLiveMeetingAfterStopFailure(id: finalFailedLiveMeetingID)
                 } else if let liveMeetingID {
                     self.pendingResumePriorTranscript[liveMeetingID] = nil
+                    self.pendingResumePriorMeetings[liveMeetingID] = nil
                 }
                 if let liveMeetingID {
                     self.appState.meetingProcessingStages[liveMeetingID] = nil
@@ -7059,13 +7083,16 @@ public final class GuesliController: NSObject {
         let meetingID: Int64
         let existingMeeting = existingMeetingID.flatMap { meeting(id: $0) }
         let preservesPriorRecording = existingMeetingID.map { pendingResumePriorTranscript[$0] != nil } ?? false
+        let priorMeeting = existingMeetingID.flatMap { pendingResumePriorMeetings[$0] }
         let savedRecordingPath = preparedRecordingSave.path
-            ?? (preservesPriorRecording ? existingMeeting?.savedRecordingPath : nil)
+            ?? (preservesPriorRecording ? priorMeeting?.savedRecordingPath : nil)
         let recordingSaveError = preparedRecordingSave.error
-        let micAudioPath = existingRecordingPath(result.sourceMicRecordingURL)
-            ?? (preservesPriorRecording ? existingMeeting?.micAudioPath : nil)
-        let systemAudioPath = existingRecordingPath(result.sourceSystemRecordingURL)
-            ?? (preservesPriorRecording ? existingMeeting?.systemAudioPath : nil)
+        let micAudioPath = existingRecordingPath(result.sourceMicRecordingURL.flatMap {
+            preparedRecordingSave.discardAfterPersistenceURLs.contains($0) ? nil : $0
+        }) ?? (preservesPriorRecording ? priorMeeting?.micAudioPath : nil)
+        let systemAudioPath = existingRecordingPath(result.sourceSystemRecordingURL.flatMap {
+            preparedRecordingSave.discardAfterPersistenceURLs.contains($0) ? nil : $0
+        }) ?? (preservesPriorRecording ? priorMeeting?.systemAudioPath : nil)
         let formattedNotes: String
         if result.summaryError != nil,
            let existingNotes = existingMeeting?.formattedNotes,
@@ -7121,11 +7148,16 @@ public final class GuesliController: NSObject {
             }
         } catch {
             recordUnpersistedRecordingForRecovery(
-                path: savedRecordingPath,
+                path: preparedRecordingSave.path
+                    ?? preparedRecordingSave.discardAfterPersistenceURLs.first(where: { ["wav", "m4a"].contains($0.pathExtension.lowercased()) })?.path
+                    ?? savedRecordingPath,
                 existingMeetingID: existingMeetingID,
                 error: error
             )
             throw error
+        }
+        for url in preparedRecordingSave.discardAfterPersistenceURLs {
+            try? FileManager.default.removeItem(at: url)
         }
         scheduleICloudSyncAfterLocalChange()
         return CompletedMeetingPersistenceResult(meetingID: meetingID, recordingSaveError: recordingSaveError)
@@ -7327,7 +7359,7 @@ public final class GuesliController: NSObject {
         saveDecision: Bool? = nil
     ) async -> PreparedMeetingRecordingSave {
         let plan = meetingRecordingSavePlan(for: result, saveDecision: saveDecision)
-        let prepared = await Self.prepareMeetingRecordingSave(plan)
+        var prepared = await Self.prepareMeetingRecordingSave(plan)
         guard isPostMeetingStagingResult(result) else { return prepared }
         let stagingAnchorURL = postMeetingStagingURL(for: result)
             ?? result.sourceMicRecordingURL
@@ -7373,11 +7405,11 @@ public final class GuesliController: NSObject {
         }
         if !shouldKeepSourceTracks {
             if let stagingSidecarURL {
-                try? FileManager.default.removeItem(at: stagingSidecarURL)
+                prepared.discardAfterPersistenceURLs.append(stagingSidecarURL)
             }
-            for url in [result.sourceMicRecordingURL, result.sourceSystemRecordingURL].compactMap({ $0 }) {
-                try? FileManager.default.removeItem(at: url)
-            }
+            prepared.discardAfterPersistenceURLs.append(contentsOf:
+                [result.sourceMicRecordingURL, result.sourceSystemRecordingURL].compactMap { $0 }
+            )
         }
         return prepared
     }
@@ -7399,6 +7431,32 @@ public final class GuesliController: NSObject {
             supportDirectory: configStore.supportDirectory()
         ).appendingPathComponent("recovered", isDirectory: true)
         return url.deletingLastPathComponent().standardizedFileURL == recoveryDirectory.standardizedFileURL
+    }
+
+    func persistRetainedMeetingRecording(
+        _ request: RetainedMeetingRecordingFinalizeRequest,
+        meetingID: Int64
+    ) async throws -> URL? {
+        let recoveryDirectory = MeetingRecordingStorage.defaultDirectory(
+            supportDirectory: configStore.supportDirectory()
+        ).appendingPathComponent("recovered", isDirectory: true)
+        let stagedURL = await Task.detached(priority: .utility) {
+            try? MeetingRecordingStorage.persistTemporaryRecording(
+                from: request.tempURL,
+                meetingTitle: request.meetingTitle,
+                startedAt: request.startedAt,
+                destinationDirectory: recoveryDirectory,
+                fileFormat: .wav
+            )
+        }.value
+        let retainedURL = stagedURL ?? request.tempURL
+        do {
+            try dictationStore.updateMeetingSavedRecordingPath(id: meetingID, path: retainedURL.path)
+            scheduleICloudSyncAfterLocalChange()
+        } catch {
+            recordUnpersistedRecordingForRecovery(path: retainedURL.path, existingMeetingID: meetingID, error: error)
+        }
+        return stagedURL
     }
 
     func persistPostMeetingRecording(
@@ -7543,8 +7601,7 @@ public final class GuesliController: NSObject {
         case .none:
             return .none
         case .discard(let url):
-            try? FileManager.default.removeItem(at: url)
-            return .none
+            return PreparedMeetingRecordingSave(path: nil, error: nil, discardAfterPersistenceURLs: [url])
         case .alreadySaved(let url):
             return PreparedMeetingRecordingSave(path: url.path, error: nil)
         case .failed(let error):

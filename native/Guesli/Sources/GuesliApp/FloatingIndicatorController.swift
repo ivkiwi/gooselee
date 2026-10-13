@@ -189,7 +189,7 @@ final class FloatingIndicatorController: NSObject {
     var isToggleDictation = false
     private var isVoiceCommand = false
     private var stopLayer: CALayer?
-    private var transcribingTitle = "Transcribing"
+    private var transcribingTitle = String(localized: "Transcribing")
     private var loadingSpinner: NSProgressIndicator?
     private var isShowingLoading = false
     private var isMeetingTranscriptManuallyDismissed = false
@@ -424,7 +424,7 @@ final class FloatingIndicatorController: NSObject {
         let previousHover = isHovered
         self.state = state
         if state != .transcribing {
-            transcribingTitle = "Transcribing"
+            transcribingTitle = String(localized: "Transcribing")
         }
         if state != .recording {
             recordingWaveformMode = .level
@@ -1581,7 +1581,7 @@ final class FloatingIndicatorController: NSObject {
                 .clear,
                 .colorWith(hex: 0xFFFFFF, alpha: isHovered ? 0.14 : 0.22),
                 "",
-                isHovered ? "Hold \(config.dictationHotkey.label) to dictate" : "",
+                isHovered ? String(localized: "Hold \(config.dictationHotkey.label) to dictate") : "",
                 .colorWith(hex: 0xFFFFFF, alpha: 0.75),
                 .colorWith(hex: 0xFFFFFF, alpha: 0.75),
                 isHovered ? 1.0 : 0.85

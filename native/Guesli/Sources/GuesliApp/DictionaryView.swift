@@ -152,9 +152,9 @@ struct DictionaryView: View {
 
     private func importDictionary() {
         let panel = NSOpenPanel()
-        panel.title = "Import Guesli Dictionary"
-        panel.message = "Choose a JSON dictionary file"
-        panel.prompt = "Import"
+        panel.title = String(localized: "Import Guesli Dictionary")
+        panel.message = String(localized: "Choose a JSON dictionary file")
+        panel.prompt = String(localized: "Import")
         panel.allowedContentTypes = [.json]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
@@ -190,8 +190,8 @@ struct DictionaryView: View {
 
     private func exportDictionary() {
         let panel = NSSavePanel()
-        panel.title = "Export Guesli Dictionary"
-        panel.prompt = "Export"
+        panel.title = String(localized: "Export Guesli Dictionary")
+        panel.prompt = String(localized: "Export")
         panel.nameFieldStringValue = "guesli-dictionary.json"
         panel.allowedContentTypes = [.json]
         panel.canCreateDirectories = true

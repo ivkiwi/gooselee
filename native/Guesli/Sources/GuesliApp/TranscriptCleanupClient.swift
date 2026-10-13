@@ -133,18 +133,18 @@ enum TranscriptCleanupError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case let .missingAPIKey(provider):
-            return "\(provider) transcript cleanup needs an API key."
+            return String(localized: "\(provider) transcript cleanup needs an API key.")
         case let .unsupportedCustomFormat(format):
-            return "Transcript cleanup supports OpenAI-compatible Custom LLM endpoints, not \(format)."
+            return String(localized: "Transcript cleanup supports OpenAI-compatible Custom LLM endpoints, not \(format).")
         case let .invalidURL(url):
-            return "Invalid transcript cleanup URL: \(url)"
+            return String(localized: "Invalid transcript cleanup URL: \(url)")
         case let .backendFailed(provider, statusCode, message):
-            let status = statusCode.map { " Status \($0)." } ?? ""
-            return "\(provider) transcript cleanup failed.\(status) \(message)"
+            let status = statusCode.map { String(localized: " Status \($0).") } ?? ""
+            return String(localized: "\(provider) transcript cleanup failed.\(status) \(message)")
         case let .emptyResponse(provider):
-            return "\(provider) transcript cleanup returned an empty response."
+            return String(localized: "\(provider) transcript cleanup returned an empty response.")
         case let .rejectedOutput(provider):
-            return "\(provider) transcript cleanup output was rejected as unsafe."
+            return String(localized: "\(provider) transcript cleanup output was rejected as unsafe.")
         }
     }
 }
@@ -152,7 +152,7 @@ enum TranscriptCleanupError: LocalizedError {
 enum TranscriptCleanupFailureSurface {
     static func warning(provider: TranscriptCleanupProviderOption, error: Error) -> String {
         let reason = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-        return "\(provider.label) transcript cleanup failed; using raw transcript. \(reason)"
+        return String(localized: "\(provider.label) transcript cleanup failed; using raw transcript. \(reason)")
     }
 }
 

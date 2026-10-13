@@ -99,7 +99,7 @@ final class DictionarySuggestionPromptController: NSObject {
         dismissButton.focusRingType = .none
         dismissButton.isBordered = false
         dismissButton.contentTintColor = NSColor.white.withAlphaComponent(0.86)
-        dismissButton.toolTip = "Dismiss"
+        dismissButton.toolTip = String(localized: "Dismiss")
         contentView.addSubview(dismissButton)
 
         panel.contentView = contentView
@@ -366,7 +366,7 @@ private final class DictionarySuggestionPromptView: NSView {
         let addX = ignoreX - buttonGap - buttonWidth
         let textWidth = cardFrame.width - textX - 14
 
-        let title = label("Add correction?", font: .systemFont(ofSize: 13, weight: .semibold), color: .white)
+        let title = label(String(localized: "Add correction?"), font: .systemFont(ofSize: 13, weight: .semibold), color: .white)
         title.frame = NSRect(x: textX, y: 66, width: textWidth, height: 18)
         cardView.addSubview(title)
 
@@ -380,11 +380,11 @@ private final class DictionarySuggestionPromptView: NSView {
         detail.frame = NSRect(x: textX, y: 43, width: textWidth, height: 18)
         cardView.addSubview(detail)
 
-        let add = button(title: "Add", action: #selector(addTapped), isPrimary: true)
+        let add = button(title: String(localized: "Add"), action: #selector(addTapped), isPrimary: true)
         add.frame = NSRect(x: addX, y: buttonY, width: buttonWidth, height: buttonHeight)
         cardView.addSubview(add)
 
-        let ignore = button(title: "Ignore", action: #selector(ignoreTapped), isPrimary: false)
+        let ignore = button(title: String(localized: "Ignore"), action: #selector(ignoreTapped), isPrimary: false)
         ignore.frame = NSRect(x: ignoreX, y: buttonY, width: buttonWidth, height: buttonHeight)
         cardView.addSubview(ignore)
     }

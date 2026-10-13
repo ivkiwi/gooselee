@@ -330,7 +330,7 @@ private enum MeetingCaptureStartError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .systemAudioTimedOut(let seconds):
-            return "Timed out while starting system audio capture after \(String(format: "%.1f", seconds)) seconds"
+            return String(localized: "Timed out while starting system audio capture after \(String(format: "%.1f", seconds)) seconds")
         }
     }
 }

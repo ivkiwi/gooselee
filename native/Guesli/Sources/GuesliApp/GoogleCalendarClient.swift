@@ -105,7 +105,7 @@ enum GoogleCalendarClientError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .requestFailed(let message):
-            return "Google Calendar request failed: \(message)"
+            return String(localized: "Google Calendar request failed: \(message)")
         case .staleRequest:
             return "Google Calendar request was superseded"
         }

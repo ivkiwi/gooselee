@@ -251,13 +251,13 @@ private enum ICloudSyncAccountError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noAccount:
-            return "Sign in to iCloud on this Mac to sync text records."
+            return String(localized: "Sign in to iCloud on this Mac to sync text records.")
         case .restricted:
-            return "iCloud is restricted for this Mac."
+            return String(localized: "iCloud is restricted for this Mac.")
         case .temporarilyUnavailable:
-            return "iCloud is temporarily unavailable. Try syncing again shortly."
+            return String(localized: "iCloud is temporarily unavailable. Try syncing again shortly.")
         case .couldNotDetermine:
-            return "Couldn't determine iCloud account status."
+            return String(localized: "Couldn't determine iCloud account status.")
         }
     }
 }

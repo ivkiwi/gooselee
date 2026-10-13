@@ -132,7 +132,7 @@ struct MeetingExporter {
                 try text.write(to: url, atomically: true, encoding: .utf8)
                 DispatchQueue.main.async { NSWorkspace.shared.open(url) }
             } catch {
-                DispatchQueue.main.async { showError("Export Failed", error.localizedDescription) }
+                DispatchQueue.main.async { showError(String(localized: "Export Failed"), error.localizedDescription) }
             }
         }
     }
@@ -145,7 +145,7 @@ struct MeetingExporter {
                 try writePDF(attributed: attributed, to: url)
                 DispatchQueue.main.async { NSWorkspace.shared.open(url) }
             } catch {
-                DispatchQueue.main.async { showError("Export Failed", error.localizedDescription) }
+                DispatchQueue.main.async { showError(String(localized: "Export Failed"), error.localizedDescription) }
             }
         }
     }
@@ -436,9 +436,9 @@ private class ExportFormatAccessory: NSObject {
 
         let container = NSView(frame: NSRect(x: 0, y: 0, width: 260, height: 32))
 
-        let label = NSTextField(labelWithString: "Format:")
+        let label = NSTextField(labelWithString: String(localized: "Format:"))
         label.font = .systemFont(ofSize: 13)
-        label.frame = NSRect(x: 0, y: 6, width: 55, height: 20)
+        label.frame = NSRect(x: 0, y: 6, width: 58, height: 20)
 
         let button = NSPopUpButton(frame: NSRect(x: 60, y: 2, width: 190, height: 28), pullsDown: false)
         button.addItems(withTitles: ["PDF", "Markdown"])

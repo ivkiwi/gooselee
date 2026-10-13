@@ -64,7 +64,7 @@ final class MeetingNotificationController {
         promptID: String? = nil,
         title: String,
         subtitle: String,
-        actionLabel: String = "Start Recording",
+        actionLabel: String = String(localized: "Start Recording"),
         meetingURL: URL? = nil,
         preferredScreen: NSScreen? = nil,
         platform explicitPlatform: MeetingPlatform? = nil,
@@ -193,7 +193,7 @@ final class MeetingNotificationController {
         dismissButton.focusRingType = .none
         dismissButton.isBordered = false
         dismissButton.contentTintColor = NSColor.white.withAlphaComponent(0.86)
-        dismissButton.toolTip = "Dismiss"
+        dismissButton.toolTip = String(localized: "Dismiss")
         contentView.addSubview(dismissButton)
         contentView.hoverFrames = [cardView.frame, dismissButton.frame]
 

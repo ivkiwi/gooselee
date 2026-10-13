@@ -30,6 +30,7 @@ enum ChatGPTAuthError: Error, LocalizedError {
 @MainActor
 final class ChatGPTAuthManager {
     static let shared = ChatGPTAuthManager()
+    private var authGeneration = 0
 
     private static let clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
     private static let authURL = "https://auth.openai.com/oauth/authorize"
@@ -62,14 +63,17 @@ final class ChatGPTAuthManager {
     }
 
     func signIn() async throws {
+        let generation = authGeneration
         let (verifier, challenge) = generatePKCE()
         let code = try await startCallbackServerAndOpenBrowser(codeChallenge: challenge)
         let tokens = try await exchangeCodeForTokens(code: code, codeVerifier: verifier)
+        guard generation == authGeneration else { throw ChatGPTAuthError.notAuthenticated }
         saveTokens(tokens, reason: "save")
         DiagnosticsLog.write("[chatgpt-auth] signed in successfully")
     }
 
     func signOut() {
+        authGeneration += 1
         deleteTokens()
         // Also clean up legacy keychain entries
         if !GuesliPaths.isRunningTests {
@@ -95,10 +99,13 @@ final class ChatGPTAuthManager {
             }
             // Token expired or about to expire — refresh
             DiagnosticsLog.write("[chatgpt-auth] token expired, refreshing...")
-            guard let refreshToken = tokenRead(key: "refresh_token") else {
+            guard let refreshToken = tokenRead(key: "refresh_token"), !refreshToken.isEmpty else {
+                signOut()
                 throw ChatGPTAuthError.notAuthenticated
             }
+            let generation = authGeneration
             let tokens = try await refreshAccessToken(refreshToken: refreshToken)
+            guard generation == authGeneration else { throw ChatGPTAuthError.notAuthenticated }
             saveTokens(tokens, reason: "save")
             return (tokens.accessToken, tokens.accountId)
         }

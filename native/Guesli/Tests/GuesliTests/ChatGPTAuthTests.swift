@@ -256,25 +256,23 @@ struct ChatGPTAuthTests {
         #expect(logs.lines.contains("[chatgpt-auth] restored tokens from backup reason=restore"))
     }
 
-    @Test("token store sign-out removes primary and backup and leaves marker")
-    func tokenStoreSignOutLeavesSignedOutMarker() throws {
+    @Test("token store sign-out removes primary, backup and legacy signed-out tokens")
+    func tokenStoreSignOutRemovesAllTokens() throws {
         let root = try makeTokenTestDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let logs = TestLogSink()
         let store = makeTokenStore(root: root, logs: logs)
         try store.save(Self.sampleTokens, reason: "save")
+        try JSONSerialization.data(withJSONObject: Self.sampleTokens).write(to: store.signedOutURL)
         logs.lines.removeAll()
 
         store.signOut()
 
         #expect(!FileManager.default.fileExists(atPath: store.primaryURL.path))
         #expect(!FileManager.default.fileExists(atPath: store.backupURL.path))
-        #expect(FileManager.default.fileExists(atPath: store.signedOutURL.path))
+        #expect(!FileManager.default.fileExists(atPath: store.signedOutURL.path))
         #expect(store.load() == nil)
-        let signedOutTokensOrNil = try tokens(at: store.signedOutURL)
-        let signedOutTokens = try #require(signedOutTokensOrNil)
-        #expect(signedOutTokens["access_token"] == "access")
-        #expect(logs.lines.contains("[chatgpt-auth] renamed chatgpt-auth.json to chatgpt-auth.signed-out.json reason=sign-out"))
+        #expect(logs.lines.contains("[chatgpt-auth] deleted chatgpt-auth.json reason=sign-out"))
         #expect(logs.lines.contains("[chatgpt-auth] deleted chatgpt-auth.backup.json reason=sign-out"))
     }
 

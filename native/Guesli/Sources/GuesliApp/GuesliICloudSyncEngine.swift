@@ -298,14 +298,18 @@ final class GuesliICloudSyncEngine {
         store: DictationStore,
         forceBridgeDeviceRefresh: Bool = false
     ) async throws -> ICloudSyncResult {
+        try Task.checkCancellation()
         try await verifyAccountAvailable()
         let syncZoneWasRecreated = try await ensureSyncZone()
+        try Task.checkCancellation()
         await refreshBridgeDeviceLink(forceRefresh: forceBridgeDeviceRefresh)
+        try Task.checkCancellation()
         try await migrateDefaultZoneIfNeeded(store: store)
 
         let remoteChanges = try await fetchChangedTextRecords()
         var downloaded = ICloudSyncKindCounts()
         for record in remoteChanges.records {
+            try Task.checkCancellation()
             guard let syncRecord = Self.syncTextRecord(from: record) else { continue }
             if try store.upsertSyncedTextRecord(syncRecord) {
                 downloaded.increment(syncRecord.kind)
@@ -327,6 +331,7 @@ final class GuesliICloudSyncEngine {
     }
 
     func ensureTextRecordSubscription() async throws {
+        try Task.checkCancellation()
         try await verifyAccountAvailable()
         _ = try await ensureSyncZone()
         do {
@@ -357,6 +362,7 @@ final class GuesliICloudSyncEngine {
 
     @discardableResult
     func ensureSyncZone() async throws -> Bool {
+        try Task.checkCancellation()
         do {
             _ = try await fetchZone(id: Schema.syncZoneID)
             return false
@@ -370,7 +376,9 @@ final class GuesliICloudSyncEngine {
     }
 
     private func verifyAccountAvailable() async throws {
+        try Task.checkCancellation()
         let status = try await accountStatus()
+        try Task.checkCancellation()
         switch status {
         case .available:
             return
@@ -388,6 +396,7 @@ final class GuesliICloudSyncEngine {
     }
 
     private func refreshBridgeDeviceLink(forceRefresh: Bool = false) async {
+        guard !Task.isCancelled else { return }
         guard GuesliBridgeDeviceIdentity.shouldRefresh(
             defaults: defaults,
             forceRefresh: forceRefresh
@@ -398,12 +407,14 @@ final class GuesliICloudSyncEngine {
             GuesliBridgeDeviceIdentity.updateRemoteDevices(from: records, defaults: defaults)
             GuesliBridgeDeviceIdentity.markRefreshed(defaults: defaults)
         } catch {
+            guard !Task.isCancelled else { return }
             fputs("Failed to refresh iCloud bridge device identity: \(error)\n", stderr)
             GuesliBridgeDeviceIdentity.markRefreshFailed(defaults: defaults)
         }
     }
 
     private func upsertLocalBridgeDeviceRecord() async throws {
+        try Task.checkCancellation()
         let snapshot = GuesliBridgeDeviceIdentity.local(defaults: defaults)
         let recordID = CKRecord.ID(
             recordName: "bridge-device-\(snapshot.deviceID)",
@@ -424,11 +435,13 @@ final class GuesliICloudSyncEngine {
     }
 
     private func fetchBridgeDeviceRecords() async throws -> [CKRecord] {
+        try Task.checkCancellation()
         let query = CKQuery(recordType: Schema.bridgeDeviceRecordType, predicate: NSPredicate(value: true))
         var records: [CKRecord] = []
         var cursor: CKQueryOperation.Cursor?
 
         repeat {
+            try Task.checkCancellation()
             let page = try await fetchBridgeDeviceRecordsPage(query: query, cursor: cursor)
             records.append(contentsOf: page.records)
             cursor = page.cursor
@@ -438,7 +451,8 @@ final class GuesliICloudSyncEngine {
     }
 
     private func accountStatus() async throws -> CKAccountStatus {
-        try await withCheckedThrowingContinuation { continuation in
+        try Task.checkCancellation()
+        return try await withCheckedThrowingContinuation { continuation in
             container.accountStatus { status, error in
                 if let error {
                     continuation.resume(throwing: error)
@@ -450,16 +464,19 @@ final class GuesliICloudSyncEngine {
     }
 
     private func fetchChangedTextRecords() async throws -> ICloudChangedRecords {
-        try await fetchChangedTextRecordsUsingStoredToken()
+        try Task.checkCancellation()
+        return try await fetchChangedTextRecordsUsingStoredToken()
     }
 
     private func fetchChangedTextRecordsUsingStoredToken() async throws -> ICloudChangedRecords {
+        try Task.checkCancellation()
         var previousToken = changeTokenStore.loadToken()
         var records: [CKRecord] = []
         var finalToken: CKServerChangeToken?
         var retriedExpiredToken = false
 
         while true {
+            try Task.checkCancellation()
             let page: ICloudZoneChangesPage
             do {
                 page = try await fetchZoneChangesPage(
@@ -487,10 +504,12 @@ final class GuesliICloudSyncEngine {
     }
 
     private func migrateDefaultZoneIfNeeded(store: DictationStore) async throws {
+        try Task.checkCancellation()
         guard !defaults.bool(forKey: Schema.migratedDefaultZoneKey) else { return }
 
         let legacyDefaultZoneRecords = try await fetchAllDefaultZoneTextRecords()
         for record in legacyDefaultZoneRecords {
+            try Task.checkCancellation()
             guard let syncRecord = Self.syncTextRecord(from: record) else { continue }
             _ = try store.upsertSyncedTextRecord(syncRecord)
         }
@@ -498,6 +517,7 @@ final class GuesliICloudSyncEngine {
         changeTokenStore.clearToken()
         let existingSyncZoneChanges = try await fetchChangedTextRecordsUsingStoredToken()
         for record in existingSyncZoneChanges.records {
+            try Task.checkCancellation()
             guard let syncRecord = Self.syncTextRecord(from: record) else { continue }
             _ = try store.upsertSyncedTextRecord(syncRecord)
         }
@@ -510,6 +530,7 @@ final class GuesliICloudSyncEngine {
         changeTokenStore.clearToken()
         let primedSyncZoneChanges = try await fetchChangedTextRecordsUsingStoredToken()
         for record in primedSyncZoneChanges.records {
+            try Task.checkCancellation()
             guard let syncRecord = Self.syncTextRecord(from: record) else { continue }
             _ = try store.upsertSyncedTextRecord(syncRecord)
         }
@@ -521,11 +542,13 @@ final class GuesliICloudSyncEngine {
     }
 
     private func fetchAllDefaultZoneTextRecords() async throws -> [CKRecord] {
+        try Task.checkCancellation()
         do {
             var cursor: CKQueryOperation.Cursor?
             var records: [CKRecord] = []
 
             repeat {
+                try Task.checkCancellation()
                 let page = try await fetchTextRecordsPage(cursor: cursor)
                 records.append(contentsOf: page.records)
                 cursor = page.cursor
@@ -539,10 +562,12 @@ final class GuesliICloudSyncEngine {
     }
 
     private func uploadLocalMigrationRecords(store: DictationStore) async throws {
+        try Task.checkCancellation()
         let batchSize = 500
         for kind in [SyncTextRecordKind.dictation, .meeting] {
             var offset = 0
             while true {
+                try Task.checkCancellation()
                 let records = try store.textRecordsForSyncMigration(
                     kind: kind,
                     limit: batchSize,
@@ -559,9 +584,11 @@ final class GuesliICloudSyncEngine {
         uploaded: ICloudSyncKindCounts,
         hasPendingUploads: Bool
     ) {
+        try Task.checkCancellation()
         var uploaded = ICloudSyncKindCounts()
 
         for _ in 0..<Self.maxDirtyUploadBatchesPerSync {
+            try Task.checkCancellation()
             let dirtyRecords = try store.textRecordsNeedingSync(limit: Self.dirtyUploadBatchSize)
             guard !dirtyRecords.isEmpty else {
                 return (uploaded, false)
@@ -581,6 +608,7 @@ final class GuesliICloudSyncEngine {
 
             var markedRecordCount = 0
             for savedRecord in savedRecords {
+                try Task.checkCancellation()
                 let recordName = savedRecord.recordID.recordName
                 guard let kind = Self.kind(from: savedRecord),
                       let dirtyRecord = dirtyRecordsByName[recordName] else { continue }
@@ -608,6 +636,7 @@ final class GuesliICloudSyncEngine {
         originalDirtyRecords: [SyncTextRecord],
         store: DictationStore
     ) async throws -> (savedRecords: [CKRecord], dirtyRecordsByName: [String: SyncTextRecord]) {
+        try Task.checkCancellation()
         do {
             return (
                 try await saveInBatches(records: uploadRecords),
@@ -636,10 +665,12 @@ final class GuesliICloudSyncEngine {
     }
 
     private func cloudRecordsForDirtyUpload(_ dirtyRecords: [SyncTextRecord], store: DictationStore) async throws -> [CKRecord] {
+        try Task.checkCancellation()
         let recordIDs = dirtyRecords.map { CKRecord.ID(recordName: $0.id, zoneID: Schema.syncZoneID) }
         let existingRecords = try await fetchExistingRecords(recordIDs: recordIDs)
         var uploadRecords: [CKRecord] = []
         for dirtyRecord in dirtyRecords {
+            try Task.checkCancellation()
             let recordID = CKRecord.ID(recordName: dirtyRecord.id, zoneID: Schema.syncZoneID)
             guard let existingRecord = existingRecords[recordID] else {
                 uploadRecords.append(Self.syncZoneCloudRecord(from: dirtyRecord))
@@ -662,16 +693,17 @@ final class GuesliICloudSyncEngine {
     }
 
     private func fetchTextRecordsPage(cursor: CKQueryOperation.Cursor?) async throws -> ICloudQueryPage {
-        try await withCheckedThrowingContinuation { continuation in
-            let operation: CKQueryOperation
-            if let cursor {
-                operation = CKQueryOperation(cursor: cursor)
-            } else {
-                operation = CKQueryOperation(query: CKQuery(
-                    recordType: Schema.textRecordType,
-                    predicate: NSPredicate(value: true)
-                ))
-            }
+        try Task.checkCancellation()
+        let operation: CKQueryOperation
+        if let cursor {
+            operation = CKQueryOperation(cursor: cursor)
+        } else {
+            operation = CKQueryOperation(query: CKQuery(
+                recordType: Schema.textRecordType,
+                predicate: NSPredicate(value: true)
+            ))
+        }
+        return try await ICloudCancellableOperation.run(operation) { continuation in
             operation.desiredKeys = Self.desiredTextRecordKeys
             operation.resultsLimit = 200
 
@@ -703,14 +735,15 @@ final class GuesliICloudSyncEngine {
         query: CKQuery,
         cursor: CKQueryOperation.Cursor?
     ) async throws -> ICloudQueryPage {
-        try await withCheckedThrowingContinuation { continuation in
-            let operation: CKQueryOperation
-            if let cursor {
-                operation = CKQueryOperation(cursor: cursor)
-            } else {
-                operation = CKQueryOperation(query: query)
-                operation.zoneID = Schema.syncZoneID
-            }
+        try Task.checkCancellation()
+        let operation: CKQueryOperation
+        if let cursor {
+            operation = CKQueryOperation(cursor: cursor)
+        } else {
+            operation = CKQueryOperation(query: query)
+            operation.zoneID = Schema.syncZoneID
+        }
+        return try await ICloudCancellableOperation.run(operation) { continuation in
             operation.desiredKeys = Self.desiredBridgeDeviceKeys
             operation.resultsLimit = 100
 
@@ -743,16 +776,17 @@ final class GuesliICloudSyncEngine {
         zoneID: CKRecordZone.ID,
         previousServerChangeToken: CKServerChangeToken?
     ) async throws -> ICloudZoneChangesPage {
-        try await withCheckedThrowingContinuation { continuation in
-            let configuration = CKFetchRecordZoneChangesOperation.ZoneConfiguration(
-                previousServerChangeToken: previousServerChangeToken,
-                resultsLimit: nil,
-                desiredKeys: Self.desiredTextRecordKeys
-            )
-            let operation = CKFetchRecordZoneChangesOperation(
-                recordZoneIDs: [zoneID],
-                configurationsByRecordZoneID: [zoneID: configuration]
-            )
+        try Task.checkCancellation()
+        let configuration = CKFetchRecordZoneChangesOperation.ZoneConfiguration(
+            previousServerChangeToken: previousServerChangeToken,
+            resultsLimit: nil,
+            desiredKeys: Self.desiredTextRecordKeys
+        )
+        let operation = CKFetchRecordZoneChangesOperation(
+            recordZoneIDs: [zoneID],
+            configurationsByRecordZoneID: [zoneID: configuration]
+        )
+        return try await ICloudCancellableOperation.run(operation) { continuation in
             let lock = NSLock()
             var records: [CKRecord] = []
             var zoneResult: Result<(serverChangeToken: CKServerChangeToken, moreComing: Bool), Error>?
@@ -808,7 +842,8 @@ final class GuesliICloudSyncEngine {
     }
 
     private func fetchSubscription(id: String) async throws -> CKSubscription {
-        try await withCheckedThrowingContinuation { continuation in
+        try Task.checkCancellation()
+        return try await withCheckedThrowingContinuation { continuation in
             database.fetch(withSubscriptionID: id) { subscription, error in
                 if let subscription {
                     continuation.resume(returning: subscription)
@@ -822,7 +857,8 @@ final class GuesliICloudSyncEngine {
     }
 
     private func fetchZone(id: CKRecordZone.ID) async throws -> CKRecordZone {
-        try await withCheckedThrowingContinuation { continuation in
+        try Task.checkCancellation()
+        return try await withCheckedThrowingContinuation { continuation in
             database.fetch(withRecordZoneID: id) { zone, error in
                 if let zone {
                     continuation.resume(returning: zone)
@@ -836,9 +872,10 @@ final class GuesliICloudSyncEngine {
     }
 
     private func fetchExistingRecords(recordIDs: [CKRecord.ID]) async throws -> [CKRecord.ID: CKRecord] {
+        try Task.checkCancellation()
         guard !recordIDs.isEmpty else { return [:] }
-        return try await withCheckedThrowingContinuation { continuation in
-            let operation = CKFetchRecordsOperation(recordIDs: recordIDs)
+        let operation = CKFetchRecordsOperation(recordIDs: recordIDs)
+        return try await ICloudCancellableOperation.run(operation) { continuation in
             let lock = NSLock()
             var fetchedRecords: [CKRecord.ID: CKRecord] = [:]
             var nonMissingError: Error?
@@ -884,9 +921,10 @@ final class GuesliICloudSyncEngine {
     }
 
     private func save(records: [CKRecord]) async throws -> [CKRecord] {
+        try Task.checkCancellation()
         guard !records.isEmpty else { return [] }
-        return try await withCheckedThrowingContinuation { continuation in
-            let operation = CKModifyRecordsOperation(recordsToSave: records, recordIDsToDelete: nil)
+        let operation = CKModifyRecordsOperation(recordsToSave: records, recordIDsToDelete: nil)
+        return try await ICloudCancellableOperation.run(operation) { continuation in
             operation.savePolicy = .changedKeys
             let lock = NSLock()
             var savedRecords: [CKRecord] = []
@@ -913,10 +951,12 @@ final class GuesliICloudSyncEngine {
     }
 
     private func saveInBatches(records: [CKRecord], batchSize: Int = 200) async throws -> [CKRecord] {
+        try Task.checkCancellation()
         guard !records.isEmpty else { return [] }
         var savedRecords: [CKRecord] = []
         var start = records.startIndex
         while start < records.endIndex {
+            try Task.checkCancellation()
             let end = records.index(start, offsetBy: batchSize, limitedBy: records.endIndex) ?? records.endIndex
             savedRecords.append(contentsOf: try await save(records: Array(records[start..<end])))
             start = end
@@ -925,7 +965,8 @@ final class GuesliICloudSyncEngine {
     }
 
     private func save(subscription: CKSubscription) async throws -> CKSubscription {
-        try await withCheckedThrowingContinuation { continuation in
+        try Task.checkCancellation()
+        return try await withCheckedThrowingContinuation { continuation in
             database.save(subscription) { savedSubscription, error in
                 if let savedSubscription {
                     continuation.resume(returning: savedSubscription)
@@ -939,7 +980,8 @@ final class GuesliICloudSyncEngine {
     }
 
     private func save(zone: CKRecordZone) async throws -> CKRecordZone {
-        try await withCheckedThrowingContinuation { continuation in
+        try Task.checkCancellation()
+        return try await withCheckedThrowingContinuation { continuation in
             database.save(zone) { savedZone, error in
                 if let savedZone {
                     continuation.resume(returning: savedZone)

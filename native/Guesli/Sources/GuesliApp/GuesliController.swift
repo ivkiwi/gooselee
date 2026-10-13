@@ -578,6 +578,7 @@ public final class GuesliController: NSObject {
     private var meetingStartOrigins: [Int64: MeetingRecordingStartOrigin] = [:]
     private var iCloudSyncTask: Task<Void, Never>?
     private var iCloudSyncGeneration = 0
+    private var iCloudSyncRestartAfterCancellation = false
     private var iCloudSyncDebounceTask: Task<Void, Never>?
     private var iCloudSubscriptionTask: Task<Void, Never>?
     private var hasEnsuredICloudSubscription = false
@@ -1689,6 +1690,7 @@ public final class GuesliController: NSObject {
             return
         }
         guard iCloudSyncTask == nil else {
+            if iCloudSyncTask?.isCancelled == true { iCloudSyncRestartAfterCancellation = true }
             appState.isICloudSyncInProgress = true
             appState.iCloudBridgeState = .syncing
             appState.iCloudBridgeMessage = nil
@@ -1717,6 +1719,15 @@ public final class GuesliController: NSObject {
         bridgeDiscoveryPending = false
         let hasKnownCompanionDeviceAtStart = GuesliBridgeDeviceIdentity.hasCompanionRemoteDevice()
         iCloudSyncTask = Task { [weak self] in
+            defer {
+                self?.iCloudSyncTask = nil
+                self?.appState.isICloudSyncInProgress = false
+                let shouldRestart = self?.iCloudSyncRestartAfterCancellation == true
+                self?.iCloudSyncRestartAfterCancellation = false
+                if shouldRestart, self?.config.iCloudSyncEnabled == true {
+                    self?.scheduleICloudSync(delay: 0.2, userInitiated: false)
+                }
+            }
             do {
                 let forceBridgeDeviceRefresh = GuesliBridgeDeviceRefreshPolicy.shouldForceRefresh(
                     userInitiated: userInitiated,
@@ -1728,6 +1739,7 @@ public final class GuesliController: NSObject {
                     store: store,
                     forceBridgeDeviceRefresh: forceBridgeDeviceRefresh
                 )
+                try Task.checkCancellation()
                 do {
                     _ = try store.purgeSoftDeletedTextRecords()
                 } catch {
@@ -1735,7 +1747,6 @@ public final class GuesliController: NSObject {
                 }
                 await MainActor.run {
                     guard let self, self.iCloudSyncGeneration == generation else { return }
-                    self.iCloudSyncTask = nil
                     self.appState.isICloudSyncInProgress = false
                     let summary = self.formatICloudSyncSummary(result)
                     self.refreshICloudBridgeDeviceState()
@@ -1769,7 +1780,6 @@ public final class GuesliController: NSObject {
             } catch is CancellationError {
                 await MainActor.run {
                     guard let self, self.iCloudSyncGeneration == generation else { return }
-                    self.iCloudSyncTask = nil
                     self.appState.isICloudSyncInProgress = false
                     self.bridgeDiscoveryFollowUpPending = false
                     if self.bridgeActivationPending {
@@ -1781,7 +1791,6 @@ public final class GuesliController: NSObject {
             } catch {
                 await MainActor.run {
                     guard let self, self.iCloudSyncGeneration == generation else { return }
-                    self.iCloudSyncTask = nil
                     self.appState.isICloudSyncInProgress = false
                     self.bridgeDiscoveryFollowUpPending = false
                     let message = error.localizedDescription
@@ -1803,8 +1812,8 @@ public final class GuesliController: NSObject {
 
     private func cancelActiveICloudSyncTask() {
         iCloudSyncGeneration += 1
+        iCloudSyncRestartAfterCancellation = false
         iCloudSyncTask?.cancel()
-        iCloudSyncTask = nil
         appState.isICloudSyncInProgress = false
         resetBridgeDiscoveryRuntimeState()
         refreshICloudBridgeStateForConfig()

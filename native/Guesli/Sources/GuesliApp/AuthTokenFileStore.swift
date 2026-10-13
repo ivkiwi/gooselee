@@ -11,6 +11,8 @@ struct AuthTokenFileStore {
     var signedOutURL: URL { Self.signedOutURL(for: primaryURL) }
 
     func save(_ tokens: [String: String], reason: String) throws {
+        var tokens = tokens
+        if tokens["refresh_token"]?.isEmpty == true { tokens.removeValue(forKey: "refresh_token") }
         let data = try JSONSerialization.data(withJSONObject: tokens, options: .prettyPrinted)
         try save(data, reason: reason)
     }
@@ -40,11 +42,7 @@ struct AuthTokenFileStore {
         GuesliPaths.preconditionSafeForTestWrite(backupURL)
         GuesliPaths.preconditionSafeForTestWrite(signedOutURL)
         removeIfExists(signedOutURL, reason: "sign-out")
-        if fileManager.fileExists(atPath: primaryURL.path) {
-            move(primaryURL, to: signedOutURL, reason: "sign-out")
-        } else if fileManager.fileExists(atPath: backupURL.path) {
-            move(backupURL, to: signedOutURL, reason: "sign-out")
-        }
+        removeIfExists(primaryURL, reason: "sign-out")
         removeIfExists(backupURL, reason: "sign-out")
     }
 
@@ -91,19 +89,6 @@ struct AuthTokenFileStore {
             log("restored tokens from backup reason=restore")
         } catch {
             log("failed to restore tokens from backup reason=restore error=\(error)")
-        }
-    }
-
-    private func move(_ sourceURL: URL, to destinationURL: URL, reason: String) {
-        GuesliPaths.preconditionSafeForTestWrite(sourceURL)
-        GuesliPaths.preconditionSafeForTestWrite(destinationURL)
-        do {
-            try fileManager.moveItem(at: sourceURL, to: destinationURL)
-            try Self.secureFilePermissions(at: destinationURL, fileManager: fileManager)
-            try excludeFromBackup(destinationURL)
-            log("renamed \(sourceURL.lastPathComponent) to \(destinationURL.lastPathComponent) reason=\(reason)")
-        } catch {
-            log("failed to rename \(sourceURL.lastPathComponent) to \(destinationURL.lastPathComponent) reason=\(reason) error=\(error)")
         }
     }
 

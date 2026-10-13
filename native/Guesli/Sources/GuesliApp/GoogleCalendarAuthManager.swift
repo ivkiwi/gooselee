@@ -70,6 +70,7 @@ final class GoogleCalendarAuthManager {
     }
 
     func signIn() async throws {
+        let generation = authGeneration
         guard let credentials else { throw GoogleCalendarAuthError.notAvailable }
         let (verifier, challenge) = generatePKCE()
         let code = try await startCallbackServerAndOpenBrowser(
@@ -81,12 +82,14 @@ final class GoogleCalendarAuthManager {
             codeVerifier: verifier,
             credentials: credentials
         )
+        guard generation == authGeneration else { throw GoogleCalendarAuthError.notAuthenticated }
         authGeneration += 1
         saveTokens(tokens, reason: "save")
         fputs("[google-cal] signed in successfully\n", stderr)
     }
 
     func signOut() {
+        authGeneration += 1
         deleteTokens()
         fputs("[google-cal] signed out\n", stderr)
     }
@@ -105,7 +108,8 @@ final class GoogleCalendarAuthManager {
                 return accessToken
             }
             fputs("[google-cal] token expired, refreshing...\n", stderr)
-            guard let refreshToken = tokenRead(key: "refresh_token") else {
+            guard let refreshToken = tokenRead(key: "refresh_token"), !refreshToken.isEmpty else {
+                signOut()
                 throw GoogleCalendarAuthError.notAuthenticated
             }
             let generation = authGeneration
@@ -113,9 +117,7 @@ final class GoogleCalendarAuthManager {
                 refreshToken: refreshToken,
                 credentials: credentials
             )
-            guard generation == authGeneration else {
-                throw GoogleCalendarAuthError.notAuthenticated
-            }
+            guard generation == authGeneration else { throw GoogleCalendarAuthError.notAuthenticated }
             saveTokens(tokens, reason: "save")
             return tokens.accessToken
         }

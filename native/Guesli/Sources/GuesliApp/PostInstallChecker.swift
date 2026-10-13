@@ -214,7 +214,7 @@ enum PostInstallChecker {
                 code: 2,
                 userInfo: [
                     NSLocalizedDescriptionKey:
-                        "Couldn't prepare existing \(appName) for replacement: \(error.localizedDescription)",
+                        String(localized: "Couldn't prepare existing \(appName) for replacement: \(error.localizedDescription)"),
                 ]
             )
         }
@@ -232,7 +232,7 @@ enum PostInstallChecker {
                     code: 3,
                     userInfo: [
                         NSLocalizedDescriptionKey:
-                            "Couldn't install the new \(appName), and the previous copy could not be restored automatically. It is still available at \(backupURL.path).",
+                            String(localized: "Couldn't install the new \(appName), and the previous copy could not be restored automatically. It is still available at \(backupURL.path)."),
                     ]
                 )
             }
@@ -242,7 +242,7 @@ enum PostInstallChecker {
                 code: 4,
                 userInfo: [
                     NSLocalizedDescriptionKey:
-                        "Couldn't install the new \(appName): \(error.localizedDescription). The previous copy was restored.",
+                        String(localized: "Couldn't install the new \(appName): \(error.localizedDescription). The previous copy was restored."),
                 ]
             )
         }

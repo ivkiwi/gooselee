@@ -59,7 +59,7 @@ private struct StatCard: View {
                 .font(GuesliTheme.title2())
                 .foregroundStyle(GuesliTheme.textPrimary)
                 .contentTransition(.numericText())
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(GuesliTheme.caption())
                 .foregroundStyle(GuesliTheme.textTertiary)
         }

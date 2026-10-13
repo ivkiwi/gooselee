@@ -27,7 +27,7 @@ struct DiagnosticIncidentReportView: View {
                 diagnosticSummaryRow("Stage", value: incident.stage)
                 diagnosticSummaryRow("Model", value: incident.model)
                 diagnosticSummaryRow("Error", value: "\(incident.errorDomain) \(incident.errorCode)")
-                diagnosticSummaryRow("Meaning", value: incident.errorMeaning?.summary ?? "Unknown; use domain/code for lookup")
+                diagnosticSummaryRow("Meaning", value: incident.errorMeaning?.summary ?? String(localized: "Unknown; use domain/code for lookup"))
             }
             .padding(GuesliTheme.spacing12)
             .background(Color.orange.opacity(0.10))
@@ -77,7 +77,7 @@ struct DiagnosticIncidentReportView: View {
     @ViewBuilder
     private func diagnosticSummaryRow(_ label: String, value: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: GuesliTheme.spacing12) {
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(GuesliTheme.captionMedium())
                 .foregroundStyle(GuesliTheme.textTertiary)
                 .frame(width: 56, alignment: .leading)

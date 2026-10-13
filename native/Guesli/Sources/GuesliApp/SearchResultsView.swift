@@ -58,7 +58,7 @@ struct SearchResultsView: View {
             withAnimation(.easeInOut(duration: 0.15)) { selectedTab = tab }
         } label: {
             HStack(spacing: 6) {
-                Text(tab.rawValue)
+                Text(LocalizedStringKey(tab.rawValue))
                     .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? GuesliTheme.textPrimary : GuesliTheme.textTertiary)
                 Text("\(count)")
@@ -84,7 +84,7 @@ struct SearchResultsView: View {
         switch selectedTab {
         case .dictations:
             if appState.searchResultDictations.isEmpty {
-                noResultsForTab("dictations")
+                noResultsForTab("No matching dictations")
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
@@ -111,7 +111,7 @@ struct SearchResultsView: View {
             }
         case .meetings:
             if appState.searchResultMeetings.isEmpty {
-                noResultsForTab("meetings")
+                noResultsForTab("No matching meetings")
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
@@ -143,9 +143,9 @@ struct SearchResultsView: View {
     }
 
     @ViewBuilder
-    private func noResultsForTab(_ name: String) -> some View {
+    private func noResultsForTab(_ message: String) -> some View {
         VStack(spacing: GuesliTheme.spacing8) {
-            Text("No matching \(name)")
+            Text(LocalizedStringKey(message))
                 .font(GuesliTheme.body())
                 .foregroundStyle(GuesliTheme.textSecondary)
         }
@@ -268,13 +268,13 @@ private struct SearchMeetingRow: View {
 
     private func formatDuration(_ seconds: Double) -> String {
         let rounded = Int(seconds.rounded())
-        if rounded < 60 { return "\(rounded)s" }
+        if rounded < 60 { return String(localized: "\(rounded)s") }
         let m = rounded / 60
         let s = rounded % 60
-        if m < 60 { return s > 0 ? "\(m)m \(s)s" : "\(m)m" }
+        if m < 60 { return s > 0 ? String(localized: "\(m)m \(s)s") : String(localized: "\(m)m") }
         let h = m / 60
         let rm = m % 60
-        return rm > 0 ? "\(h)h \(rm)m" : "\(h)h"
+        return rm > 0 ? String(localized: "\(h)h \(rm)m") : String(localized: "\(h)h")
     }
 }
 

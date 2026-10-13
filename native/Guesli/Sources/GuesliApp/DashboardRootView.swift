@@ -44,7 +44,7 @@ struct DashboardRootView: View {
                     appState.selectedMeetingID = nil
                     appState.selectedMeetingRecord = nil
                 },
-                backLabel: "Back to Search"
+                backLabel: String(localized: "Back to Search")
             )
             .id(id)
         } else if appState.isSearchActive {

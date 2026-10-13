@@ -86,6 +86,7 @@ struct MeetingDetailView: View {
     @State private var showNewFolderPrompt = false
     @State private var newFolderName = ""
     @State private var threadContext: MeetingThreadContext?
+    @State private var recordingSeekRequest: MeetingRecordingSeekRequest?
 
     init(
         meeting: MeetingRecord?,
@@ -322,7 +323,12 @@ struct MeetingDetailView: View {
 
             if let savedRecordingPath = meeting.savedRecordingPath,
                FileManager.default.fileExists(atPath: savedRecordingPath) {
-                MeetingRecordingPlayerView(recordingPath: savedRecordingPath)
+                MeetingRecordingPlayerView(
+                    recordingPath: savedRecordingPath,
+                    meetingID: meeting.id,
+                    seekRequest: $recordingSeekRequest
+                )
+                .id(meeting.id)
             }
 
             activeMeetingAudioWarningBanner(for: meeting)
@@ -481,6 +487,10 @@ struct MeetingDetailView: View {
 
                     MeetingTranscriptView(
                         transcript: meeting.rawTranscript,
+                        seekUnavailableReason: TranscriptRecordingSeek.unavailableReason(for: meeting),
+                        onSeekTimestamp: { timestamp in
+                            recordingSeekRequest = MeetingRecordingSeekRequest(meeting: meeting, timestamp: timestamp)
+                        },
                         onRenameSpeaker: meeting.status == .completed ? { oldLabel, newName in
                             controller.renameMeetingSpeaker(id: meeting.id, from: oldLabel, to: newName)
                         } : nil
@@ -1616,6 +1626,7 @@ struct MeetingDetailView: View {
             editableTranscript = meeting?.rawTranscript ?? ""
         }
         if meetingChanged {
+            recordingSeekRequest = nil
             editableManualNotes = meeting?.manualNotes ?? ""
             manualNotesSaveStatus = .saved
             transcriptResummaryPromptMeetingID = nil
@@ -1893,12 +1904,21 @@ struct TranscriptChatMessage: Identifiable, Equatable {
 
 private struct MeetingTranscriptView: View {
     let transcript: String
+    let seekUnavailableReason: String?
+    let onSeekTimestamp: (String) -> Void
     var onRenameSpeaker: ((String, String) -> Void)? = nil
     @State private var messages: [TranscriptChatMessage]
     @State private var speakerToRename: String?
 
-    init(transcript: String, onRenameSpeaker: ((String, String) -> Void)? = nil) {
+    init(
+        transcript: String,
+        seekUnavailableReason: String?,
+        onSeekTimestamp: @escaping (String) -> Void,
+        onRenameSpeaker: ((String, String) -> Void)? = nil
+    ) {
         self.transcript = transcript
+        self.seekUnavailableReason = seekUnavailableReason
+        self.onSeekTimestamp = onSeekTimestamp
         self.onRenameSpeaker = onRenameSpeaker
         _messages = State(initialValue: TranscriptChatMessage.messages(from: transcript))
     }
@@ -1916,6 +1936,8 @@ private struct MeetingTranscriptView: View {
                     ForEach(messages) { message in
                         TranscriptChatBubble(
                             message: message,
+                            seekUnavailableReason: seekUnavailableReason,
+                            onSeekTimestamp: onSeekTimestamp,
                             onRenameSpeaker: onRenameSpeaker == nil ? nil : { speakerToRename = $0 }
                         )
                     }
@@ -1937,6 +1959,8 @@ private struct MeetingTranscriptView: View {
 
 struct TranscriptChatBubble: View {
     let message: TranscriptChatMessage
+    let seekUnavailableReason: String?
+    let onSeekTimestamp: (String) -> Void
     var onRenameSpeaker: ((String) -> Void)? = nil
 
     var body: some View {
@@ -1946,23 +1970,32 @@ struct TranscriptChatBubble: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                if let metadata = metadata {
-                    // The mic speaker stays "You" so user bubbles keep their alignment.
-                    if let speaker = message.speaker, message.timestamp != nil, !message.isUser, let onRenameSpeaker {
-                        Button {
-                            onRenameSpeaker(speaker)
-                        } label: {
-                            Text(metadata)
-                                .font(.system(size: 10, weight: .medium))
-                                .foregroundStyle(GuesliTheme.textTertiary)
+                if message.speaker != nil || message.timestamp != nil {
+                    HStack(spacing: 4) {
+                        if let speaker = message.speaker {
+                            // The mic speaker stays "You" so user bubbles keep their alignment.
+                            if message.timestamp != nil, !message.isUser, let onRenameSpeaker {
+                                Button {
+                                    onRenameSpeaker(speaker)
+                                } label: {
+                                    Text(verbatim: speaker)
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundStyle(GuesliTheme.textTertiary)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Rename Speaker…")
+                            } else {
+                                Text(verbatim: speaker)
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(GuesliTheme.textTertiary)
+                                    .textSelection(.enabled)
+                            }
                         }
-                        .buttonStyle(.plain)
-                        .help("Rename Speaker…")
-                    } else {
-                        Text(metadata)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(GuesliTheme.textTertiary)
-                            .textSelection(.enabled)
+                        if let timestamp = message.timestamp {
+                            TranscriptTimestampButton(timestamp: timestamp, unavailableReason: seekUnavailableReason) {
+                                onSeekTimestamp(timestamp)
+                            }
+                        }
                     }
                 }
                 Text(message.text)
@@ -1986,18 +2019,5 @@ struct TranscriptChatBubble: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: message.isUser ? .trailing : .leading)
-    }
-
-    private var metadata: String? {
-        switch (message.speaker, message.timestamp) {
-        case let (speaker?, timestamp?):
-            return "\(speaker) \(timestamp)"
-        case let (speaker?, nil):
-            return speaker
-        case let (nil, timestamp?):
-            return timestamp
-        case (nil, nil):
-            return nil
-        }
     }
 }

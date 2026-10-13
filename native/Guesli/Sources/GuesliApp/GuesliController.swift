@@ -563,6 +563,8 @@ public final class GuesliController: NSObject {
     private var isPresentingMeetingTerminationConfirmation = false
     private var isTerminatingAfterMeetingConfirmation = false
     private var terminateAfterMeetingProcessing = false
+    /// Discard tears down HAL devices off the main thread; the next meeting start waits for it.
+    private var pendingMeetingTeardown: Task<Void, Never>?
     private var backgroundMeetingProcessingCount = 0 {
         didSet { appState.isProcessingMeetingInBackground = backgroundMeetingProcessingCount > 0 }
     }
@@ -6063,6 +6065,8 @@ public final class GuesliController: NSObject {
         endDate: Date?,
         previousMeetingNotes: String? = nil
     ) async throws {
+        // A just-discarded meeting must release its audio devices before this one claims them.
+        await pendingMeetingTeardown?.value
         resetMeetSpeakerBridgeStatsForMeeting()
         var shouldRetryAfterPermissionRequest = config.useCoreAudioTap
         statusBarController?.setStatus("Meeting transcription will start shortly.")
@@ -6602,18 +6606,28 @@ public final class GuesliController: NSObject {
             }
             return
         }
-        sessionToDiscard.discard()
         disarmMeetingAutoStop()
         self.activeMeetingSession = nil
         indicator.setMeetingRecording(false, config: config)
-        if let meetingID = activeMeetingID {
-            activeMeetingID = nil
-            if activeMeetingAudioWarning?.meetingID == meetingID {
-                activeMeetingAudioWarning = nil
+        let meetingID = activeMeetingID
+        activeMeetingID = nil
+        if let meetingID, activeMeetingAudioWarning?.meetingID == meetingID {
+            activeMeetingAudioWarning = nil
+        }
+        // HAL teardown can block for seconds. The draft is resolved only after capture
+        // stopped, so no late chunk callback writes into a deleted meeting.
+        let previousTeardown = pendingMeetingTeardown
+        pendingMeetingTeardown = Task { [weak self] in
+            await previousTeardown?.value
+            await Task.detached(priority: .userInitiated) {
+                sessionToDiscard.discard()
+            }.value
+            guard let self else { return }
+            if let meetingID {
+                self.resolveLiveMeetingAfterDiscard(id: meetingID, resolution: resolution)
+            } else {
+                self.finishDiscardMeetingRecording()
             }
-            resolveLiveMeetingAfterDiscard(id: meetingID, resolution: resolution)
-        } else {
-            finishDiscardMeetingRecording()
         }
     }
 

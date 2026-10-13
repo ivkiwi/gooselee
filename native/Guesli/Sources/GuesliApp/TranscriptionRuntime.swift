@@ -477,11 +477,14 @@ actor TranscriptionCoordinator {
         backend: BackendOption,
         enablePostProcessor: Bool = false,
         customWords: [[String: Any]] = [],
-        appContext: String? = nil
+        appContext: String? = nil,
+        onRecognizedText: (@Sendable (String) async -> Void)? = nil
     ) async throws -> SpeechTranscriptionResult {
         // Qwen3 post-processing is intentionally dictation-only. Meeting transcription should keep raw backend/Parakeet output.
         var result = try await route(url: url, backend: backend)
         result = removeArtifacts(result)
+        await onRecognizedText?(result.text)
+        try Task.checkCancellation()
         if !result.text.isEmpty {
             Qwen3PostProcessorLogging.logVerbose("Dictation raw transcript after artifact cleanup: \(result.text)")
         }

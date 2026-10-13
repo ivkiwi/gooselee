@@ -521,6 +521,7 @@ public final class GuesliController: NSObject {
     private var pendingDictationStopSessionID: UUID?
     private var pendingReleaseSoundSessionID: UUID?
     private var pendingPreparingIndicatorWorkItem: DispatchWorkItem?
+    private var dictationProcessingDeadline: DictationProcessingDeadline?
     private var _streamingDictationController: Any?  // StreamingDictationController (macOS 15+)
     private var isNemotron35Streaming = false
     private var nemotron35StreamingSessionID: UUID?
@@ -7691,6 +7692,10 @@ public final class GuesliController: NSObject {
     }
 
     private func setState(_ state: DictationState) {
+        if state != .transcribing {
+            dictationProcessingDeadline?.cancel()
+            dictationProcessingDeadline = nil
+        }
         pendingPreparingIndicatorWorkItem?.cancel()
         pendingPreparingIndicatorWorkItem = nil
         dictationState = state
@@ -8106,6 +8111,10 @@ public final class GuesliController: NSObject {
     }
 
     private func ensureDictationBackendReady() -> Bool {
+        if dictationProcessingDeadline != nil {
+            hotkeyMonitor.cancelToggleMode()
+            return false
+        }
         guard !isDictationTestMode else { return true }
         guard !dictationBackendReadiness.allowsDictation else { return true }
         guard let message = dictationBackendReadiness.blockingMessage(backendLabel: selectedBackend.label) else {
@@ -8563,6 +8572,8 @@ public final class GuesliController: NSObject {
     }
 
     private func handleCancel() {
+        // A rejected hotkey gesture may still emit cancel while processing.
+        guard dictationProcessingDeadline == nil else { return }
         if isMeetingRecording() { return }
         fputs("[guesli-native] cancel\n", stderr)
         resetDictationOutputMode()
@@ -8694,6 +8705,7 @@ public final class GuesliController: NSObject {
     }
 
     private func handleStop() {
+        guard dictationProcessingDeadline == nil else { return }
         if isMeetingRecording() {
             cancelDictationAudioSessionForMeetingRecordingIfNeeded()
             return
@@ -8852,6 +8864,49 @@ public final class GuesliController: NSObject {
         let storageContext = capturedContext.map { DictationContextCapture.formatForStorage($0) }
             ?? correctionTargetApp?.appContext
             ?? ""
+        let processingDeadline = DictationProcessingDeadline()
+        dictationProcessingDeadline = processingDeadline
+        processingDeadline.start { [weak self] text in
+            guard let self, self.dictationProcessingDeadline === processingDeadline else { return }
+            var savedText = false
+            if isTestMode {
+                if text.isEmpty {
+                    self.dictationTestFailureCallback?(String(localized: "Dictation processing timed out. Try again."))
+                } else {
+                    self.dictationTestCallback?(text)
+                }
+            } else if !text.isEmpty {
+                savedText = (try? self.dictationStore.insertDictation(
+                    text: text,
+                    durationSeconds: duration,
+                    appContext: storageContext,
+                    startedAt: startedAt,
+                    endedAt: Date()
+                )) != nil
+                if savedText { self.scheduleICloudSyncAfterLocalChange() }
+                else {
+                    // Preserve the recognized text even if history storage is unavailable.
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(text, forType: .string)
+                }
+                self.statusBarController?.refresh()
+                self.historyWindowController?.reload()
+                self.syncAppState()
+            }
+            self.clearCapturedDictationSessionContext()
+            self.resetDictationOutputMode()
+            self.hotkeyMonitor.cancelToggleMode()
+            self.indicator.isToggleDictation = false
+            self.setState(.idle)
+            self.meetingMonitor.resumeAfterCooldown()
+            self.meetingMonitor.refreshState()
+            if !isTestMode {
+                let message = text.isEmpty
+                    ? String(localized: "Dictation timed out — try again")
+                    : (savedText ? String(localized: "Processing stopped — text saved in history") : String(localized: "Processing stopped — text in clipboard (⌘V)"))
+                self.indicator.showWarning(message, duration: 4)
+            }
+        }
         let task = Task { [weak self] in
             guard let self else { return }
             defer {
@@ -8864,7 +8919,10 @@ public final class GuesliController: NSObject {
                     backend: transcriptionBackend,
                     enablePostProcessor: self.isPostProcessorReady,
                     customWords: self.serializedCustomWords(),
-                    appContext: promptContext
+                    appContext: promptContext,
+                    onRecognizedText: { text in
+                        await processingDeadline.retainRecognizedText(text)
+                    }
                 )
                 // Drop result if test was cancelled (user navigated away)
                 try Task.checkCancellation()
@@ -8873,6 +8931,7 @@ public final class GuesliController: NSObject {
                 // Test mode: route result to callback, skip history/paste
                 if isTestMode {
                     await MainActor.run {
+                        guard self.dictationProcessingDeadline === processingDeadline else { return }
                         self.dictationTestCallback?(text)
                         self.clearCapturedDictationSessionContext()
                         self.resetDictationOutputMode()
@@ -8885,6 +8944,7 @@ public final class GuesliController: NSObject {
 
                 guard !text.isEmpty else {
                     await MainActor.run {
+                        guard self.dictationProcessingDeadline === processingDeadline else { return }
                         self.clearCapturedDictationSessionContext()
                         self.resetDictationOutputMode()
                         self.setState(.idle)
@@ -8893,14 +8953,15 @@ public final class GuesliController: NSObject {
                     }
                     return
                 }
-                _ = try? self.dictationStore.insertDictation(
-                    text: text,
-                    durationSeconds: duration,
-                    appContext: storageContext,
-                    startedAt: startedAt,
-                    endedAt: Date()
-                )
                 await MainActor.run {
+                    guard self.dictationProcessingDeadline === processingDeadline else { return }
+                    _ = try? self.dictationStore.insertDictation(
+                        text: text,
+                        durationSeconds: duration,
+                        appContext: storageContext,
+                        startedAt: startedAt,
+                        endedAt: Date()
+                    )
                     self.scheduleICloudSyncAfterLocalChange()
                     self.clearCapturedDictationSessionContext()
                     self.statusBarController?.refresh()
@@ -8910,7 +8971,10 @@ public final class GuesliController: NSObject {
                         PasteController.paste(
                             text: text,
                             appendDictationSentenceSpace: true,
-                            shortcut: self.config.pasteShortcut
+                            shortcut: self.config.pasteShortcut,
+                            onNoTarget: { [weak self] in
+                                self?.indicator.showWarning(String(localized: "Text in clipboard — paste manually (⌘V)"), duration: 4)
+                            }
                         )
                         if self.config.enableDictionaryCorrectionPrompts {
                             // Dictionary correction prompts are an explicit opt-in
@@ -8934,6 +8998,7 @@ public final class GuesliController: NSObject {
             } catch is CancellationError {
                 fputs("[guesli-native] test dictation cancelled\n", stderr)
                 await MainActor.run {
+                    guard self.dictationProcessingDeadline === processingDeadline else { return }
                     self.clearCapturedDictationSessionContext()
                     self.resetDictationOutputMode()
                     self.setState(.idle)
@@ -8943,6 +9008,7 @@ public final class GuesliController: NSObject {
             } catch {
                 fputs("[guesli-native] transcription failed: \(error)\n", stderr)
                 await MainActor.run {
+                    guard self.dictationProcessingDeadline === processingDeadline else { return }
                     if self.isDictationTestMode {
                         self.dictationTestFailureCallback?(self.userFacingDictationTestError(error))
                     } else {
@@ -8961,6 +9027,7 @@ public final class GuesliController: NSObject {
                 }
             }
         }
+        processingDeadline.attach(task)
         if isTestMode { dictationTestTask = task }
     }
 

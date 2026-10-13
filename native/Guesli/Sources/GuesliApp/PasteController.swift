@@ -33,7 +33,7 @@ enum PasteController {
         "`": (50, []), "~": (50, .maskShift),
     ]
 
-    /// Paste text into the active app via clipboard, then restore the original clipboard contents.
+    /// Paste text into the active app, restoring the clipboard unless AX confirms no text target.
     ///
     /// Flow: save clipboard → write text → Cmd+V → restore clipboard after delay.
     /// If the clipboard cannot be saved (e.g. lazy-provided data), falls back to a simple
@@ -43,7 +43,9 @@ enum PasteController {
         appendDictationSentenceSpace: Bool = false,
         pasteboard: NSPasteboard = .general,
         shortcut: PasteShortcut = .commandV,
-        simulatePasteAction: (() -> Void)? = nil
+        simulatePasteAction: (() -> Void)? = nil,
+        pasteTargetCheck: @escaping @Sendable () -> PasteTargetVerdict = PasteTargetProbe.focusedTargetVerdict,
+        onNoTarget: (() -> Void)? = nil
     ) {
         guard !text.isEmpty else { return }
         let simulate = simulatePasteAction ?? { simulatePaste(shortcut: shortcut) }
@@ -62,10 +64,17 @@ enum PasteController {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             simulate()
+            let target = PasteTargetObservation()
+            DispatchQueue.global(qos: .userInitiated).async {
+                target.update(pasteTargetCheck())
+            }
 
             // Restore the original clipboard contents after the receiving app has consumed the paste.
             DispatchQueue.main.asyncAfter(deadline: .now() + clipboardRestoreDelay) {
                 guard pasteboard.changeCount == pasteChangeCount else { return }
+                let verdict = target.current
+                if verdict.shouldSuggestManualPaste { onNoTarget?() }
+                guard verdict.shouldRestoreClipboard else { return }
                 restoreClipboard(pasteboard, from: savedItems)
             }
         }

@@ -1749,6 +1749,7 @@ struct OnboardingView: View {
         let isPreparing = lowercasedDetail.contains("compiling")
             || lowercasedDetail.contains("warming")
             || lowercasedDetail.contains("readying")
+            || detail == String(localized: "Warming up \(backend.label)...")
 
         modelDownloadError = nil
         isModelStillDownloading = true

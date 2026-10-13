@@ -8994,6 +8994,7 @@ public final class GuesliController: NSObject {
         let task = Task { [weak self] in
             guard let self else { return }
             var recognizedCommand: String?
+            var commandContext: DictationContext?
             defer {
                 try? FileManager.default.removeItem(at: wavURL)
             }
@@ -9036,7 +9037,7 @@ public final class GuesliController: NSObject {
                     recognizedCommand = text
                     // A timeout during the LLM call should still keep the spoken instruction.
                     await processingDeadline.retainRecognizedText(text)
-                    let commandContext = await commandContextTask?.value
+                    commandContext = await commandContextTask?.value
                     text = try await VoiceCommandProcessor.process(instruction: text, context: commandContext, config: commandConfig, coordinator: self.transcriptionCoordinator)
                     try Task.checkCancellation()
                 }
@@ -9050,6 +9051,16 @@ public final class GuesliController: NSObject {
                         self.syncDictationRecorderWarmup(intent: .postDictation(.transcriptionComplete))
                     }
                     return
+                }
+                let startContext = commandContext
+                // The user may switch apps or selection while the model runs; never replace what they did not select.
+                let commandTargetChanged: Bool
+                if isCommand {
+                    commandTargetChanged = await Task.detached(priority: .userInitiated) {
+                        VoiceCommandScreenContext.targetChanged(since: startContext)
+                    }.value
+                } else {
+                    commandTargetChanged = false
                 }
                 await MainActor.run {
                     guard self.dictationProcessingDeadline === processingDeadline else { return }
@@ -9065,7 +9076,10 @@ public final class GuesliController: NSObject {
                     self.statusBarController?.refresh()
                     self.historyWindowController?.reload()
                     self.syncAppState()
-                    if outputMode != .voiceNote {
+                    if commandTargetChanged {
+                        self.copyToClipboard(text)
+                        self.indicator.showWarning(String(localized: "Selection changed — result in clipboard (⌘V)"), duration: 4)
+                    } else if outputMode != .voiceNote {
                         PasteController.paste(
                             text: text,
                             appendDictationSentenceSpace: !isCommand,
@@ -9107,7 +9121,10 @@ public final class GuesliController: NSObject {
                 if recognizedCommand == nil { fputs("[guesli-native] transcription failed: \(error)\n", stderr) }
                 await MainActor.run {
                     guard self.dictationProcessingDeadline === processingDeadline else { return }
-                    if let recognizedCommand {
+                    if recognizedCommand != nil, (error as? VoiceCommandError) == .emptyInstruction {
+                        // Nothing was said and nothing was selected: keep history and clipboard untouched.
+                        self.presentErrorAlert(title: String(localized: "Voice command failed"), message: error.localizedDescription)
+                    } else if let recognizedCommand {
                         let preserved = recognizedCommand.isEmpty ? VoiceCommandPrompt.defaultRewrite : recognizedCommand
                         self.copyToClipboard(preserved)
                         _ = try? self.dictationStore.insertDictation(text: preserved, durationSeconds: duration, appContext: storageContext, startedAt: startedAt, endedAt: Date())

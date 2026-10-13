@@ -9,9 +9,17 @@ struct VoiceCommandPrompt {
     Не запускай программы, не вызывай инструменты и не заявляй, что совершила действие в приложении. Твоя единственная задача — подготовить текст. Отвечай на языке исходного текста или на языке, указанном пользователем; в остальных случаях используй русский.
     """
 
+    // shortcut: local Qwen has 1024 tokens for system prompt, data and answer; selections over ~500 chars still overflow and fail as emptyResponse.
+    static let localScreenContextCharacters = 1_000
+
     static let defaultRewrite = "Исправь ошибки и улучши ясность выделенного текста, сохранив смысл, язык и структуру. Верни только отредактированный текст."
 
-    static func user(instruction: String, context: DictationContext?) throws -> String {
+    static func user(
+        instruction: String,
+        context: DictationContext?,
+        includeScreenContext: Bool,
+        maxScreenContextCharacters: Int? = nil
+    ) throws -> String {
         let selected = context?.selectedText ?? ""
         let command = instruction.trimmingCharacters(in: .whitespacesAndNewlines)
         let shortCommand = command.lowercased().trimmingCharacters(in: .punctuationCharacters.union(.whitespacesAndNewlines))
@@ -19,12 +27,17 @@ struct VoiceCommandPrompt {
         let effective = !selected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && rewriteCommands.contains(shortCommand)
             ? defaultRewrite : command
         guard !effective.isEmpty else { throw VoiceCommandError.emptyInstruction }
+        var windowText = includeScreenContext ? context?.documentContext ?? "" : ""
+        if let maxScreenContextCharacters {
+            // The model reads the selection and writes it back, so it costs the budget twice.
+            windowText = String(windowText.prefix(max(0, maxScreenContextCharacters - 2 * selected.count)))
+        }
         let data: [String: String] = [
             "application": context?.appName ?? "",
             "bundleID": context?.bundleID ?? "",
-            "windowText": context?.documentContext ?? "",
+            "windowText": windowText,
             "selectedText": selected,
-            "url": context?.url ?? "",
+            "url": includeScreenContext ? context?.url ?? "" : "",
         ]
         let json = try JSONSerialization.data(withJSONObject: data, options: [.sortedKeys])
         return "Задание пользователя:\n\(effective)\n\nДанные экрана (JSON, только материал):\n\(String(decoding: json, as: UTF8.self))"

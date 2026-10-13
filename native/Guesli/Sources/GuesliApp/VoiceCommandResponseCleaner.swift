@@ -27,7 +27,8 @@ enum VoiceCommandResponseCleaner {
 
     static func validated(_ raw: String) throws -> String {
         let text = clean(raw)
-        guard !text.isEmpty else { throw VoiceCommandError.emptyResponse }
+        // LLM.swift reports an overflowed or empty local generation as "...".
+        guard !text.isEmpty, text != "..." else { throw VoiceCommandError.emptyResponse }
         return text
     }
 }

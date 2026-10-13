@@ -29,11 +29,23 @@ struct StatsHeaderView: View {
                 icon: "person.2.fill",
                 iconColor: GuesliTheme.accent,
                 value: "\(meetingStats.totalMeetings)",
-                label: "meetings"
+                label: Self.countedNoun(
+                    meetingStats.totalMeetings,
+                    in: meetingStats.totalMeetings == 1
+                        ? String(localized: "1 meeting")
+                        : String(localized: "\(meetingStats.totalMeetings) meetings")
+                )
             )
         }
         .padding(.horizontal, GuesliTheme.spacing24)
         .padding(.vertical, GuesliTheme.spacing20)
+    }
+
+    /// The noun of a counted plural string ("5 встреч" → "встреч"), so the caption agrees with the number shown above it.
+    static func countedNoun(_ count: Int, in counted: String) -> String {
+        let number = "\(count)"
+        guard counted.hasPrefix(number) else { return counted }
+        return counted.dropFirst(number.count).trimmingCharacters(in: .whitespaces)
     }
 
     private func formatWordCount(_ count: Int) -> String {
@@ -59,7 +71,7 @@ private struct StatCard: View {
                 .font(GuesliTheme.title2())
                 .foregroundStyle(GuesliTheme.textPrimary)
                 .contentTransition(.numericText())
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(GuesliTheme.caption())
                 .foregroundStyle(GuesliTheme.textTertiary)
         }

@@ -215,21 +215,21 @@ public enum ModelDownloadError: Error, LocalizedError, Sendable {
         case .invalidHTTPStatus(let status, let path):
             return "HTTP " + String(status) + " while downloading " + path
         case .stalled(let path):
-            return "Download stalled while receiving " + path
+            return String(localized: "Download stalled while receiving \(path)")
         case .invalidContentLength(let path, let expected, let actual):
             return "The server reported an invalid size for " + path + " (expected " + String(expected) + " bytes, reported " + String(actual) + ")"
         case .sizeMismatch(let path, let expected, let actual):
             return "Downloaded " + path + " is incomplete (expected " + String(expected) + " bytes, received " + String(actual) + ")"
         case .checksumMismatch(let path):
-            return "Downloaded " + path + " failed integrity validation"
+            return String(localized: "Downloaded \(path) failed integrity validation")
         case .etagMismatch(let path):
             return "The partial download for " + path + " is from an older model revision"
         case .insufficientDiskSpace(let required, let available):
-            return "Not enough disk space (need " + String(required) + " bytes, have " + String(available) + ")"
+            return String(localized: "Not enough disk space (need \(required) bytes, have \(available))")
         case .diskSpaceUnavailable(let path):
             return "Could not determine available disk space for " + path
         case .retriesExhausted(let path, let detail):
-            return "Could not download " + path + " after three attempts: " + detail
+            return String(localized: "Could not download \(path) after three attempts: \(detail)")
         case .conflictingInFlightDownload(let modelID):
             return "Another download for model " + modelID + " is already active in this location"
         }

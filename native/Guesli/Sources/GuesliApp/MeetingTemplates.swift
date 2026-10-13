@@ -68,6 +68,17 @@ struct MeetingTemplateDefinition: Identifiable, Equatable, Sendable {
             prompt: promptBody
         )
     }
+
+    /// Built-in titles are translated only for display; ids and stored names stay English.
+    var displayTitle: String {
+        kind == .custom ? title : String(localized: String.LocalizationValue(title))
+    }
+}
+
+extension MeetingTemplateSnapshot {
+    var displayName: String {
+        kind == .custom ? name : String(localized: String.LocalizationValue(name))
+    }
 }
 
 enum MeetingTemplates {

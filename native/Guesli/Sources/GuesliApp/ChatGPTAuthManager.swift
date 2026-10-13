@@ -16,13 +16,13 @@ enum ChatGPTAuthError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notAuthenticated: return "Not signed in to ChatGPT"
-        case .callbackTimeout: return "Sign-in timed out — no response from browser"
-        case .callbackMissingCode: return "OAuth callback missing authorization code"
-        case .callbackStateMismatch: return "OAuth state mismatch — possible CSRF attack"
-        case .tokenExchangeFailed(let msg): return "Token exchange failed: \(msg)"
-        case .refreshFailed(let msg): return "Token refresh failed: \(msg)"
-        case .portInUse: return "Callback port 1455 is already in use"
+        case .notAuthenticated: return String(localized: "Not signed in to ChatGPT")
+        case .callbackTimeout: return String(localized: "Sign-in timed out — no response from browser")
+        case .callbackMissingCode: return String(localized: "OAuth callback missing authorization code")
+        case .callbackStateMismatch: return String(localized: "OAuth state mismatch — possible CSRF attack")
+        case .tokenExchangeFailed(let msg): return String(localized: "Token exchange failed: \(msg)")
+        case .refreshFailed(let msg): return String(localized: "Token refresh failed: \(msg)")
+        case .portInUse: return String(localized: "Callback port 1455 is already in use")
         }
     }
 }
@@ -30,6 +30,7 @@ enum ChatGPTAuthError: Error, LocalizedError {
 @MainActor
 final class ChatGPTAuthManager {
     static let shared = ChatGPTAuthManager()
+    private var authGeneration = 0
 
     private static let clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
     private static let authURL = "https://auth.openai.com/oauth/authorize"
@@ -37,6 +38,8 @@ final class ChatGPTAuthManager {
     private static let redirectURI = "http://localhost:1455/auth/callback"
     private static let scopes = "openid profile email offline_access"
     private static let callbackTimeoutSeconds: TimeInterval = 300 // 5 minutes
+    /// Cancels the pending browser sign-in so a new attempt can take over the callback port.
+    private var cancelPendingCallback: (() -> Void)?
 
     private var tokenFileURL: URL {
         AppIdentity.supportDirectoryURL.appendingPathComponent("chatgpt-auth.json")
@@ -60,14 +63,17 @@ final class ChatGPTAuthManager {
     }
 
     func signIn() async throws {
+        let generation = authGeneration
         let (verifier, challenge) = generatePKCE()
         let code = try await startCallbackServerAndOpenBrowser(codeChallenge: challenge)
         let tokens = try await exchangeCodeForTokens(code: code, codeVerifier: verifier)
+        guard generation == authGeneration else { throw ChatGPTAuthError.notAuthenticated }
         saveTokens(tokens, reason: "save")
         DiagnosticsLog.write("[chatgpt-auth] signed in successfully")
     }
 
     func signOut() {
+        authGeneration += 1
         deleteTokens()
         // Also clean up legacy keychain entries
         if !GuesliPaths.isRunningTests {
@@ -93,10 +99,13 @@ final class ChatGPTAuthManager {
             }
             // Token expired or about to expire — refresh
             DiagnosticsLog.write("[chatgpt-auth] token expired, refreshing...")
-            guard let refreshToken = tokenRead(key: "refresh_token") else {
+            guard let refreshToken = tokenRead(key: "refresh_token"), !refreshToken.isEmpty else {
+                signOut()
                 throw ChatGPTAuthError.notAuthenticated
             }
+            let generation = authGeneration
             let tokens = try await refreshAccessToken(refreshToken: refreshToken)
+            guard generation == authGeneration else { throw ChatGPTAuthError.notAuthenticated }
             saveTokens(tokens, reason: "save")
             return (tokens.accessToken, tokens.accountId)
         }
@@ -142,10 +151,13 @@ final class ChatGPTAuthManager {
     }
 
     private func startCallbackServerAndOpenBrowser(codeChallenge: String) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
+        cancelPendingCallback?()
+        return try await withCheckedThrowingContinuation { continuation in
             let port: NWEndpoint.Port = 1455
             let params = NWParameters.tcp
             params.requiredLocalEndpoint = NWEndpoint.hostPort(host: .ipv4(.loopback), port: port)
+            // The cancelled previous listener may still be releasing the port.
+            params.allowLocalEndpointReuse = true
 
             guard let listener = try? NWListener(using: params) else {
                 continuation.resume(throwing: ChatGPTAuthError.portInUse)
@@ -163,6 +175,13 @@ final class ChatGPTAuthManager {
                 deadline: .now() + Self.callbackTimeoutSeconds,
                 execute: timeoutWork
             )
+            self.cancelPendingCallback = { [weak listener] in
+                guard !resumed else { return }
+                resumed = true
+                timeoutWork.cancel()
+                listener?.cancel()
+                continuation.resume(throwing: ChatGPTAuthError.callbackTimeout)
+            }
 
             listener.stateUpdateHandler = { state in
                 if case .failed = state {
@@ -183,7 +202,10 @@ final class ChatGPTAuthManager {
                         listener.cancel()
                         timeoutWork.cancel()
                     }
-                    guard !resumed else { return }
+                    guard !resumed else {
+                        connection.cancel()
+                        return
+                    }
                     resumed = true
 
                     guard let data, let request = String(data: data, encoding: .utf8) else {

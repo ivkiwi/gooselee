@@ -10,6 +10,7 @@ import os
 /// Protocol for system audio capture backends (ScreenCaptureKit vs CoreAudio tap).
 protocol SystemAudioCapturing: AnyObject {
     var onPCMSamples: (([Int16]) -> Void)? { get set }
+    var onRecordingFailed: ((Error) -> Void)? { get set }
     var isRecording: Bool { get }
     var isPaused: Bool { get }
     func start() async throws
@@ -45,6 +46,10 @@ protocol SystemAudioCapturing: AnyObject {
 }
 
 extension SystemAudioCapturing {
+    var onRecordingFailed: ((Error) -> Void)? {
+        get { nil }
+        set {}
+    }
     var captureHeartbeat: UInt64 { 0 }
     var isRebuilding: Bool { false }
     var supportsHeartbeatMonitoring: Bool { false }
@@ -81,7 +86,17 @@ struct RebuildRetryPolicy: Equatable {
 /// - Doesn't require "Screen & System Audio Recording" permission for audio capture
 /// - Hardware-synchronized with mic input when used in an aggregate device
 final class CoreAudioSystemRecorder: SystemAudioCapturing, SystemAudioDiagnosticsProviding {
-    var onPCMSamples: (([Int16]) -> Void)?
+    /// Read on processingQueue for every buffer, cleared from the session's stop thread.
+    var onPCMSamples: (([Int16]) -> Void)? {
+        get { callbackLock.withLock { $0.onPCMSamplesStorage } }
+        set { callbackLock.withLock { $0.onPCMSamplesStorage = newValue } }
+    }
+    private let callbackLock = OSAllocatedUnfairLock(initialState: CallbackState())
+
+    private struct CallbackState {
+        var onPCMSamplesStorage: (([Int16]) -> Void)?
+    }
+    var onRecordingFailed: ((Error) -> Void)?
 
     private var tapID: AudioObjectID = kAudioObjectUnknown
     private var aggregateDeviceID: AudioDeviceID = kAudioObjectUnknown
@@ -107,7 +122,9 @@ final class CoreAudioSystemRecorder: SystemAudioCapturing, SystemAudioDiagnostic
     var onCaptureFailure: ((Error) -> Void)?
     /// True while a route-change/health rebuild (including retries) is in
     /// flight; the watchdog treats this as a known-transient stall window.
-    private(set) var isRebuilding = false
+    /// Written on processingQueue, read by the watchdog from its timer queue.
+    private let rebuildingFlag = ManagedAtomic(false)
+    var isRebuilding: Bool { rebuildingFlag.load(ordering: .acquiring) }
     var supportsHeartbeatMonitoring: Bool { true }
     /// Set when a rebuild exhausts its retry budget. The recorder deliberately
     /// keeps isRecording/onPCMSamples alive in that state so the watchdog can
@@ -210,7 +227,7 @@ final class CoreAudioSystemRecorder: SystemAudioCapturing, SystemAudioDiagnostic
         guard let file = FileHandle(forWritingAtPath: url.path) else {
             throw RecorderError.fileCreationFailed
         }
-        file.write(WavWriter.header(dataSize: 0))
+        try file.write(contentsOf: WavWriter.header(dataSize: 0))
         outputFile = file
         outputURL = url
         totalBytesWritten = 0
@@ -243,18 +260,15 @@ final class CoreAudioSystemRecorder: SystemAudioCapturing, SystemAudioDiagnostic
         // A rebuild retry pending on processingQueue must not fire after
         // teardown (attemptTapRebuild also guards on isRecording, belt and
         // suspenders).
-        rebuildRetryWorkItem?.cancel()
-        isRebuilding = false
         processingQueue.sync {
+            rebuildRetryWorkItem?.cancel()
+            rebuildingFlag.store(false, ordering: .releasing)
             teardownTapAndAudioDevice()
             onPCMSamples = nil
         }
 
         if let file = outputFile {
-            let header = WavWriter.header(dataSize: totalBytesWritten)
-            file.seek(toFileOffset: 0)
-            file.write(header)
-            file.closeFile()
+            RecordingWAVFileIO.finalizePreservingFile(file)
         }
         outputFile = nil
 
@@ -461,7 +475,15 @@ final class CoreAudioSystemRecorder: SystemAudioCapturing, SystemAudioDiagnostic
         let rawData = int16Samples.withUnsafeBufferPointer { buf in
             Data(bytes: buf.baseAddress!, count: buf.count * MemoryLayout<Int16>.size)
         }
-        outputFile?.write(rawData)
+        guard let file = outputFile else { return }
+        do {
+            try RecordingWAVFileIO.append(rawData, to: file, bytesWritten: totalBytesWritten)
+        } catch {
+            RecordingWAVFileIO.finalizePreservingFile(file)
+            outputFile = nil
+            onRecordingFailed?(error)
+            return
+        }
         totalBytesWritten += rawData.count
         diagnosticsLock.withLock { state in
             state.bytesWritten += rawData.count
@@ -903,12 +925,12 @@ final class CoreAudioSystemRecorder: SystemAudioCapturing, SystemAudioDiagnostic
     /// marks the state) so a watchdog-driven rebuild can still recover it.
     func attemptTapRebuild(reason: String) {
         guard isRecording else { return }
-        isRebuilding = true
+        rebuildingFlag.store(true, ordering: .releasing)
         let attempt = rebuildRetryCount + 1
         fputs("[system-audio] rebuilding tap (reason=\(reason), attempt=\(attempt))\n", stderr)
         teardownTapAndAudioDevice()
         guard isRecording else {
-            isRebuilding = false
+            rebuildingFlag.store(false, ordering: .releasing)
             return
         }
         do {
@@ -918,7 +940,7 @@ final class CoreAudioSystemRecorder: SystemAudioCapturing, SystemAudioDiagnostic
                 try createTapAndAggregateDevice()
                 try setupAndStartAudioDevice()
             }
-            isRebuilding = false
+            rebuildingFlag.store(false, ordering: .releasing)
             rebuildRetryCount = 0
             captureDeadFlag.store(false, ordering: .releasing)
             fputs("[system-audio] CoreAudio tap capture restarted (reason=\(reason), attempt=\(attempt))\n", stderr)
@@ -933,7 +955,7 @@ final class CoreAudioSystemRecorder: SystemAudioCapturing, SystemAudioDiagnostic
                 processingQueue.asyncAfter(deadline: .now() + delay, execute: item)
                 fputs("[system-audio] tap rebuild failed (reason=\(reason), retrying in \(delay)s): \(error)\n", stderr)
             } else {
-                isRebuilding = false
+                rebuildingFlag.store(false, ordering: .releasing)
                 rebuildRetryCount = 0
                 // Capture is dead, but stay in a recoverable state: the
                 // watchdog's rebuild path (or a later route change) must be
@@ -979,9 +1001,9 @@ final class CoreAudioSystemRecorder: SystemAudioCapturing, SystemAudioDiagnostic
         var errorDescription: String? {
             switch self {
             case .fileCreationFailed:
-                return "Could not create output file"
+                return String(localized: "Could not create output file")
             case .noDefaultOutputDevice:
-                return "No default audio output device found"
+                return String(localized: "No default audio output device found")
             case .tapCreationFailed(let s):
                 return "Process tap creation failed (status: \(s))"
             case .aggregateDeviceCreationFailed(let s):

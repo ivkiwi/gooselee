@@ -6,12 +6,12 @@ enum MeetingBrowserFilter: Hashable {
 
     var label: String {
         switch self {
-        case .all: return "All time"
-        case .last2Days: return "Last 2 days"
-        case .lastWeek: return "Last week"
-        case .last2Weeks: return "Last 2 weeks"
-        case .lastMonth: return "Last month"
-        case .last3Months: return "Last 3 months"
+        case .all: return String(localized: "All time")
+        case .last2Days: return String(localized: "Last 2 days")
+        case .lastWeek: return String(localized: "Last week")
+        case .last2Weeks: return String(localized: "Last 2 weeks")
+        case .lastMonth: return String(localized: "Last month")
+        case .last3Months: return String(localized: "Last 3 months")
         }
     }
 }
@@ -22,8 +22,8 @@ enum MeetingBrowserSort: Hashable {
 
     var label: String {
         switch self {
-        case .newestFirst: return "Newest first"
-        case .oldestFirst: return "Oldest first"
+        case .newestFirst: return String(localized: "Newest first")
+        case .oldestFirst: return String(localized: "Oldest first")
         }
     }
 }
@@ -196,8 +196,8 @@ struct MeetingsView: View {
     }
 
     private var currentFolderName: String {
-        guard let folderID = appState.selectedFolderID else { return "All Meetings" }
-        return appState.folders.first(where: { $0.id == folderID })?.name ?? "All Meetings"
+        guard let folderID = appState.selectedFolderID else { return String(localized: "All Meetings") }
+        return appState.folders.first(where: { $0.id == folderID })?.name ?? String(localized: "All Meetings")
     }
 
     private var currentDocumentMeeting: MeetingRecord? {
@@ -358,9 +358,9 @@ struct MeetingsView: View {
             let isTomorrow = calendar.date(byAdding: .day, value: 1, to: today).map { calendar.isDate(date, inSameDayAs: $0) } ?? false
             let dayLabel: String
             if isToday {
-                dayLabel = "Today"
+                dayLabel = String(localized: "Today")
             } else if isTomorrow {
-                dayLabel = "Tomorrow"
+                dayLabel = String(localized: "Tomorrow")
             } else {
                 dayLabel = monthFormatter.string(from: date)
             }
@@ -639,7 +639,7 @@ struct MeetingsView: View {
     @ViewBuilder
     private var browserHeaderMeta: some View {
         HStack(spacing: GuesliTheme.spacing8) {
-            Text("\(filteredMeetings.count) meeting\(filteredMeetings.count == 1 ? "" : "s")")
+            (filteredMeetings.count == 1 ? Text("1 meeting") : Text("\(filteredMeetings.count) meetings"))
                 .font(GuesliTheme.callout())
                 .foregroundStyle(GuesliTheme.textSecondary)
                 .fixedSize()
@@ -834,10 +834,10 @@ struct MeetingsView: View {
 
     private func activeMeetingStatusText(for meeting: MeetingRecord) -> String {
         switch activeMeetingBannerPhase(for: meeting) {
-        case .preparing: return "Preparing recording"
-        case .recording: return "Recording now"
-        case .paused: return "Recording paused"
-        case .finalizing: return "Finalizing notes"
+        case .preparing: return String(localized: "Preparing recording")
+        case .recording: return String(localized: "Recording now")
+        case .paused: return String(localized: "Recording paused")
+        case .finalizing: return String(localized: "Finalizing notes")
         }
     }
 

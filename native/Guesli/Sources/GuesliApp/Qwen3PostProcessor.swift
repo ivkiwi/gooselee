@@ -175,6 +175,7 @@ enum Qwen3PostProcessorOutputCleaner {
     static func shouldFallbackToInput(cleaned: String, input: String) -> Bool {
         let trimmed = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return true }
+        if trimmed.allSatisfy({ $0 == "." || $0 == "…" || $0.isWhitespace }) { return true }
 
         let lower = trimmed.lowercased()
         let assistantMarkers = [
@@ -209,7 +210,7 @@ enum Qwen3PostProcessorConfig {
     // Local development override — takes precedence over the UI-selected model when set.
     static let envOverride = "GUESLI_QWEN3_POSTPROC_GGUF"
     static let legacyDirectoryEnvOverride = "GUESLI_QWEN3_POSTPROC_DIR"
-    // Dictation-only cleanup cap. Keep bounded to avoid slow local inference; long dictations may be truncated by LLM.swift.
+    // Keep local inference bounded; dictations that cannot fit retain their original transcript.
     static let maxContextTokens: Int32 = 1024
 
     static func formatInput(_ text: String, appContext: String? = nil, maxAppContextCharacters: Int = 1_200) -> String {
@@ -315,23 +316,55 @@ private actor Qwen3PostProcessorManager {
         try await inferenceGate.acquire()
         do {
             try Task.checkCancellation()
-            let bot = try loadBot()
-            defer { bot.reset() }
-            let formattedInput = Qwen3PostProcessorConfig.formatInput(text, appContext: appContext)
-            await bot.respond(to: formattedInput, thinking: .suppressed)
-            let raw = bot.output
-            let cleaned = Qwen3PostProcessorOutputCleaner.clean(raw)
-            Qwen3PostProcessorLogging.logVerbose("Qwen3 GGUF prompt chars=\(bot.preprocess(formattedInput, [], .suppressed).count)")
-            Qwen3PostProcessorLogging.logVerbose("Qwen3 GGUF raw output: \(raw)")
-            Qwen3PostProcessorLogging.logVerbose("Qwen3 GGUF cleaned output: \(cleaned)")
             let result: String
-            if Qwen3PostProcessorOutputCleaner.shouldFallbackToInput(cleaned: cleaned, input: text) {
-                Qwen3PostProcessorLogging.logVerbose("Qwen3 GGUF output rejected; falling back to deterministic cleanup")
-                throw NSError(domain: "Qwen3PostProcessor", code: 4, userInfo: [
-                    NSLocalizedDescriptionKey: "Qwen3 GGUF output was rejected by transcript safety checks",
-                ])
-            } else {
-                result = cleaned
+            do {
+                let bot = try loadBot()
+                defer { bot.reset() }
+                let formattedInput = Qwen3PostProcessorConfig.formatInput(text, appContext: appContext)
+                let promptTokens = await bot.core.encode(bot.preprocess(formattedInput, [], .suppressed)).count
+                let replyTokens = await bot.core.encode(text, shouldAddBOS: false, special: false).count
+                guard DictationCleanupSafety.hasContextBudget(promptTokens: promptTokens, replyTokens: replyTokens, contextTokens: Int(Qwen3PostProcessorConfig.maxContextTokens)) else {
+                    throw DictationCleanupError.contextExceeded
+                }
+                await bot.respond(to: formattedInput, thinking: .suppressed)
+                try Task.checkCancellation()
+                let raw = bot.output
+                let cleaned = Qwen3PostProcessorOutputCleaner.clean(raw)
+                Qwen3PostProcessorLogging.logVerbose("Qwen3 GGUF prompt chars=\(bot.preprocess(formattedInput, [], .suppressed).count)")
+                Qwen3PostProcessorLogging.logVerbose("Qwen3 GGUF raw output: \(DictationLogMetadata(text: raw).summary)")
+                Qwen3PostProcessorLogging.logVerbose("Qwen3 GGUF cleaned output: \(DictationLogMetadata(text: cleaned).summary)")
+                if Qwen3PostProcessorOutputCleaner.shouldFallbackToInput(cleaned: cleaned, input: text) {
+                    Qwen3PostProcessorLogging.logVerbose("Qwen3 GGUF output rejected; falling back to deterministic cleanup")
+                    throw NSError(domain: "Qwen3PostProcessor", code: 4, userInfo: [
+                        NSLocalizedDescriptionKey: "Qwen3 GGUF output was rejected by transcript safety checks",
+                    ])
+                } else {
+                    result = cleaned
+                }
+            }
+            await inferenceGate.release()
+            return result
+        } catch {
+            await inferenceGate.release()
+            throw error
+        }
+    }
+
+    func generateVoiceCommand(_ prompt: String) async throws -> String {
+        try await inferenceGate.acquire()
+        do {
+            try Task.checkCancellation()
+            let result: String
+            do {
+                let bot = try loadBot()
+                bot.useResolvedTemplate(systemPrompt: VoiceCommandPrompt.system)
+                defer {
+                    bot.reset()
+                    bot.useResolvedTemplate(systemPrompt: systemPrompt)
+                }
+                await bot.respond(to: prompt, thinking: .suppressed)
+                try Task.checkCancellation()
+                result = try VoiceCommandResponseCleaner.validated(bot.output)
             }
             await inferenceGate.release()
             return result
@@ -359,6 +392,7 @@ private actor Qwen3PostProcessorManager {
             ])
         }
         loaded.useResolvedTemplate(systemPrompt: systemPrompt)
+        loaded.postprocess = { _ in }
         bot = loaded
         return loaded
     }
@@ -403,6 +437,11 @@ actor Qwen3PostProcessor {
     func process(_ text: String, appContext: String? = nil) async throws -> String {
         let manager = try await loadManager()
         return try await manager.process(text, appContext: appContext)
+    }
+
+    func generateVoiceCommand(_ prompt: String) async throws -> String {
+        let manager = try await loadManager()
+        return try await manager.generateVoiceCommand(prompt)
     }
 
     func shutdown() {

@@ -200,7 +200,7 @@ final class MeetingSessionDiagnostics {
             GuesliPaths.preconditionSafeForTestWrite(cleanedURL)
             FileManager.default.createFile(atPath: cleanedURL.path, contents: nil)
             let file = FileHandle(forWritingAtPath: cleanedURL.path)
-            file?.write(WavWriter.header(dataSize: 0))
+            try file?.write(contentsOf: WavWriter.header(dataSize: 0))
             outputDirectory = runDirectory
             cleanedMicURL = cleanedURL
             cleanedMicFile = file
@@ -217,8 +217,15 @@ final class MeetingSessionDiagnostics {
         guard enabled, !samples.isEmpty else { return }
         let data = samples.withUnsafeBufferPointer { Data(buffer: $0) }
         lock.withLock { state in
-            guard !state.isClosed else { return }
-            cleanedMicFile?.write(data)
+            guard !state.isClosed, let cleanedMicFile else { return }
+            do {
+                try RecordingWAVFileIO.append(data, to: cleanedMicFile, bytesWritten: state.bytesWritten)
+            } catch {
+                RecordingWAVFileIO.finalizePreservingFile(cleanedMicFile)
+                state.isClosed = true
+                fputs("[meeting-diagnostics] audio write failed: \(error)\n", stderr)
+                return
+            }
             state.bytesWritten += data.count
             state.stats.addInt16(samples)
         }
@@ -298,13 +305,13 @@ final class MeetingSessionDiagnostics {
 
     private func finalizeCleanedMic() -> AudioSampleStatsSnapshot? {
         guard let cleanedMicFile else { return nil }
-        let finalState = lock.withLock { state -> CleanedMicState in
+        let (finalState, wasClosed) = lock.withLock { state -> (CleanedMicState, Bool) in
+            let wasClosed = state.isClosed
             state.isClosed = true
-            return state
+            return (state, wasClosed)
         }
-        cleanedMicFile.seek(toFileOffset: 0)
-        cleanedMicFile.write(WavWriter.header(dataSize: UInt32(finalState.bytesWritten)))
-        cleanedMicFile.closeFile()
+        // A failed write already finalized the file.
+        if !wasClosed { RecordingWAVFileIO.finalizePreservingFile(cleanedMicFile) }
         return finalState.stats.snapshot()
     }
 

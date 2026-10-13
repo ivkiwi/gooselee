@@ -139,10 +139,10 @@ struct MeetingListItemView: View {
         if record.followUpToID != nil || hasFollowUps {
             HStack(spacing: 4) {
                 if record.followUpToID != nil {
-                    relationshipIcon("arrow.turn.down.right", help: "Follow-up meeting")
+                    relationshipIcon("arrow.turn.down.right", help: String(localized: "Follow-up meeting"))
                 }
                 if hasFollowUps {
-                    relationshipIcon("arrow.triangle.branch", help: "Has follow-up meetings")
+                    relationshipIcon("arrow.triangle.branch", help: String(localized: "Has follow-up meetings"))
                 }
             }
         }
@@ -197,7 +197,8 @@ struct MeetingListItemView: View {
                     folderPopoverRow(
                         icon: hasChildren ? "folder.fill" : "folder",
                         label: folderBreadcrumb(folder),
-                        isActive: record.folderID == folder.id
+                        isActive: record.folderID == folder.id,
+                        verbatim: true
                     ) {
                         onMove(folder.id)
                         showFolderPopover = false
@@ -229,14 +230,19 @@ struct MeetingListItemView: View {
     }
 
     @ViewBuilder
-    private func folderPopoverRow(icon: String, label: String, isActive: Bool = false, action: @escaping () -> Void) -> some View {
+    private func folderPopoverRow(icon: String, label: String, isActive: Bool = false, verbatim: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
                     .font(.system(size: 11))
                     .frame(width: 16)
-                Text(label)
-                    .font(GuesliTheme.callout())
+                if verbatim {
+                    Text(verbatim: label)
+                        .font(GuesliTheme.callout())
+                } else {
+                    Text(LocalizedStringKey(label))
+                        .font(GuesliTheme.callout())
+                }
                 Spacer()
                 if isActive {
                     Image(systemName: "checkmark")
@@ -288,10 +294,10 @@ struct MeetingListItemView: View {
             return AnyView(SyncOriginBadge(label: label))
         }
         if isImportedAudio {
-            return AnyView(sourceBadge(icon: "square.and.arrow.down", label: "Imported", help: "Imported audio"))
+            return AnyView(sourceBadge(icon: "square.and.arrow.down", label: "Imported", help: String(localized: "Imported audio")))
         }
         if hasSavedRecording {
-            return AnyView(sourceBadge(icon: "waveform", label: "Recording", help: "Saved recording available"))
+            return AnyView(sourceBadge(icon: "waveform", label: "Recording", help: String(localized: "Saved recording available")))
         }
         return nil
     }
@@ -316,7 +322,7 @@ struct MeetingListItemView: View {
         HStack(spacing: 4) {
             Image(systemName: icon)
                 .font(.system(size: 10, weight: .semibold))
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(.system(size: 10, weight: .semibold))
         }
         .foregroundStyle(isImportedAudio ? GuesliTheme.accent : GuesliTheme.textSecondary)
@@ -337,14 +343,14 @@ struct MeetingListItemView: View {
     private func formatDuration(_ seconds: Double) -> String {
         let rounded = Int(seconds.rounded())
         if rounded >= 3600 {
-            return "\(rounded / 3600)h \((rounded % 3600) / 60)m"
+            return String(localized: "\(rounded / 3600)h \((rounded % 3600) / 60)m")
         }
         if rounded >= 60 {
             let m = rounded / 60
             let s = rounded % 60
-            return s == 0 ? "\(m)m" : "\(m)m \(s)s"
+            return s == 0 ? String(localized: "\(m)m") : String(localized: "\(m)m \(s)s")
         }
-        return "\(rounded)s"
+        return String(localized: "\(rounded)s")
     }
 
     private func previewText() -> String {

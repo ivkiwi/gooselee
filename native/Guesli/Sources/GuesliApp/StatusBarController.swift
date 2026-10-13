@@ -113,22 +113,22 @@ final class StatusBarController: NSObject, NSMenuDelegate {
             menu.addItem(.separator())
         }
 
-        menu.addItem(actionItem(title: "Open \(AppIdentity.displayName)", action: #selector(GuesliController.openHistoryWindow as (GuesliController) -> () -> Void)))
+        menu.addItem(actionItem(title: String(localized: "Open \(AppIdentity.displayName)"), action: #selector(GuesliController.openHistoryWindow as (GuesliController) -> () -> Void)))
         if controller.isMeetingRecording() {
-            let pauseTitle = controller.isMeetingRecordingPaused() ? "Resume Meeting Recording" : "Pause Meeting Recording"
+            let pauseTitle = controller.isMeetingRecordingPaused() ? String(localized: "Resume Meeting Recording") : String(localized: "Pause Meeting Recording")
             menu.addItem(actionItem(title: pauseTitle, action: #selector(GuesliController.toggleMeetingRecordingPause)))
-            menu.addItem(actionItem(title: "Stop Meeting Recording", action: #selector(GuesliController.toggleMeetingRecording)))
-            menu.addItem(actionItem(title: "Discard Meeting Recording...", action: #selector(GuesliController.discardMeetingWithConfirmation)))
+            menu.addItem(actionItem(title: String(localized: "Stop Meeting Recording"), action: #selector(GuesliController.toggleMeetingRecording)))
+            menu.addItem(actionItem(title: String(localized: "Discard Meeting Recording..."), action: #selector(GuesliController.discardMeetingWithConfirmation)))
         } else {
-            menu.addItem(actionItem(title: "Start Meeting Recording", action: #selector(GuesliController.toggleMeetingRecording)))
+            menu.addItem(actionItem(title: String(localized: "Start Meeting Recording"), action: #selector(GuesliController.toggleMeetingRecording)))
         }
         menu.addItem(.separator())
 
-        let recentItem = NSMenuItem(title: "Recent Dictations", action: nil, keyEquivalent: "")
+        let recentItem = NSMenuItem(title: String(localized: "Recent Dictations"), action: nil, keyEquivalent: "")
         let recentMenu = NSMenu()
         let recentRows = controller.recentDictations()
         if recentRows.isEmpty {
-            let empty = NSMenuItem(title: "No dictations yet", action: nil, keyEquivalent: "")
+            let empty = NSMenuItem(title: String(localized: "No dictations yet"), action: nil, keyEquivalent: "")
             empty.isEnabled = false
             recentMenu.addItem(empty)
         } else {
@@ -142,7 +142,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         menu.setSubmenu(recentMenu, for: recentItem)
         menu.addItem(recentItem)
 
-        let backendItem = NSMenuItem(title: "Transcription Backend", action: nil, keyEquivalent: "")
+        let backendItem = NSMenuItem(title: String(localized: "Transcription Backend"), action: nil, keyEquivalent: "")
         let backendMenu = NSMenu()
         for option in BackendOption.downloaded {
             let prefix = controller.selectedBackend == option ? "✓ " : ""
@@ -154,7 +154,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         menu.setSubmenu(backendMenu, for: backendItem)
         menu.addItem(backendItem)
 
-        let meetingBackendItem = NSMenuItem(title: "Meetings Backend", action: nil, keyEquivalent: "")
+        let meetingBackendItem = NSMenuItem(title: String(localized: "Meetings Backend"), action: nil, keyEquivalent: "")
         let meetingBackendMenu = NSMenu()
         for option in MeetingSummaryBackendOption.all {
             let prefix = controller.selectedMeetingSummaryBackend == option ? "✓ " : ""
@@ -171,10 +171,10 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         menu.addItem(meetingBackendItem)
 
         menu.addItem(.separator())
-        menu.addItem(actionItem(title: "Settings…", action: #selector(GuesliController.openSettingsTab)))
+        menu.addItem(actionItem(title: String(localized: "Settings…"), action: #selector(GuesliController.openSettingsTab)))
         menu.addItem(checkForUpdatesItem())
         menu.addItem(.separator())
-        menu.addItem(actionItem(title: "Quit", action: #selector(GuesliController.quitApp)))
+        menu.addItem(actionItem(title: String(localized: "Quit"), action: #selector(GuesliController.quitApp)))
     }
 
     private func addUpcomingEventsSection(_ events: [UnifiedCalendarEvent]) {
@@ -193,7 +193,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
             let firstEvent = nextUpEvents[0]
             let minutesUntil = Int(ceil(firstEvent.startDate.timeIntervalSince(now) / 60))
             addUpcomingEventGroup(
-                title: "Starts in \(formatTimeUntil(minutesUntil))",
+                title: String(localized: "Starts in \(formatTimeUntil(minutesUntil))"),
                 events: nextUpEvents,
                 timeFormatter: timeFormatter
             )
@@ -256,26 +256,26 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     private func upcomingMenuHeader(for day: Date, calendar: Calendar) -> String {
         if calendar.isDateInToday(day) {
-            return "Today"
+            return String(localized: "Today")
         }
         if calendar.isDateInTomorrow(day) {
-            return "Tomorrow"
+            return String(localized: "Tomorrow")
         }
         let formatter = DateFormatter()
-        formatter.dateFormat = "EEE, MMM d"
+        formatter.setLocalizedDateFormatFromTemplate("EEEMMMd")
         return formatter.string(from: day)
     }
 
     private func formatTimeUntil(_ minutes: Int) -> String {
         if minutes < 60 {
-            return "\(minutes)m"
+            return String(localized: "\(minutes)m")
         }
         let hours = minutes / 60
         let remainingMinutes = minutes % 60
         if remainingMinutes == 0 {
-            return "\(hours)h"
+            return String(localized: "\(hours)h")
         }
-        return "\(hours)h \(remainingMinutes)m"
+        return String(localized: "\(hours)h \(remainingMinutes)m")
     }
 
     private func actionItem(title: String, action: Selector) -> NSMenuItem {
@@ -286,7 +286,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     private func checkForUpdatesItem() -> NSMenuItem {
         let item = NSMenuItem(
-            title: "Check for Updates…",
+            title: String(localized: "Check for Updates…"),
             action: #selector(GuesliController.checkForUpdates),
             keyEquivalent: ""
         )

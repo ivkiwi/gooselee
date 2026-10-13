@@ -17,8 +17,8 @@ private enum ManualNotesSaveStatus {
 
     var label: String {
         switch self {
-        case .saved: return "Saved"
-        case .saving: return "Saving..."
+        case .saved: return String(localized: "Saved")
+        case .saving: return String(localized: "Saving...")
         }
     }
 }
@@ -44,8 +44,8 @@ private struct LiveTranscriptSection: View {
         LiveTranscriptView(
             transcript: transcript,
             placeholder: appState.config.resolvedMeetingProcessingMode == .post
-                ? "Recording… transcript after meeting"
-                : "Waiting for speech…",
+                ? String(localized: "Recording… transcript after meeting")
+                : String(localized: "Waiting for speech…"),
             partialYou: appState.liveMeetingPartialYou,
             partialOthers: appState.liveMeetingPartialOthers
         )
@@ -86,13 +86,15 @@ struct MeetingDetailView: View {
     @State private var showNewFolderPrompt = false
     @State private var newFolderName = ""
     @State private var threadContext: MeetingThreadContext?
+    @State private var recordingSeekRequest: MeetingRecordingSeekRequest?
+    @State private var previousMeeting: MeetingRecord?
 
     init(
         meeting: MeetingRecord?,
         controller: GuesliController,
         appState: AppState,
         onBack: (() -> Void)? = nil,
-        backLabel: String = "Back to Meetings"
+        backLabel: String = String(localized: "Back to Meetings")
     ) {
         self.meeting = meeting
         self.controller = controller
@@ -115,6 +117,12 @@ struct MeetingDetailView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     header(meeting)
 
+                    if let predecessor = previousMeeting {
+                        PreviousMeetingContextView(meeting: predecessor) {
+                            controller.showMeetingDocument(id: predecessor.id)
+                        }
+                    }
+
                     Divider()
                         .background(GuesliTheme.surfaceBorder)
 
@@ -123,16 +131,30 @@ struct MeetingDetailView: View {
                         summaryFailureBanner(message: summaryError, meeting: meeting)
                     }
 
+                    if meeting.status == .failed {
+                        MeetingProcessingFailedBanner(
+                            canRetry: Self.showsRetranscribeAction(for: meeting),
+                            isRetrying: isRetranscribing,
+                            onRetry: { startRetranscription(for: meeting) }
+                        )
+                    }
+
+                    MeetingQuickActionsView(appState: appState, meeting: meeting)
+                        .padding(GuesliTheme.spacing16)
                     content(for: meeting)
                 }
                 .background(GuesliTheme.backgroundBase)
                 .onAppear {
                     threadContext = controller.meetingThreadContext(for: meeting.id)
+                    previousMeeting = threadContext?.predecessor ?? controller.previousRecurringMeeting(for: meeting.id)
                 }
                 .onChange(of: meeting.id) { _, _ in
                     syncLocalState(with: meeting)
                 }
                 .onChange(of: meeting.status) { _, _ in
+                    syncLocalState(with: meeting)
+                }
+                .onChange(of: meeting.followUpToID) { _, _ in
                     syncLocalState(with: meeting)
                 }
                 .onChange(of: meeting.manualNotes) { _, _ in
@@ -159,14 +181,14 @@ struct MeetingDetailView: View {
                 summaryErrorMessage = nil
             }
         } message: {
-            Text(summaryErrorMessage ?? "The updated meeting notes could not be saved.")
+            Text(summaryErrorMessage ?? String(localized: "The updated meeting notes could not be saved."))
         }
         .alert("Couldn't Re-transcribe Meeting", isPresented: retranscriptionErrorBinding) {
             Button("OK", role: .cancel) {
                 retranscriptionErrorMessage = nil
             }
         } message: {
-            Text(retranscriptionErrorMessage ?? "The saved recording could not be re-transcribed.")
+            Text(retranscriptionErrorMessage ?? String(localized: "The saved recording could not be re-transcribed."))
         }
         .alert("Re-summarize Notes?", isPresented: transcriptResummaryPromptBinding) {
             Button("Re-summarize") {
@@ -314,7 +336,12 @@ struct MeetingDetailView: View {
 
             if let savedRecordingPath = meeting.savedRecordingPath,
                FileManager.default.fileExists(atPath: savedRecordingPath) {
-                MeetingRecordingPlayerView(recordingPath: savedRecordingPath)
+                MeetingRecordingPlayerView(
+                    recordingPath: savedRecordingPath,
+                    meetingID: meeting.id,
+                    seekRequest: $recordingSeekRequest
+                )
+                .id(meeting.id)
             }
 
             activeMeetingAudioWarningBanner(for: meeting)
@@ -383,7 +410,19 @@ struct MeetingDetailView: View {
                 }
             } else {
                 let isManualNotesEditable = canEditManualNotes(for: meeting)
+                let isProcessing = meeting.status == .processing
                 VStack(alignment: .leading, spacing: GuesliTheme.spacing12) {
+                    if isProcessing {
+                        MeetingProcessingDraftSection(
+                            appState: appState,
+                            controller: controller,
+                            meetingID: meeting.id,
+                            transcriptPrefix: meeting.rawTranscript
+                        )
+                    }
+
+                    // Manual notes are read-only while processing; hide the empty editor so the draft gets the space.
+                    if !isProcessing || !editableManualNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     manualNotesToolbar(for: meeting)
                         .disabled(!isManualNotesEditable)
 
@@ -404,6 +443,7 @@ struct MeetingDetailView: View {
                         RoundedRectangle(cornerRadius: GuesliTheme.cornerSmall)
                             .strokeBorder(GuesliTheme.surfaceBorder, lineWidth: 1)
                     )
+                    }
                 }
                 .padding(.horizontal, 40)
                 .padding(.top, 12)
@@ -458,7 +498,16 @@ struct MeetingDetailView: View {
                         .allowsHitTesting(documentMode == .notes)
                         .accessibilityHidden(documentMode != .notes)
 
-                    MeetingTranscriptView(transcript: meeting.rawTranscript)
+                    MeetingTranscriptView(
+                        transcript: meeting.rawTranscript,
+                        seekUnavailableReason: TranscriptRecordingSeek.unavailableReason(for: meeting),
+                        onSeekTimestamp: { timestamp in
+                            recordingSeekRequest = MeetingRecordingSeekRequest(meeting: meeting, timestamp: timestamp)
+                        },
+                        onRenameSpeaker: meeting.status == .completed ? { oldLabel, newName in
+                            controller.renameMeetingSpeaker(id: meeting.id, from: oldLabel, to: newName)
+                        } : nil
+                    )
                         .opacity(documentMode == .transcript ? 1 : 0)
                         .allowsHitTesting(documentMode == .transcript)
                         .accessibilityHidden(documentMode != .transcript)
@@ -699,7 +748,8 @@ struct MeetingDetailView: View {
                             templateMenuItem(
                                 title: template.name,
                                 systemImage: resolved.icon,
-                                isSelected: pendingTemplateID == template.id
+                                isSelected: pendingTemplateID == template.id,
+                                verbatim: true
                             )
                         }
                     }
@@ -740,6 +790,10 @@ struct MeetingDetailView: View {
             Spacer()
 
             retranscribeAction(for: meeting)
+
+            if meeting.status == .completed && meeting.notesState == .structuredNotes {
+                MeetingFollowUpEmailButton(meeting: meeting, controller: controller, isBackendConfigured: hasApiKey)
+            }
 
             Button(action: {
                 controller.copyToClipboard(activeCopyText(for: meeting))
@@ -798,7 +852,7 @@ struct MeetingDetailView: View {
     private func statusChip(for meeting: MeetingRecord) -> some View {
         let isPreparing = isPreparingThisMeeting(meeting)
         let isPaused = meeting.status == .recording && appState.isMeetingRecordingPaused
-        let label = isPreparing ? "Preparing" : isPaused ? "Paused" : meeting.status.displayLabel
+        let label = isPreparing ? String(localized: "Preparing") : isPaused ? String(localized: "Paused") : meeting.status.displayLabel
         let color = isPreparing || isPaused ? GuesliTheme.transcribing : meeting.status.displayColor
         HStack(spacing: 6) {
             Circle()
@@ -906,13 +960,13 @@ struct MeetingDetailView: View {
             )
         }
         .buttonStyle(.plain)
-        .help(label)
+        .help(LocalizedStringKey(label))
     }
 
     @ViewBuilder
     private func exportMenu(for meeting: MeetingRecord) -> some View {
         let currentContent: MeetingExportContent = documentMode == .transcript ? .transcript : .notes
-        let currentLabel = documentMode == .transcript ? "Export Transcript" : "Export Notes"
+        let currentLabel = documentMode == .transcript ? String(localized: "Export Transcript") : String(localized: "Export Notes")
         Menu {
             Button {
                 MeetingExporter.export(meeting: meeting, content: currentContent)
@@ -990,11 +1044,15 @@ struct MeetingDetailView: View {
         }
     }
 
-    private func templateMenuItem(title: String, systemImage: String, isSelected: Bool) -> some View {
+    private func templateMenuItem(title: String, systemImage: String, isSelected: Bool, verbatim: Bool = false) -> some View {
         HStack(spacing: 8) {
             Image(systemName: isSelected ? "checkmark" : systemImage)
                 .frame(width: 12)
-            Text(title)
+            if verbatim {
+                Text(verbatim: title)
+            } else {
+                Text(LocalizedStringKey(title))
+            }
         }
     }
 
@@ -1004,7 +1062,7 @@ struct MeetingDetailView: View {
             HStack(spacing: 4) {
                 Image(systemName: systemImage)
                     .font(.system(size: 10))
-                Text(label)
+                Text(LocalizedStringKey(label))
                     .font(.system(size: 11, weight: .medium))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
@@ -1035,7 +1093,7 @@ struct MeetingDetailView: View {
                 .controlSize(.small)
                 .frame(width: 14, height: 14)
                 .accessibilityLabel("Preparing transcription")
-            Text(appState.meetingStartStatus ?? "Meeting transcription will start shortly.")
+            Text(appState.meetingStartStatus ?? String(localized: "Meeting transcription will start shortly."))
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(GuesliTheme.textSecondary)
                 .lineLimit(1)
@@ -1167,7 +1225,7 @@ struct MeetingDetailView: View {
                 if let predecessor = threadContext.predecessor {
                     threadLink(
                         icon: "arrow.turn.left.up",
-                        text: "Follow-up to: \(predecessor.title)",
+                        text: String(localized: "Follow-up to: \(predecessor.title)"),
                         targetID: predecessor.id
                     )
                 }
@@ -1177,7 +1235,7 @@ struct MeetingDetailView: View {
                 ForEach(threadContext.successors) { successor in
                     threadLink(
                         icon: "arrow.turn.left.down",
-                        text: "Followed by: \(successor.title)",
+                        text: String(localized: "Followed by: \(successor.title)"),
                         targetID: successor.id
                     )
                 }
@@ -1213,7 +1271,7 @@ struct MeetingDetailView: View {
             HStack(spacing: 5) {
                 Image(systemName: hasFolder ? "folder.fill" : "folder.badge.plus")
                     .font(.system(size: 10))
-                Text(currentFolder?.name ?? "Add to folder")
+                Text(currentFolder?.name ?? String(localized: "Add to folder"))
                     .font(.system(size: 11, weight: .medium))
             }
             .foregroundStyle(hasFolder ? GuesliTheme.accent : GuesliTheme.textSecondary)
@@ -1233,7 +1291,7 @@ struct MeetingDetailView: View {
                 if !appState.folders.isEmpty {
                     ForEach(appState.folders) { folder in
                         let isActive = meeting.folderID == folder.id
-                        folderPopoverRow(icon: "folder", label: folder.name, isActive: isActive) {
+                        folderPopoverRow(icon: "folder", label: folder.name, isActive: isActive, verbatim: true) {
                             controller.moveMeeting(id: meeting.id, toFolder: isActive ? nil : folder.id)
                             showFolderPopover = false
                         }
@@ -1263,14 +1321,19 @@ struct MeetingDetailView: View {
     }
 
     @ViewBuilder
-    private func folderPopoverRow(icon: String, label: String, isActive: Bool = false, action: @escaping () -> Void) -> some View {
+    private func folderPopoverRow(icon: String, label: String, isActive: Bool = false, verbatim: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
                     .font(.system(size: 11))
                     .frame(width: 16)
-                Text(label)
-                    .font(GuesliTheme.callout())
+                if verbatim {
+                    Text(verbatim: label)
+                        .font(GuesliTheme.callout())
+                } else {
+                    Text(LocalizedStringKey(label))
+                        .font(GuesliTheme.callout())
+                }
                 Spacer()
                 if isActive {
                     Image(systemName: "checkmark")
@@ -1355,23 +1418,23 @@ struct MeetingDetailView: View {
     }
 
     private var primarySummaryActionLabel: String {
-        guard let meeting else { return "Re-summarize" }
+        guard let meeting else { return String(localized: "Re-summarize") }
         return primarySummaryActionLabel(for: meeting)
     }
 
     private var copyButtonLabel: String {
-        "Copy"
+        String(localized: "Copy")
     }
 
     private var editButtonLabel: String {
         if isEditingNotes || isEditingTranscript {
-            return "Done"
+            return String(localized: "Done")
         }
-        return documentMode == .transcript ? "Edit Transcript" : "Edit Notes"
+        return documentMode == .transcript ? String(localized: "Edit Transcript") : String(localized: "Edit Notes")
     }
 
     private func primarySummaryActionLabel(for meeting: MeetingRecord) -> String {
-        hasPendingTemplateChange(for: meeting) ? "Apply Template" : "Re-summarize"
+        hasPendingTemplateChange(for: meeting) ? String(localized: "Apply Template") : String(localized: "Re-summarize")
     }
 
     private func activeCopyText(for meeting: MeetingRecord) -> String {
@@ -1578,6 +1641,7 @@ struct MeetingDetailView: View {
         let meetingChanged = previousMeetingID != meeting?.id
         loadedMeetingID = meeting?.id
         threadContext = meeting.flatMap { controller.meetingThreadContext(for: $0.id) }
+        previousMeeting = threadContext?.predecessor ?? meeting.flatMap { controller.previousRecurringMeeting(for: $0.id) }
         editableTitle = meeting?.title ?? ""
         if meetingChanged || !isEditingNotes {
             editableNotes = meeting.map { Self.notesContent(for: $0) } ?? ""
@@ -1586,6 +1650,7 @@ struct MeetingDetailView: View {
             editableTranscript = meeting?.rawTranscript ?? ""
         }
         if meetingChanged {
+            recordingSeekRequest = nil
             editableManualNotes = meeting?.manualNotes ?? ""
             manualNotesSaveStatus = .saved
             transcriptResummaryPromptMeetingID = nil
@@ -1607,7 +1672,9 @@ struct MeetingDetailView: View {
 
     private func syncManualNotesState(with meeting: MeetingRecord?) {
         let persistedManualNotes = meeting?.manualNotes ?? ""
-        if manualNotesSaveStatus == .saving, editableManualNotes != persistedManualNotes {
+        // A controller-side write (e.g. a bookmark) makes the persisted notes the latest value.
+        if manualNotesSaveStatus == .saving, editableManualNotes != persistedManualNotes,
+           meeting.map({ controller.manualNotesForLiveMeeting(id: $0.id) }) != persistedManualNotes {
             return
         }
         editableManualNotes = persistedManualNotes
@@ -1617,20 +1684,20 @@ struct MeetingDetailView: View {
     private func formatMeta(_ meeting: MeetingRecord) -> String {
         let time = MeetingBrowserLogic.formatStartTime(meeting.startTime)
         let duration = formatDuration(meeting.durationSeconds)
-        return "\(time)  \u{2022}  \(duration)  \u{2022}  \(meeting.wordCount) words"
+        return String(localized: "\(time)  \u{2022}  \(duration)  \u{2022}  \(meeting.wordCount) words")
     }
 
     private func formatDuration(_ seconds: Double) -> String {
         let rounded = Int(seconds.rounded())
         if rounded >= 3600 {
-            return "\(rounded / 3600)h \((rounded % 3600) / 60)m"
+            return String(localized: "\(rounded / 3600)h \((rounded % 3600) / 60)m")
         }
         if rounded >= 60 {
             let m = rounded / 60
             let s = rounded % 60
-            return s == 0 ? "\(m)m" : "\(m)m \(s)s"
+            return s == 0 ? String(localized: "\(m)m") : String(localized: "\(m)m \(s)s")
         }
-        return "\(rounded)s"
+        return String(localized: "\(rounded)s")
     }
 }
 
@@ -1678,7 +1745,7 @@ private struct MarqueeTitleTextField: View {
                     restartMarqueeIfNeeded()
                 }
 
-            Text(text.isEmpty ? "Meeting Title" : text)
+            Text(text.isEmpty ? String(localized: "Meeting Title") : text)
                 .font(titleFont)
                 .fontWeight(.bold)
                 .foregroundStyle(GuesliTheme.textPrimary)
@@ -1697,7 +1764,7 @@ private struct MarqueeTitleTextField: View {
             }
         )
         .overlay(
-            Text(text.isEmpty ? "Meeting Title" : text)
+            Text(text.isEmpty ? String(localized: "Meeting Title") : text)
                 .font(titleFont)
                 .fontWeight(.bold)
                 .lineLimit(1)
@@ -1814,7 +1881,7 @@ struct TranscriptChatMessage: Identifiable, Equatable {
             let remainderStart = line.index(after: timestampEnd)
             let remainder = line[remainderStart...]
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            let speakerText = splitSpeakerAndText(remainder)
+            let speakerText = splitSpeakerAndText(remainder, isTimestamped: true)
             return TranscriptChatMessage(
                 id: id,
                 timestamp: timestamp.isEmpty ? nil : timestamp,
@@ -1832,13 +1899,14 @@ struct TranscriptChatMessage: Identifiable, Equatable {
         )
     }
 
-    private static func splitSpeakerAndText(_ text: String) -> (speaker: String?, text: String) {
+    private static func splitSpeakerAndText(_ text: String, isTimestamped: Bool = false) -> (speaker: String?, text: String) {
         guard let separator = text.firstIndex(of: ":") else {
             return (nil, text)
         }
 
         let candidate = text[..<separator].trimmingCharacters(in: .whitespacesAndNewlines)
-        guard isLikelySpeakerLabel(candidate) else {
+        // Timestamped lines always carry a label, including manually renamed speakers.
+        guard isLikelySpeakerLabel(candidate) || (isTimestamped && !candidate.isEmpty && candidate.count <= MeetingSpeakerRename.maxNameLength) else {
             return (nil, text)
         }
 
@@ -1860,10 +1928,22 @@ struct TranscriptChatMessage: Identifiable, Equatable {
 
 private struct MeetingTranscriptView: View {
     let transcript: String
+    let seekUnavailableReason: String?
+    let onSeekTimestamp: (String) -> Void
+    var onRenameSpeaker: ((String, String) -> Void)? = nil
     @State private var messages: [TranscriptChatMessage]
+    @State private var speakerToRename: String?
 
-    init(transcript: String) {
+    init(
+        transcript: String,
+        seekUnavailableReason: String?,
+        onSeekTimestamp: @escaping (String) -> Void,
+        onRenameSpeaker: ((String, String) -> Void)? = nil
+    ) {
         self.transcript = transcript
+        self.seekUnavailableReason = seekUnavailableReason
+        self.onSeekTimestamp = onSeekTimestamp
+        self.onRenameSpeaker = onRenameSpeaker
         _messages = State(initialValue: TranscriptChatMessage.messages(from: transcript))
     }
 
@@ -1878,7 +1958,12 @@ private struct MeetingTranscriptView: View {
                         .padding(GuesliTheme.spacing24)
                 } else {
                     ForEach(messages) { message in
-                        TranscriptChatBubble(message: message)
+                        TranscriptChatBubble(
+                            message: message,
+                            seekUnavailableReason: seekUnavailableReason,
+                            onSeekTimestamp: onSeekTimestamp,
+                            onRenameSpeaker: onRenameSpeaker == nil ? nil : { speakerToRename = $0 }
+                        )
                     }
                 }
             }
@@ -1890,11 +1975,17 @@ private struct MeetingTranscriptView: View {
         .onChange(of: transcript) { _, newTranscript in
             messages = TranscriptChatMessage.messages(from: newTranscript)
         }
+        .speakerRenameAlert(speaker: $speakerToRename) { oldLabel, newName in
+            onRenameSpeaker?(oldLabel, newName)
+        }
     }
 }
 
 struct TranscriptChatBubble: View {
     let message: TranscriptChatMessage
+    let seekUnavailableReason: String?
+    let onSeekTimestamp: (String) -> Void
+    var onRenameSpeaker: ((String) -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .bottom, spacing: GuesliTheme.spacing8) {
@@ -1903,11 +1994,33 @@ struct TranscriptChatBubble: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                if let metadata = metadata {
-                    Text(metadata)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(GuesliTheme.textTertiary)
-                        .textSelection(.enabled)
+                if message.speaker != nil || message.timestamp != nil {
+                    HStack(spacing: 4) {
+                        if let speaker = message.speaker {
+                            // The mic speaker stays "You" so user bubbles keep their alignment.
+                            if message.timestamp != nil, !message.isUser, let onRenameSpeaker {
+                                Button {
+                                    onRenameSpeaker(speaker)
+                                } label: {
+                                    Text(verbatim: Self.displayName(for: speaker))
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundStyle(GuesliTheme.textTertiary)
+                                }
+                                .buttonStyle(.plain)
+                                .help("Rename Speaker…")
+                            } else {
+                                Text(verbatim: Self.displayName(for: speaker))
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(GuesliTheme.textTertiary)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                        if let timestamp = message.timestamp {
+                            TranscriptTimestampButton(timestamp: timestamp, unavailableReason: seekUnavailableReason) {
+                                onSeekTimestamp(timestamp)
+                            }
+                        }
+                    }
                 }
                 Text(message.text)
                     .font(.system(size: 14))
@@ -1932,16 +2045,12 @@ struct TranscriptChatBubble: View {
         .frame(maxWidth: .infinity, alignment: message.isUser ? .trailing : .leading)
     }
 
-    private var metadata: String? {
-        switch (message.speaker, message.timestamp) {
-        case let (speaker?, timestamp?):
-            return "\(speaker) \(timestamp)"
-        case let (speaker?, nil):
-            return speaker
-        case let (nil, timestamp?):
-            return timestamp
-        case (nil, nil):
-            return nil
+    /// System labels match LiveTranscriptView; other names (renamed speakers) stay verbatim.
+    private static func displayName(for speaker: String) -> String {
+        switch speaker {
+        case "You": return String(localized: "You")
+        case "Others": return String(localized: "Others")
+        default: return speaker
         }
     }
 }

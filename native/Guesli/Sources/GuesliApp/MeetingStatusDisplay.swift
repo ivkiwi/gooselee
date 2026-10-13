@@ -5,15 +5,15 @@ extension MeetingStatus {
     var displayLabel: String {
         switch self {
         case .recording:
-            return "Recording"
+            return String(localized: "Recording")
         case .processing:
-            return "Processing"
+            return String(localized: "Processing")
         case .completed:
-            return "Completed"
+            return String(localized: "Completed")
         case .noteOnly:
-            return "Note only"
+            return String(localized: "Note only")
         case .failed:
-            return "Needs attention"
+            return String(localized: "Needs attention")
         }
     }
 

@@ -760,6 +760,59 @@ public final class DictationStore {
         return makeMeetingRecord(statement)
     }
 
+    public func previousMeetingInCalendarSeries(
+        _ occurrence: CalendarOccurrenceReference,
+        before startTime: Date
+    ) throws -> MeetingRecord? {
+        guard let prefix = occurrence.recurringSeriesKeyPrefix else { return nil }
+        let db = try openDatabase()
+        defer { sqlite3_close(db) }
+        return try previousMeetingInCalendarSeries(prefix: prefix, before: formatISODate(startTime), db: db)
+    }
+
+    public func previousMeetingInCalendarSeries(beforeMeetingID id: Int64) throws -> MeetingRecord? {
+        let db = try openDatabase()
+        defer { sqlite3_close(db) }
+        let sql = "SELECT calendar_occurrence_key, start_time FROM meetings WHERE id = ? AND deleted_at IS NULL"
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { throw lastError(db) }
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_int64(statement, 1, id)
+        let result = sqlite3_step(statement)
+        guard result == SQLITE_ROW else {
+            if result != SQLITE_DONE { throw lastError(db) }
+            return nil
+        }
+        guard let keyText = sqlite3_column_text(statement, 0),
+              let startText = sqlite3_column_text(statement, 1),
+              let prefix = CalendarRecurringSeries.keyPrefix(from: String(cString: keyText)) else { return nil }
+        return try previousMeetingInCalendarSeries(prefix: prefix, before: String(cString: startText), db: db)
+    }
+
+    private func previousMeetingInCalendarSeries(prefix: String, before startString: String, db: OpaquePointer?) throws -> MeetingRecord? {
+        let sql = """
+        SELECT \(Self.meetingColumns)
+        FROM meetings
+        WHERE deleted_at IS NULL
+          AND substr(calendar_occurrence_key, 1, length(?)) = ?
+          AND start_time < ?
+        ORDER BY start_time DESC, id DESC
+        LIMIT 1
+        """
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { throw lastError(db) }
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_text(statement, 1, (prefix as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(statement, 2, (prefix as NSString).utf8String, -1, nil)
+        sqlite3_bind_text(statement, 3, (startString as NSString).utf8String, -1, nil)
+        let result = sqlite3_step(statement)
+        guard result == SQLITE_ROW else {
+            if result != SQLITE_DONE { throw lastError(db) }
+            return nil
+        }
+        return makeMeetingRecord(statement)
+    }
+
     @discardableResult
     public func insertMeeting(
         title: String,
@@ -1150,6 +1203,10 @@ public final class DictationStore {
     public func deleteDictation(id: Int64) throws {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
+        try exec("BEGIN IMMEDIATE", db: db)
+        defer {
+            if sqlite3_get_autocommit(db) == 0 { _ = sqlite3_exec(db, "ROLLBACK", nil, nil, nil) }
+        }
         try deleteComputerUseTrace(dictationID: id, db: db)
         let sql = """
         UPDATE dictations
@@ -1177,6 +1234,7 @@ public final class DictationStore {
         guard sqlite3_changes(db) > 0 else {
             throw DictationStoreError.dictationNotFound(id: id)
         }
+        try exec("COMMIT", db: db)
     }
 
     public func deleteMeeting(id: Int64) throws {
@@ -1214,6 +1272,10 @@ public final class DictationStore {
     public func clearDictations() throws {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
+        try exec("BEGIN IMMEDIATE", db: db)
+        defer {
+            if sqlite3_get_autocommit(db) == 0 { _ = sqlite3_exec(db, "ROLLBACK", nil, nil, nil) }
+        }
         try exec("DELETE FROM computer_use_traces", db: db)
         try exec(
             """
@@ -1229,6 +1291,7 @@ public final class DictationStore {
             """,
             db: db
         )
+        try exec("COMMIT", db: db)
     }
 
     public func insertComputerUseTrace(
@@ -1283,6 +1346,10 @@ public final class DictationStore {
     public func clearMeetings() throws {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
+        try exec("BEGIN IMMEDIATE", db: db)
+        defer {
+            if sqlite3_get_autocommit(db) == 0 { _ = sqlite3_exec(db, "ROLLBACK", nil, nil, nil) }
+        }
         try exec("DELETE FROM meeting_resume_snapshots", db: db)
         try exec("DELETE FROM meeting_transcript_checkpoints", db: db)
         try exec(
@@ -1305,12 +1372,13 @@ public final class DictationStore {
             """,
             db: db
         )
+        try exec("COMMIT", db: db)
     }
 
     public func updateMeeting(id: Int64, title: String, formattedNotes: String) throws {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
-        let sql = "UPDATE meetings SET title = ?, formatted_notes = ?, updated_at = ?, sync_dirty = 1 WHERE id = ?"
+        let sql = "UPDATE meetings SET title = ?, formatted_notes = ?, updated_at = ?, sync_dirty = 1 WHERE id = ? AND deleted_at IS NULL"
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             throw lastError(db)
@@ -1323,12 +1391,15 @@ public final class DictationStore {
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw lastError(db)
         }
+        guard sqlite3_changes(db) > 0 else {
+            throw DictationStoreError.meetingNotFound(id: id)
+        }
     }
 
     public func updateMeetingNotes(id: Int64, formattedNotes: String) throws {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
-        let sql = "UPDATE meetings SET formatted_notes = ?, updated_at = ?, sync_dirty = 1 WHERE id = ?"
+        let sql = "UPDATE meetings SET formatted_notes = ?, updated_at = ?, sync_dirty = 1 WHERE id = ? AND deleted_at IS NULL"
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             throw lastError(db)
@@ -1340,6 +1411,9 @@ public final class DictationStore {
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw lastError(db)
         }
+        guard sqlite3_changes(db) > 0 else {
+            throw DictationStoreError.meetingNotFound(id: id)
+        }
     }
 
     public func updateMeetingTranscript(id: Int64, rawTranscript: String) throws {
@@ -1347,7 +1421,7 @@ public final class DictationStore {
         defer { sqlite3_close(db) }
         let manualNotes = try manualNotesForMeeting(id: id, db: db)
         let wordCount = Self.countWords(in: rawTranscript) + Self.countWords(in: manualNotes)
-        let sql = "UPDATE meetings SET raw_transcript = ?, raw_original_transcript = NULL, word_count = ?, updated_at = ?, sync_dirty = 1 WHERE id = ?"
+        let sql = "UPDATE meetings SET raw_transcript = ?, raw_original_transcript = NULL, word_count = ?, updated_at = ?, sync_dirty = 1 WHERE id = ? AND deleted_at IS NULL"
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             throw lastError(db)
@@ -1487,7 +1561,7 @@ public final class DictationStore {
         let sql = """
         UPDATE meetings
         SET end_time = ?, duration_seconds = ?, raw_transcript = ?, raw_original_transcript = NULL, formatted_notes = ?, meeting_status = ?, word_count = ?, updated_at = ?, sync_dirty = 1
-        WHERE id = ?
+        WHERE id = ? AND deleted_at IS NULL
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
@@ -1516,7 +1590,7 @@ public final class DictationStore {
     public func updateMeetingManualNotes(id: Int64, manualNotes: String) throws {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
-        let sql = "UPDATE meetings SET manual_notes = ?, updated_at = ?, sync_dirty = 1 WHERE id = ?"
+        let sql = "UPDATE meetings SET manual_notes = ?, updated_at = ?, sync_dirty = 1 WHERE id = ? AND deleted_at IS NULL"
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             throw lastError(db)
@@ -1538,8 +1612,8 @@ public final class DictationStore {
         defer { sqlite3_close(db) }
         let wordCount = try manualNoteWordCountIfNeeded(for: status, id: id, db: db)
         let sql = wordCount == nil
-            ? "UPDATE meetings SET meeting_status = ?, updated_at = ?, sync_dirty = 1 WHERE id = ?"
-            : "UPDATE meetings SET meeting_status = ?, word_count = ?, updated_at = ?, sync_dirty = 1 WHERE id = ?"
+            ? "UPDATE meetings SET meeting_status = ?, updated_at = ?, sync_dirty = 1 WHERE id = ? AND deleted_at IS NULL"
+            : "UPDATE meetings SET meeting_status = ?, word_count = ?, updated_at = ?, sync_dirty = 1 WHERE id = ? AND deleted_at IS NULL"
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             throw lastError(db)
@@ -1592,7 +1666,7 @@ public final class DictationStore {
         let sql = """
         UPDATE meetings
         SET title = ?, calendar_event_id = ?, start_time = ?, end_time = ?, duration_seconds = ?, raw_transcript = ?, raw_original_transcript = ?, formatted_notes = ?, summary_error = ?, mic_audio_path = ?, system_audio_path = ?, saved_recording_path = ?, meeting_status = ?, word_count = ?, selected_template_id = ?, selected_template_name = ?, selected_template_kind = ?, selected_template_prompt = ?, updated_at = ?, sync_dirty = 1
-        WHERE id = ?
+        WHERE id = ? AND deleted_at IS NULL
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
@@ -1780,7 +1854,7 @@ public final class DictationStore {
             UPDATE meetings
             SET start_time = ?, end_time = ?, duration_seconds = ?, raw_transcript = ?,
                 formatted_notes = ?, meeting_status = ?, word_count = ?, updated_at = ?, sync_dirty = 1
-            WHERE id = ?
+            WHERE id = ? AND deleted_at IS NULL
             """
             var statement: OpaquePointer?
             guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { throw lastError(db) }
@@ -1942,7 +2016,7 @@ public final class DictationStore {
         let sql = """
         UPDATE meetings
         SET title = ?, formatted_notes = ?, summary_error = NULL, selected_template_id = ?, selected_template_name = ?, selected_template_kind = ?, selected_template_prompt = ?, updated_at = ?, sync_dirty = 1
-        WHERE id = ?
+        WHERE id = ? AND deleted_at IS NULL
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
@@ -1960,6 +2034,9 @@ public final class DictationStore {
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw lastError(db)
         }
+        guard sqlite3_changes(db) > 0 else {
+            throw DictationStoreError.meetingNotFound(id: id)
+        }
     }
 
     public func updateMeetingSummaryError(id: Int64, message: String) throws {
@@ -1968,7 +2045,7 @@ public final class DictationStore {
         let sql = """
         UPDATE meetings
         SET summary_error = ?, updated_at = ?, sync_dirty = 1
-        WHERE id = ?
+        WHERE id = ? AND deleted_at IS NULL
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
@@ -2004,7 +2081,7 @@ public final class DictationStore {
         let sql = """
         UPDATE meetings
         SET raw_transcript = ?, raw_original_transcript = ?, formatted_notes = ?, summary_error = ?, meeting_status = ?, word_count = ?, selected_template_id = ?, selected_template_name = ?, selected_template_kind = ?, selected_template_prompt = ?, updated_at = ?, sync_dirty = 1
-        WHERE id = ?
+        WHERE id = ? AND deleted_at IS NULL
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
@@ -2034,7 +2111,7 @@ public final class DictationStore {
     public func updateMeetingTitle(id: Int64, title: String) throws {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
-        let sql = "UPDATE meetings SET title = ?, updated_at = ?, sync_dirty = 1 WHERE id = ?"
+        let sql = "UPDATE meetings SET title = ?, updated_at = ?, sync_dirty = 1 WHERE id = ? AND deleted_at IS NULL"
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             throw lastError(db)
@@ -2046,12 +2123,15 @@ public final class DictationStore {
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw lastError(db)
         }
+        guard sqlite3_changes(db) > 0 else {
+            throw DictationStoreError.meetingNotFound(id: id)
+        }
     }
 
     public func updateMeetingSavedRecordingPath(id: Int64, path: String?) throws {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
-        let sql = "UPDATE meetings SET saved_recording_path = ?, updated_at = ?, sync_dirty = 1 WHERE id = ?"
+        let sql = "UPDATE meetings SET saved_recording_path = ?, updated_at = ?, sync_dirty = 1 WHERE id = ? AND deleted_at IS NULL"
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             throw lastError(db)
@@ -2062,6 +2142,9 @@ public final class DictationStore {
         sqlite3_bind_int64(statement, 3, id)
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw lastError(db)
+        }
+        guard sqlite3_changes(db) > 0 else {
+            throw DictationStoreError.meetingNotFound(id: id)
         }
     }
 
@@ -2245,7 +2328,7 @@ public final class DictationStore {
     public func moveMeeting(id: Int64, toFolder folderID: Int64?) throws {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
-        let sql = "UPDATE meetings SET folder_id = ? WHERE id = ?"
+        let sql = "UPDATE meetings SET folder_id = ? WHERE id = ? AND deleted_at IS NULL"
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             throw lastError(db)
@@ -2259,6 +2342,9 @@ public final class DictationStore {
         sqlite3_bind_int64(statement, 2, id)
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw lastError(db)
+        }
+        guard sqlite3_changes(db) > 0 else {
+            throw DictationStoreError.meetingNotFound(id: id)
         }
     }
 
@@ -2585,6 +2671,7 @@ public final class DictationStore {
         db: OpaquePointer?
     ) throws -> (dictations: Int, meetings: Int) {
         let cutoff = now.addingTimeInterval(-max(retentionInterval, 0)).timeIntervalSince1970
+        try removeSoftDeletedMeetingAudio(db: db)
         try exec("BEGIN IMMEDIATE", db: db)
         do {
             let dictations = try purgeSoftDeletedRows(table: "dictations", deletedBefore: cutoff, db: db)
@@ -2625,6 +2712,7 @@ public final class DictationStore {
               WHERE deleted_at IS NOT NULL
                 AND deleted_at <= ?
                 AND (sync_dirty = 0 OR cloud_record_name IS NULL OR cloud_record_name = '')
+                AND mic_audio_path IS NULL AND system_audio_path IS NULL AND saved_recording_path IS NULL
           )
         """
         var statement: OpaquePointer?
@@ -2640,11 +2728,14 @@ public final class DictationStore {
         deletedBefore cutoff: TimeInterval,
         db: OpaquePointer?
     ) throws -> Int {
+        let audioCondition = table == "meetings"
+            ? "AND mic_audio_path IS NULL AND system_audio_path IS NULL AND saved_recording_path IS NULL" : ""
         let sql = """
         DELETE FROM \(table)
         WHERE deleted_at IS NOT NULL
           AND deleted_at <= ?
           AND (sync_dirty = 0 OR cloud_record_name IS NULL OR cloud_record_name = '')
+          \(audioCondition)
         """
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
@@ -2993,7 +3084,75 @@ public final class DictationStore {
         guard sqlite3_step(statement) == SQLITE_DONE else {
             throw lastError(db)
         }
-        return sqlite3_changes(db) > 0
+        let changed = sqlite3_changes(db) > 0
+        if record.isDeleted { try removeSoftDeletedMeetingAudio(recordName: record.id, db: db) }
+        return changed
+    }
+
+    private func removeSoftDeletedMeetingAudio(recordName: String? = nil, db: OpaquePointer?) throws {
+        try exec("BEGIN IMMEDIATE", db: db)
+        defer {
+            if sqlite3_get_autocommit(db) == 0 { _ = sqlite3_exec(db, "ROLLBACK", nil, nil, nil) }
+        }
+        var sql = """
+        SELECT id, mic_audio_path, system_audio_path, saved_recording_path FROM meetings
+        WHERE deleted_at IS NOT NULL
+          AND (mic_audio_path IS NOT NULL OR system_audio_path IS NOT NULL OR saved_recording_path IS NOT NULL)
+        """
+        if recordName != nil { sql += " AND cloud_record_name = ?" }
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { throw lastError(db) }
+        defer { sqlite3_finalize(statement) }
+        if recordName != nil { bindOptionalText(recordName, at: 1, statement: statement) }
+        var recordings: [(id: Int64, paths: [String])] = []
+        var result = sqlite3_step(statement)
+        while result == SQLITE_ROW {
+            recordings.append((sqlite3_column_int64(statement, 0), (1...3).compactMap { optionalStringColumn(statement, index: Int32($0)) }))
+            result = sqlite3_step(statement)
+        }
+        guard result == SQLITE_DONE else { throw lastError(db) }
+        for recording in recordings {
+            var removedAll = true
+            for path in Set(recording.paths) where !path.isEmpty {
+                let standardizedPath = URL(fileURLWithPath: path).standardizedFileURL.path
+                let referencesSQL = """
+                SELECT 1 FROM meetings WHERE deleted_at IS NULL AND
+                    (mic_audio_path IN (?, ?) OR system_audio_path IN (?, ?) OR saved_recording_path IN (?, ?)) LIMIT 1
+                """
+                var references: OpaquePointer?
+                guard sqlite3_prepare_v2(db, referencesSQL, -1, &references, nil) == SQLITE_OK else { throw lastError(db) }
+                defer { sqlite3_finalize(references) }
+                for index in 1...6 {
+                    let value = index % 2 == 1 ? path : standardizedPath
+                    sqlite3_bind_text(references, Int32(index), (value as NSString).utf8String, -1, nil)
+                }
+                let referenceResult = sqlite3_step(references)
+                guard referenceResult == SQLITE_ROW || referenceResult == SQLITE_DONE else { throw lastError(db) }
+                if referenceResult == SQLITE_ROW { continue }
+                let url = URL(fileURLWithPath: path)
+                do {
+                    let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+                    guard attributes[.type] as? FileAttributeType != .typeDirectory else { removedAll = false; break }
+                    GuesliPaths.preconditionSafeForTestWrite(url)
+                    try FileManager.default.removeItem(at: url)
+                } catch {
+                    let fileError = error as NSError
+                    if fileError.domain == NSCocoaErrorDomain,
+                       [NSFileNoSuchFileError, NSFileReadNoSuchFileError].contains(fileError.code) { continue }
+                    removedAll = false
+                    diagnosticsLogger?("[db] could not remove audio for deleted meeting \(recording.id)")
+                    break
+                }
+            }
+            guard removedAll else { continue }
+            var clearPaths: OpaquePointer?
+            let clearSQL = "UPDATE meetings SET mic_audio_path = NULL, system_audio_path = NULL, saved_recording_path = NULL WHERE id = ? AND deleted_at IS NOT NULL"
+            guard sqlite3_prepare_v2(db, clearSQL, -1, &clearPaths, nil) == SQLITE_OK else { throw lastError(db) }
+            defer { sqlite3_finalize(clearPaths) }
+            sqlite3_bind_int64(clearPaths, 1, recording.id)
+            guard sqlite3_step(clearPaths) == SQLITE_DONE else { throw lastError(db) }
+        }
+        try exec("COMMIT", db: db)
     }
 
     private func localUpdatedAt(table: String, recordName: String, db: OpaquePointer?) throws -> Double? {
@@ -3084,7 +3243,7 @@ public final class DictationStore {
         )
     }
 
-    private func openDatabase() throws -> OpaquePointer? {
+    func openDatabase() throws -> OpaquePointer? {
         GuesliPaths.preconditionSafeForTestWrite(databaseURL)
         try FileManager.default.createDirectory(
             at: databaseURL.deletingLastPathComponent(),
@@ -3094,6 +3253,7 @@ public final class DictationStore {
         if sqlite3_open(databaseURL.path, &db) != SQLITE_OK {
             throw lastError(db)
         }
+        sqlite3_busy_timeout(db, 5_000)
         if sqlite3_exec(db, "PRAGMA foreign_keys=ON", nil, nil, nil) != SQLITE_OK {
             throw lastError(db)
         }
@@ -3215,7 +3375,7 @@ public final class DictationStore {
 
     private func dictationStreaks(db: OpaquePointer?) throws -> (current: Int, longest: Int) {
         let sql = """
-        SELECT DISTINCT date(timestamp) AS used_day
+        SELECT DISTINCT date(timestamp, 'localtime') AS used_day
         FROM dictations
         WHERE deleted_at IS NULL
         ORDER BY used_day ASC
@@ -3227,10 +3387,15 @@ public final class DictationStore {
         defer { sqlite3_finalize(statement) }
 
         var days: [Date] = []
-        let formatter = ISO8601DateFormatter()
+        // Streaks are shown per local day, so group and parse days in the local time zone.
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd"
         while sqlite3_step(statement) == SQLITE_ROW {
             let raw = stringColumn(statement, index: 0)
-            if let date = formatter.date(from: "\(raw)T00:00:00Z") {
+            if let date = formatter.date(from: raw) {
                 days.append(date)
             }
         }

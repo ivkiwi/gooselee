@@ -50,10 +50,10 @@ enum NemotronRNNTError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notLoaded: return "Nemotron models not loaded."
-        case .downloadFailed(let m): return "Download failed: \(m)"
-        case .preprocessingFailed(let m): return "Preprocessing failed: \(m)"
-        case .decodingFailed(let m): return "Decoding failed: \(m)"
+        case .notLoaded: return String(localized: "Nemotron models not loaded.")
+        case .downloadFailed(let m): return String(localized: "Download failed: \(m)")
+        case .preprocessingFailed(let m): return String(localized: "Preprocessing failed: \(m)")
+        case .decodingFailed(let m): return String(localized: "Decoding failed: \(m)")
         }
     }
 }

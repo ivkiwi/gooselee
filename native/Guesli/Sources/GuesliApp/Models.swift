@@ -15,7 +15,7 @@ struct BackendOption: Equatable {
         model: "FluidInference/parakeet-tdt-0.6b-v3-coreml",
         label: "Parakeet v3",
         sizeLabel: "~450 MB",
-        description: "Multilingual, 25 languages. Runs on Apple Neural Engine.",
+        description: String(localized: "Multilingual, 25 languages. Runs on Apple Neural Engine."),
         recommended: true
     )
 
@@ -24,7 +24,7 @@ struct BackendOption: Equatable {
         model: "FluidInference/Nemotron-3.5-ASR-Streaming-Multilingual-0.6b-CoreML",
         label: "Nemotron 3.5 Multilingual",
         sizeLabel: "~665 MB",
-        description: "NVIDIA Nemotron 3.5 streaming RNNT via FluidInference. Multilingual incl. Hindi, Chinese, Japanese + 100+ locales (auto-detect). Native punctuation. Hold-to-talk or double-tap handsfree (live text). Append-only — no corrections.",
+        description: String(localized: "NVIDIA Nemotron 3.5 streaming RNNT via FluidInference. Multilingual incl. Hindi, Chinese, Japanese + 100+ locales (auto-detect). Native punctuation. Hold-to-talk or double-tap handsfree (live text). Append-only — no corrections."),
         recommended: false
     )
 
@@ -33,7 +33,7 @@ struct BackendOption: Equatable {
         model: "istupakov/gigaam-v3-onnx:e2e-ctc-int8",
         label: "GigaAM v3 E2E CTC",
         sizeLabel: ONNXGigaAMModelStore.downloadedModelSizeLabel,
-        description: "Russian-first offline ASR via ONNX INT8 with CoreML GPU acceleration. Runs locally on Apple Silicon; no Python server or cloud.",
+        description: String(localized: "Russian-first offline ASR via ONNX INT8 with CoreML GPU acceleration. Runs locally on Apple Silicon; no Python server or cloud."),
         recommended: true
     )
 
@@ -492,7 +492,7 @@ struct PostProcessorOption: Identifiable, Equatable {
         id: "qwen3-postproc-v2",
         label: "Post-Proc v2 (Finetuned)",
         sizeLabel: "~390 MB",
-        description: "Fine-tuned on Guesli dictation data. Best for filler removal, deletion cues, and spoken list formatting.",
+        description: String(localized: "Fine-tuned on Guesli dictation data. Best for filler removal, deletion cues, and spoken list formatting."),
         downloadURL: URL(string: "https://huggingface.co/phequals/qwen3-postproc-v2/resolve/main/qwen3-postproc-v2-q4_k_m.gguf")!,
         filename: "qwen3-postproc-v2-q4_k_m.gguf"
     )
@@ -502,7 +502,7 @@ struct PostProcessorOption: Identifiable, Equatable {
         id: "qwen35-0.8b",
         label: "Qwen3.5 0.8B",
         sizeLabel: "~533 MB",
-        description: "Vanilla Qwen3.5-0.8B. Good for typo correction and filler removal. Spoken list formatting is unreliable.",
+        description: String(localized: "Vanilla Qwen3.5-0.8B. Good for typo correction and filler removal. Spoken list formatting is unreliable."),
         downloadURL: URL(string: "https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_K_M.gguf")!,
         filename: "Qwen3.5-0.8B-Q4_K_M.gguf"
     )
@@ -512,7 +512,7 @@ struct PostProcessorOption: Identifiable, Equatable {
         id: "qwen35-postproc-v3",
         label: "Post-Proc v3 (Finetuned)",
         sizeLabel: "~505 MB",
-        description: "Fine-tuned Qwen3.5-0.8B on Guesli dictation data. Improved over v2 on filler removal, deletion cues, and spoken list formatting.",
+        description: String(localized: "Fine-tuned Qwen3.5-0.8B on Guesli dictation data. Improved over v2 on filler removal, deletion cues, and spoken list formatting."),
         downloadURL: URL(string: "https://huggingface.co/phequals/qwen35-postproc-v3-gguf/resolve/main/qwen35-postproc-v3-Q4_K_M.gguf")!,
         filename: "qwen35-postproc-v3-Q4_K_M.gguf"
     )
@@ -580,6 +580,11 @@ struct TranscriptCleanupPromptPreset: Identifiable, Equatable, Sendable {
     let name: String
     let prompt: String
     let isCustom: Bool
+
+    /// Built-in names are translated only for display; custom names stay verbatim.
+    var displayName: String {
+        isCustom ? name : String(localized: String.LocalizationValue(name))
+    }
 }
 
 struct CustomTranscriptCleanupPrompt: Codable, Equatable, Identifiable, Sendable {
@@ -825,6 +830,11 @@ struct HotkeyConfig: Codable, Equatable {
         return Self.symbolLabel(for: keyCode) ?? label
     }
 
+    /// `label` is persisted in English; translate it only when shown.
+    var localizedLabel: String {
+        String(localized: String.LocalizationValue(label))
+    }
+
     static func label(for keyCode: UInt16) -> String? {
         switch keyCode {
         case 55: return "Left Cmd"
@@ -902,6 +912,12 @@ struct HotkeyConfig: Codable, Equatable {
         label: "⌘⇧R",
         combinationModifiers: UInt(NSEvent.ModifierFlags([.command, .shift]).rawValue),
         combinationKeyCode: 15
+    )
+    static let meetingBookmarkDefault = HotkeyConfig(
+        keyCode: UInt16.max,
+        label: "⌃⌥B",
+        combinationModifiers: UInt(NSEvent.ModifierFlags([.control, .option]).rawValue),
+        combinationKeyCode: 11
     )
 
 }
@@ -1079,7 +1095,10 @@ struct AppConfig: Codable {
     var autoExportMarkdownFolderPath: String = ""
     var autoExportMarkdownContent: String = MeetingExportContent.notes.rawValue
     var autoExportFileFormat: String = MeetingAutoExportFileFormat.markdown.rawValue
-    var iCloudSyncEnabled: Bool = false
+    var meetingBookmarkHotkey: HotkeyConfig = .meetingBookmarkDefault
+    var enableMeetingBookmarkHotkey: Bool = false
+    var enableVoiceCommands: Bool = true
+    var showMeetingPreparationNotifications: Bool = true
 
     enum CodingKeys: String, CodingKey {
         case dictationHotkey = "dictation_hotkey"
@@ -1176,7 +1195,10 @@ struct AppConfig: Codable {
         case autoExportMarkdownFolderPath = "auto_export_markdown_folder_path"
         case autoExportMarkdownContent = "auto_export_markdown_content"
         case autoExportFileFormat = "auto_export_file_format"
-        case iCloudSyncEnabled = "icloud_sync_enabled"
+        case meetingBookmarkHotkey = "meeting_bookmark_hotkey"
+        case enableMeetingBookmarkHotkey = "enable_meeting_bookmark_hotkey"
+        case enableVoiceCommands = "enable_voice_commands"
+        case showMeetingPreparationNotifications = "show_meeting_preparation_notifications"
     }
 
     init() {}
@@ -1228,7 +1250,6 @@ struct AppConfig: Codable {
             .resolved(try? c.decode(String.self, forKey: .meetingRecordingFileFormat))
             .rawValue
         darkMode = (try? c.decode(Bool.self, forKey: .darkMode)) ?? defaults.darkMode
-        iCloudSyncEnabled = (try? c.decode(Bool.self, forKey: .iCloudSyncEnabled)) ?? defaults.iCloudSyncEnabled
         enableDoubleTapDictation = (try? c.decode(Bool.self, forKey: .enableDoubleTapDictation)) ?? defaults.enableDoubleTapDictation
         pasteShortcut = (try? c.decode(PasteShortcut.self, forKey: .pasteShortcut)) ?? defaults.pasteShortcut
         hotkeyTriggerThresholdMS = HotkeyTriggerTiming.clampedMilliseconds(
@@ -1344,6 +1365,10 @@ struct AppConfig: Codable {
         autoExportMarkdownContent = MeetingExportContent(rawValue: decodedAutoExportMarkdownContent)?.rawValue ?? defaults.autoExportMarkdownContent
         let decodedAutoExportFileFormat = (try? c.decode(String.self, forKey: .autoExportFileFormat)) ?? defaults.autoExportFileFormat
         autoExportFileFormat = MeetingAutoExportFileFormat(rawValue: decodedAutoExportFileFormat)?.rawValue ?? defaults.autoExportFileFormat
+        meetingBookmarkHotkey = (try? c.decode(HotkeyConfig.self, forKey: .meetingBookmarkHotkey)) ?? defaults.meetingBookmarkHotkey
+        enableMeetingBookmarkHotkey = (try? c.decode(Bool.self, forKey: .enableMeetingBookmarkHotkey)) ?? defaults.enableMeetingBookmarkHotkey
+        enableVoiceCommands = (try? c.decode(Bool.self, forKey: .enableVoiceCommands)) ?? defaults.enableVoiceCommands
+        showMeetingPreparationNotifications = (try? c.decode(Bool.self, forKey: .showMeetingPreparationNotifications)) ?? defaults.showMeetingPreparationNotifications
     }
 
     var resolvedNemotron35Language: Nemotron35Language {

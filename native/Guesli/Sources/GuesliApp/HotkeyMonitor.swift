@@ -34,6 +34,18 @@ final class HotkeyMonitor {
     var onToggleStop: (() -> Void)?
     var targetKeyCode: UInt16 = 55
     var doubleTapEnabled: Bool = true
+    var voiceCommandsEnabled: Bool = false
+    var onVoiceCommandModeChanged: (() -> Void)?
+    /// One-shot combinations (meeting bookmarks) also fire while a text field has focus.
+    var handlesCombinationWhileEditingText = false
+    private var voiceCommandMode = VoiceCommandMode()
+    private var combinationShiftDown = false
+
+    var isVoiceCommand: Bool { voiceCommandMode.isCommand }
+
+    private var commandsAvailable: Bool {
+        voiceCommandsEnabled && VoiceCommandMode.supportsHotkey(keyCode: targetKeyCode, requiredModifiers: combinationModifiers)
+    }
 
     // Combination mode (e.g. Cmd+Shift+R)
     var combinationModifiers: NSEvent.ModifierFlags?
@@ -280,6 +292,7 @@ final class HotkeyMonitor {
         flags: NSEvent.ModifierFlags,
         isRepeat: Bool
     ) -> Bool {
+        combinationShiftDown = flags.contains(.shift)
         if type == .keyDown && keyCode == 53 {
             if toggleActive {
                 toggleActive = false
@@ -298,7 +311,7 @@ final class HotkeyMonitor {
               let targetKey = combinationKeyCode else { return false }
 
         if type == .flagsChanged, combinationKeyDown,
-           HotkeyConfig.supportedCombinationModifiers(from: flags) != targetMods {
+           !VoiceCommandMode.matchesCombination(flags, required: targetMods, commandsEnabled: commandsAvailable) {
             cancelCombinationPending(notify: false)
             return true
         }
@@ -311,7 +324,7 @@ final class HotkeyMonitor {
         guard type == .keyDown,
               !isRepeat,
               keyCode == targetKey,
-              HotkeyConfig.supportedCombinationModifiers(from: flags) == targetMods
+              VoiceCommandMode.matchesCombination(flags, required: targetMods, commandsEnabled: commandsAvailable)
         else { return false }
 
         combinationKeyDown = true
@@ -339,6 +352,7 @@ final class HotkeyMonitor {
         } else {
             fputs("[hotkey] combination → toggle start\n", stderr)
             toggleActive = true
+            voiceCommandMode.begin(enabled: commandsAvailable, shiftDown: combinationShiftDown, handsFree: true)
             onToggleStart?()
         }
     }
@@ -370,6 +384,7 @@ final class HotkeyMonitor {
     ) -> Bool {
         let isTextEditing = firstResponder is NSTextView || firstResponder is NSTextField
         guard isTextEditing else { return true }
+        if handlesCombinationWhileEditingText && isCombinationMode { return true }
 
         // Text editing owns fresh hotkey starts, but an already-armed hotkey
         // session must still receive key-up/Escape cleanup events.
@@ -381,6 +396,12 @@ final class HotkeyMonitor {
     }
 
     func handleFlagsChanged(keyCode: UInt16, flags: NSEvent.ModifierFlags) {
+        if commandsAvailable, keyCode != targetKeyCode, keyCode == 56 || keyCode == 60 {
+            let wasCommand = isVoiceCommand
+            voiceCommandMode.observeShift(enabled: commandsAvailable, shiftDown: flags.contains(.shift), hotkeyHeld: targetKeyDown)
+            if !wasCommand && isVoiceCommand { onVoiceCommandModeChanged?() }
+            return
+        }
         if keyCode == targetKeyCode {
             let isDown = isModifierDown(keyCode: targetKeyCode, flags: flags)
             if isDown {
@@ -411,10 +432,12 @@ final class HotkeyMonitor {
                         lastTapUpTime = nil
                         toggleActive = true
                         cancelTimers()
+                        voiceCommandMode.begin(enabled: commandsAvailable, shiftDown: flags.contains(.shift), handsFree: true)
                         onToggleStart?()
                         return
                     }
 
+                    voiceCommandMode.begin(enabled: commandsAvailable, shiftDown: flags.contains(.shift), handsFree: false)
                     if let onArm {
                         armed = true
                         onArm()

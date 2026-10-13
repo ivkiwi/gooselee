@@ -92,6 +92,8 @@ private final class HoverIndicatorView: NSView {
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
+        // AppKit updates .inVisibleRect without losing entered/exited state.
+        if owner?.usesIdleHoverTracking == true, trackingAreaRef != nil { return }
         if let trackingAreaRef {
             removeTrackingArea(trackingAreaRef)
         }
@@ -133,8 +135,8 @@ private final class HoverIndicatorView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        owner?.isDragging = false
         if didDrag {
-            owner?.isDragging = false
             owner?.savePosition()
         } else if event.modifierFlags.contains(.option) {
             owner?.handleOptionClick()
@@ -162,6 +164,7 @@ final class FloatingIndicatorController: NSObject {
     private var hoverExitWorkItem: DispatchWorkItem?
     private var dockFrameCache: (screenFrame: NSRect, visibleFrame: NSRect, dockFrame: NSRect)?
     private let configStore: ConfigStore
+    private let pointerLocation: () -> NSPoint
     private var isMeetingRecording = false
     private var isMeetingRecordingPaused = false
     private var glassView: NSVisualEffectView?
@@ -182,9 +185,11 @@ final class FloatingIndicatorController: NSObject {
     var onCancelToggleDictation: (() -> Void)?
     var onPositionSaved: ((CGPoint) -> Void)?
     var onOpenMeetingNotes: (() -> Void)?
+    var onAddMeetingBookmark: (() -> Void)?
     var isToggleDictation = false
+    private var isVoiceCommand = false
     private var stopLayer: CALayer?
-    private var transcribingTitle = "Transcribing"
+    private var transcribingTitle = String(localized: "Transcribing")
     private var loadingSpinner: NSProgressIndicator?
     private var isShowingLoading = false
     private var isMeetingTranscriptManuallyDismissed = false
@@ -197,6 +202,9 @@ final class FloatingIndicatorController: NSObject {
         },
         onDismiss: { [weak self] in
             self?.dismissMeetingTranscript()
+        },
+        onBookmark: { [weak self] in
+            self?.onAddMeetingBookmark?()
         }
     )
 
@@ -205,8 +213,9 @@ final class FloatingIndicatorController: NSObject {
         case waiting
     }
 
-    init(configStore: ConfigStore) {
+    init(configStore: ConfigStore, pointerLocation: @escaping () -> NSPoint = { NSEvent.mouseLocation }) {
         self.configStore = configStore
+        self.pointerLocation = pointerLocation
         super.init()
     }
 
@@ -324,6 +333,12 @@ final class FloatingIndicatorController: NSObject {
         onPositionSaved?(center)
     }
 
+    func setVoiceCommand(_ active: Bool, config: AppConfig) {
+        guard isVoiceCommand != active else { return }
+        isVoiceCommand = active
+        setState(state, config: config)
+    }
+
     func setToggleDictation(_ active: Bool, config: AppConfig) {
         isToggleDictation = active
         if active {
@@ -337,6 +352,7 @@ final class FloatingIndicatorController: NSObject {
     func setMeetingRecording(_ recording: Bool, config: AppConfig) {
         isMeetingRecording = recording
         recordingWaveformMode = .level
+        meetingTranscriptPanel.setRecording(recording)
         if !recording {
             isMeetingRecordingPaused = false
             isMeetingTranscriptManuallyDismissed = false
@@ -393,6 +409,10 @@ final class FloatingIndicatorController: NSObject {
         )
     }
 
+    func configureMeetingQuickActions(appState: AppState) {
+        meetingTranscriptPanel.configureQuickActions(appState: appState)
+    }
+
     func setTranscribingTitle(_ title: String, config: AppConfig) {
         transcribingTitle = title
         guard state == .transcribing else { return }
@@ -404,12 +424,13 @@ final class FloatingIndicatorController: NSObject {
         let previousHover = isHovered
         self.state = state
         if state != .transcribing {
-            transcribingTitle = "Transcribing"
+            transcribingTitle = String(localized: "Transcribing")
         }
         if state != .recording {
             recordingWaveformMode = .level
         }
         if state != .idle {
+            hoverExitWorkItem?.cancel()
             isHovered = false
         }
         if !config.showFloatingIndicator && state == .idle {
@@ -420,6 +441,8 @@ final class FloatingIndicatorController: NSObject {
             createPanel(config: config)
         }
         guard let panel, let contentView, let iconLabel, let textLabel else { return }
+
+        contentView.setAccessibilityLabel(isVoiceCommand ? String(localized: "Voice command") : nil)
 
         let preservesWaveformAcrossTransition = previousState == .preparing && state == .recording
         if (previousState == .recording || previousState == .preparing)
@@ -496,6 +519,9 @@ final class FloatingIndicatorController: NSObject {
 
             // Apply glass state last so it can override iconLabel visibility set above.
             applyGlassState(state, frameSize: targetFrame.size)
+        } completionHandler: { [weak self] in
+            guard let self, self.panel === panel else { return }
+            self.reconcileIdleHover()
         }
 
         // Manage SF Symbol effects — stop everything first, then start for the new state.
@@ -755,6 +781,16 @@ final class FloatingIndicatorController: NSObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.14, execute: workItem)
     }
 
+    fileprivate var usesIdleHoverTracking: Bool {
+        state == .idle && !isShowingLoading
+    }
+
+    private func reconcileIdleHover() {
+        guard usesIdleHoverTracking, isHovered, !isDragging,
+              panel?.isVisible == true, !pointerIsInsidePanel() else { return }
+        setHovered(false)
+    }
+
     func closeIfIdle() {
         if state == .idle, !isShowingLoading { close() }
     }
@@ -763,6 +799,8 @@ final class FloatingIndicatorController: NSObject {
         stopWaveformAnimation()
         hoverExitWorkItem?.cancel()
         hoverExitWorkItem = nil
+        isHovered = false
+        isDragging = false
         panel?.close()
         panel = nil
         meetingTranscriptPanel.close()
@@ -967,7 +1005,7 @@ final class FloatingIndicatorController: NSObject {
             tintHex = "1e1e2e"
         case .recording:
             tintAlpha = 0.85
-            tintHex = themeHex
+            tintHex = isVoiceCommand && !isMeetingRecording ? "30659B" : themeHex
         case .transcribing:
             tintAlpha = 0.62
             tintHex = "1e1e2e"
@@ -1434,7 +1472,7 @@ final class FloatingIndicatorController: NSObject {
         case .preparing: size = NSSize(width: 76, height: 22)
         case .recording: size = NSSize(width: 76, height: 22)
         case .transcribing:
-            size = Self.transcribingPillSize(title: transcribingTitle, screenWidth: screen.width)
+            size = Self.transcribingPillSize(title: isVoiceCommand ? String(localized: "Running command") : transcribingTitle, screenWidth: screen.width)
         }
 
         // Use the pill's current on-screen center if it exists, so state
@@ -1543,7 +1581,7 @@ final class FloatingIndicatorController: NSObject {
                 .clear,
                 .colorWith(hex: 0xFFFFFF, alpha: isHovered ? 0.14 : 0.22),
                 "",
-                isHovered ? "Hold \(config.dictationHotkey.label) to dictate" : "",
+                isHovered ? String(localized: "Hold \(config.dictationHotkey.localizedLabel) to dictate") : "",
                 .colorWith(hex: 0xFFFFFF, alpha: 0.75),
                 .colorWith(hex: 0xFFFFFF, alpha: 0.75),
                 isHovered ? 1.0 : 0.85
@@ -1560,7 +1598,7 @@ final class FloatingIndicatorController: NSObject {
         case .transcribing:
             return (
                 .clear, .colorWith(hex: 0xFFFFFF, alpha: 0.16),
-                "", transcribingTitle,
+                "", isVoiceCommand ? String(localized: "Running command") : transcribingTitle,
                 .white, .colorWith(hex: 0xFFFFFF, alpha: 0.82), 1.0
             )
         }
@@ -1668,7 +1706,7 @@ final class FloatingIndicatorController: NSObject {
 
     private func pointerIsInsidePanel() -> Bool {
         guard let panel else { return false }
-        return panel.frame.contains(NSEvent.mouseLocation)
+        return panel.frame.contains(pointerLocation())
     }
 }
 

@@ -584,7 +584,7 @@ enum MeetingSummaryClient {
         )
     }
 
-    private static func summarizeOnce(
+    static func summarizeOnce(
         transcript: String,
         meetingTitle: String,
         config: AppConfig,
@@ -683,6 +683,9 @@ enum MeetingSummaryClient {
     }
 
     static func summaryInstructions(for template: MeetingTemplateSnapshot, existingNotes: String? = nil, manualNotes: String? = nil) -> String {
+        if template.id == MeetingFollowUpEmail.template.id {
+            return template.prompt
+        }
         let notePreservationInstructions: String
         let hasManualNotes = !(manualNotes?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
         if let existingNotes,
@@ -1077,7 +1080,7 @@ enum MeetingSummaryClient {
             }
             throw MeetingSummaryError.emptyResponse(backend: "ChatGPT")
         } catch {
-            DiagnosticsLog.write("[summary] ChatGPT summarization failed: \(error.localizedDescription)")
+            DiagnosticsLog.write("[summary] ChatGPT summarization failed")
             throw summaryRequestError(backend: "ChatGPT", error: error)
         }
     }
@@ -1495,7 +1498,7 @@ enum MeetingSummaryClient {
             var errorData = Data()
             for try await byte in bytes { errorData.append(byte) }
             let message = extractErrorMessage(from: errorData) ?? String(data: errorData, encoding: .utf8) ?? "(unknown)"
-            DiagnosticsLog.write("[summary] ChatGPT WHAM: HTTP \(httpStatus): \(String(message.prefix(500)))")
+            DiagnosticsLog.write("[summary] ChatGPT WHAM: HTTP \(httpStatus)")
             throw MeetingSummaryError.backendFailed(backend: "ChatGPT", statusCode: httpStatus, message: message)
         }
 

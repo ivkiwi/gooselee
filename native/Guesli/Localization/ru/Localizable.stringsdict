@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>%lld dictations</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>one</key>
+			<string>%lld диктовка</string>
+			<key>few</key>
+			<string>%lld диктовки</string>
+			<key>many</key>
+			<string>%lld диктовок</string>
+			<key>other</key>
+			<string>%lld диктовки</string>
+		</dict>
+	</dict>
+	<key>%lld meetings</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>one</key>
+			<string>%lld встреча</string>
+			<key>few</key>
+			<string>%lld встречи</string>
+			<key>many</key>
+			<string>%lld встреч</string>
+			<key>other</key>
+			<string>%lld встречи</string>
+		</dict>
+	</dict>
+	<key>%@  •  %@  •  %lld words</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%1$@  •  %2$@  •  %3$#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>one</key>
+			<string>%3$lld слово</string>
+			<key>few</key>
+			<string>%3$lld слова</string>
+			<key>many</key>
+			<string>%3$lld слов</string>
+			<key>other</key>
+			<string>%3$lld слова</string>
+		</dict>
+	</dict>
+	<key>%lld retries</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>one</key>
+			<string>%lld повтор</string>
+			<key>few</key>
+			<string>%lld повтора</string>
+			<key>many</key>
+			<string>%lld повторов</string>
+			<key>other</key>
+			<string>%lld повтора</string>
+		</dict>
+	</dict>
+	<key>Exported %lld dictionary entries.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>one</key>
+			<string>Экспортирована %lld запись.</string>
+			<key>few</key>
+			<string>Экспортированы %lld записи.</string>
+			<key>many</key>
+			<string>Экспортировано %lld записей.</string>
+			<key>other</key>
+			<string>Экспортировано %lld записи.</string>
+		</dict>
+	</dict>
+</dict>
+</plist>

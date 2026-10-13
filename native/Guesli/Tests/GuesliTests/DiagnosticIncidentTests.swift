@@ -104,7 +104,7 @@ struct DiagnosticIncidentTests {
 
         let incident = DiagnosticIncident(
             kind: .meetingProcessingFailed,
-            stage: "live_gigaam_collector_drain_timeout",
+            stage: "live_collector_drain_timeout",
             backend: "gigaam_v3",
             model: "kruatech/gigaam-v3-coreml",
             error: error,
@@ -192,7 +192,7 @@ struct DiagnosticIncidentTests {
             "nemotron_streaming_start",
             "nemotron_streaming_runtime",
             "standard_dictation_transcribe",
-            "live_gigaam_collector_drain_timeout",
+            "live_collector_drain_timeout",
         ]
 
         for stage in expectedStages {

@@ -284,16 +284,25 @@ final class StreamingMicRecorder: StreamingDictationRecording, StreamingDictatio
                 return max(-160, min(0, rawDB))
             }()
 
-            let shouldEmit = self.lock.withLock { state -> Bool in
-                guard !state.isPaused else {
+            let (shouldEmit, writeFailure) = self.lock.withLock { state -> (Bool, Error?) in
+                guard !state.isPaused, let fileHandle = state.fileHandle else {
                     state.latestPowerDB = -160
-                    return false
+                    return (false, nil)
                 }
-                state.fileHandle?.write(pcmData)
+                do {
+                    try RecordingWAVFileIO.append(pcmData, to: fileHandle, bytesWritten: state.bytesWritten)
+                } catch {
+                    if let count = RecordingWAVFileIO.finalizePreservingFile(fileHandle) {
+                        state.bytesWritten = count
+                    }
+                    state.fileHandle = nil
+                    return (false, error)
+                }
                 state.bytesWritten += pcmData.count
                 state.latestPowerDB = powerDB
-                return true
+                return (true, nil)
             }
+            if let writeFailure { self.reportRecordingFailure(writeFailure, recordingID: recordingID) }
             guard shouldEmit else { return }
 
             self.onPCMSamples?(int16Samples)
@@ -546,17 +555,17 @@ final class StreamingMicRecorder: StreamingDictationRecording, StreamingDictatio
             ])
         }
         // Write placeholder WAV header (will be finalized on close)
-        handle.write(WavWriter.header(dataSize: 0))
+        try handle.write(contentsOf: WavWriter.header(dataSize: 0))
         return FileState(fileHandle: handle, fileURL: url, bytesWritten: 0)
     }
 
     private func finalizeFile(_ state: FileState) -> URL? {
-        guard let handle = state.fileHandle, let url = state.fileURL else { return nil }
+        guard let url = state.fileURL else { return nil }
 
         // Rewrite WAV header with correct data size
-        handle.seek(toFileOffset: 0)
-        handle.write(WavWriter.header(dataSize: UInt32(state.bytesWritten)))
-        handle.closeFile()
+        if let handle = state.fileHandle {
+            RecordingWAVFileIO.finalizePreservingFile(handle)
+        }
 
         if state.bytesWritten == 0 {
             try? FileManager.default.removeItem(at: url)

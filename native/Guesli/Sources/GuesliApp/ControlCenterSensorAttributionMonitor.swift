@@ -53,8 +53,8 @@ final class ControlCenterSensorAttributionMonitor {
             self?.consume(text)
         }
 
-        process.terminationHandler = { [weak self] _ in
-            self?.clearProcess()
+        process.terminationHandler = { [weak self] terminatedProcess in
+            self?.clearProcess(terminatedProcess)
         }
 
         do {
@@ -123,12 +123,14 @@ final class ControlCenterSensorAttributionMonitor {
         }
     }
 
-    private func clearProcess() {
+    /// A late handler from a stopped stream must not drop the stream started after it.
+    private func clearProcess(_ terminatedProcess: Process) {
         lock.lock()
+        defer { lock.unlock() }
+        guard process === terminatedProcess else { return }
         process = nil
         outputPipe = nil
         lineBuffer = ""
-        lock.unlock()
     }
 
     private func logSnapshot(_ snapshot: SensorAttributionSnapshot) {

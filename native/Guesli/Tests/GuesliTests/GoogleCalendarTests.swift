@@ -61,8 +61,8 @@ struct GoogleCalendarTests {
         #expect(verified == true)
     }
 
-    @Test("Google Calendar token store writes backup and soft-delete marker")
-    func googleCalendarTokenStoreBackupAndSoftDelete() throws {
+    @Test("Google Calendar sign-out removes all token files")
+    func googleCalendarTokenStoreSignOutDeletesTokens() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("google-calendar-auth-test-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -83,7 +83,7 @@ struct GoogleCalendarTests {
         #expect(!FileManager.default.fileExists(atPath: store.primaryURL.path))
         #expect(!FileManager.default.fileExists(atPath: store.backupURL.path))
         #expect(store.signedOutURL.lastPathComponent == "google-calendar-auth.signed-out.json")
-        #expect(FileManager.default.fileExists(atPath: store.signedOutURL.path))
+        #expect(!FileManager.default.fileExists(atPath: store.signedOutURL.path))
     }
 
     // MARK: - Event JSON parsing
@@ -290,6 +290,31 @@ struct GoogleCalendarTests {
 
         let merged = GoogleCalendarClient.mergeEvents(eventKit: ek, google: google)
         #expect(merged.count == 2)
+    }
+
+    @Test("two Google events with the same title and time stay separate")
+    func keepsDistinctGoogleEvents() {
+        let google = [
+            UnifiedCalendarEvent(id: "g1", title: "Standup", startDate: date("2026-04-10T09:00:00Z"), endDate: date("2026-04-10T09:15:00Z"), isAllDay: false, source: .googleCalendar, calendarID: "team-a"),
+            UnifiedCalendarEvent(id: "g2", title: "Standup", startDate: date("2026-04-10T09:02:00Z"), endDate: date("2026-04-10T09:15:00Z"), isAllDay: false, source: .googleCalendar, calendarID: "team-b"),
+        ]
+
+        let merged = GoogleCalendarClient.mergeEvents(eventKit: [], google: google)
+        #expect(merged.map(\.id) == ["g1", "g2"])
+    }
+
+    @Test("events with different meeting rooms are not deduplicated")
+    func keepsDifferentMeetingRooms() {
+        let ek = [
+            UnifiedCalendarEvent(id: "ek1", title: "Standup", startDate: date("2026-04-10T09:00:00Z"), endDate: date("2026-04-10T09:15:00Z"), isAllDay: false, source: .eventKit, meetingURL: URL(string: "https://meet.google.com/abc-defg-hij")),
+        ]
+        let google = [
+            UnifiedCalendarEvent(id: "g1", title: "Standup", startDate: date("2026-04-10T09:00:00Z"), endDate: date("2026-04-10T09:15:00Z"), isAllDay: false, source: .googleCalendar, meetingURL: URL(string: "https://meet.google.com/xyz-wxyz-xyz")),
+            UnifiedCalendarEvent(id: "g2", title: "Standup", startDate: date("2026-04-10T09:01:00Z"), endDate: date("2026-04-10T09:15:00Z"), isAllDay: false, source: .googleCalendar, meetingURL: URL(string: "https://meet.google.com/abc-defg-hij?authuser=0")),
+        ]
+
+        let merged = GoogleCalendarClient.mergeEvents(eventKit: ek, google: google)
+        #expect(Set(merged.map(\.id)) == ["ek1", "g1"])
     }
 
     @Test("merged events are sorted by start date")

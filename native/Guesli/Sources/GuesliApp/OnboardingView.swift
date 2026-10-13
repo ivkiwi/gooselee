@@ -31,7 +31,7 @@ func onboardingInitialDownloadProgressStatusChoice(
     if alreadyDownloaded {
         return OnboardingInitialDownloadProgressStatusChoice(
             progress: nil,
-            status: "Warming up \(backend.label)..."
+            status: String(localized: "Warming up \(backend.label)...")
         )
     }
 
@@ -70,9 +70,9 @@ func onboardingInitialDownloadStatus(for backend: BackendOption) -> String {
         .replacingOccurrences(of: "~", with: "")
         .trimmingCharacters(in: .whitespacesAndNewlines)
     if !size.isEmpty {
-        return "0 MB of \(size)"
+        return String(localized: "0 MB of \(size)")
     }
-    return "Starting \(backend.label) download..."
+    return String(localized: "Starting \(backend.label) download...")
 }
 
 struct OnboardingView: View {
@@ -386,7 +386,7 @@ struct OnboardingView: View {
     @ViewBuilder
     private func onboardingButton(_ title: String, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.white)
                 .padding(.horizontal, GuesliTheme.spacing20)
@@ -488,12 +488,12 @@ struct OnboardingView: View {
 
     private var modelDownloadIndicatorTitle: String {
         if modelDownloadError != nil {
-            return "Download paused"
+            return String(localized: "Download paused")
         }
         if isShowingModelReadyIndicator {
-            return "\(selectedBackend.label) ready"
+            return String(localized: "\(selectedBackend.label) ready")
         }
-        return "Preparing \(selectedBackend.label)"
+        return String(localized: "Preparing \(selectedBackend.label)")
     }
 
     private func modelDownloadIndicatorDetail(progress: Double?) -> String {
@@ -501,23 +501,23 @@ struct OnboardingView: View {
             return modelDownloadError
         }
         if isShowingModelReadyIndicator {
-            return "Ready to test"
+            return String(localized: "Ready to test")
         }
         if let modelDownloadStatus {
             return modelDownloadStatus
         }
         if let progress {
-            return "\(Int((progress * 100).rounded()))% complete"
+            return String(localized: "\(Int((progress * 100).rounded()))% complete")
         }
-        return "Downloading..."
+        return String(localized: "Downloading...")
     }
 
     private var dictationTestSubtitle: AttributedString {
         let markdown: String
         if isSelectedModelReadyForDictationTest {
             markdown = selectedUseCase.includesVoiceNotes
-                ? "Hold **\(selectedHotkey.label)** to record a voice note, then release.\nYour words should appear below."
-                : "Hold **\(selectedHotkey.label)** and say something, then release.\nYour words should appear below."
+                ? String(localized: "Hold **\(selectedHotkey.localizedLabel)** to record a voice note, then release.\nYour words should appear below.")
+                : String(localized: "Hold **\(selectedHotkey.localizedLabel)** and say something, then release.\nYour words should appear below.")
         } else {
             markdown = dictationTestPreparationSubtitleMarkdown
         }
@@ -525,18 +525,18 @@ struct OnboardingView: View {
     }
 
     private var dictationTestPreparationSubtitleMarkdown: String {
-        let unlockCopy = selectedUseCase.includesVoiceNotes ? "Voice note test" : "Dictation"
+        let unlockCopy = selectedUseCase.includesVoiceNotes ? String(localized: "Voice note test") : String(localized: "Dictation")
         if isModelPreparingAfterDownload {
-            return "Optimizing **\(selectedBackend.label)** for this Mac.\n\(unlockCopy) will unlock when it is ready."
+            return String(localized: "Optimizing **\(selectedBackend.label)** for this Mac.\n\(unlockCopy) will unlock when it is ready.")
         }
-        return "Preparing **\(selectedBackend.label)** for your first test.\n\(unlockCopy) will unlock when the model is ready."
+        return String(localized: "Preparing **\(selectedBackend.label)** for your first test.\n\(unlockCopy) will unlock when the model is ready.")
     }
 
     private var modelPreparationHints: [String] {
         return [
-            "Preparing the first dictation test",
-            "Future launches will skip most of this",
-            "We'll bring Guesli forward when ready",
+            String(localized: "Preparing the first dictation test"),
+            String(localized: "Future launches will skip most of this"),
+            String(localized: "We'll bring Guesli forward when ready"),
         ]
     }
 
@@ -565,7 +565,7 @@ struct OnboardingView: View {
                     .font(GuesliTheme.caption())
                     .foregroundStyle(GuesliTheme.textTertiary)
 
-                OnboardingTextField(text: $userName, placeholder: "Enter your name", onSubmit: {
+                OnboardingTextField(text: $userName, placeholder: String(localized: "Enter your name"), onSubmit: {
                     if !userName.trimmingCharacters(in: .whitespaces).isEmpty {
                         goToNextStep()
                     }
@@ -639,9 +639,9 @@ struct OnboardingView: View {
             VStack(spacing: 5) {
                 Image(systemName: icon)
                     .font(.system(size: 20, weight: .medium))
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(.system(size: 12, weight: .semibold))
-                Text(subtitle)
+                Text(LocalizedStringKey(subtitle))
                     .font(.system(size: 10))
                     .foregroundStyle(selected ? .white.opacity(0.72) : GuesliTheme.textTertiary)
                     .lineLimit(1)
@@ -775,16 +775,16 @@ struct OnboardingView: View {
     /// successful transcription before meeting-specific permissions appear.
     private var permissionSteps: [(icon: String, name: String, description: String, granted: Bool, action: () -> Void)] {
         var steps: [(String, String, String, Bool, () -> Void)] = [
-            ("mic.fill", "Microphone", "Record audio for voice notes, dictation, and meetings", micGranted, requestMicrophonePermission)
+            ("mic.fill", "Microphone", String(localized: "Record audio for voice notes, dictation, and meetings"), micGranted, requestMicrophonePermission)
         ]
         if selectedUseCase.includesPushToTalk {
             if selectedUseCase.includesDictation {
                 steps += [
-                    ("hand.raised.fill", "Accessibility", "Paste transcribed text into other apps", accessibilityGranted, requestAccessibilityPermission),
+                    ("hand.raised.fill", "Accessibility", String(localized: "Paste transcribed text into other apps"), accessibilityGranted, requestAccessibilityPermission),
                 ]
             }
             steps += [
-            ("keyboard.fill", "Input Monitoring", "Detect hotkey for push-to-talk recording", inputMonitoringGranted, {
+            ("keyboard.fill", "Input Monitoring", String(localized: "Detect hotkey for push-to-talk recording"), inputMonitoringGranted, {
                 if !CGRequestListenEventAccess() {
                     self.openSystemSettings("Privacy_ListenEvent")
                 }
@@ -824,7 +824,7 @@ struct OnboardingView: View {
                         .foregroundStyle(GuesliTheme.textTertiary)
                         .textCase(.uppercase)
 
-                    Text(step.name)
+                    Text(LocalizedStringKey(step.name))
                         .font(GuesliTheme.title1())
                         .foregroundStyle(GuesliTheme.textPrimary)
 
@@ -944,10 +944,10 @@ struct OnboardingView: View {
     }
 
     private func permissionButtonTitle(for permissionName: String, isConfirmingGrant: Bool) -> String {
-        if isConfirmingGrant { return "Granted" }
-        if isWaitingForNativePermissionPrompt(permissionName) { return "Waiting for macOS..." }
-        if grantingPermissionName == permissionName { return "Open Settings" }
-        return "Grant Permission"
+        if isConfirmingGrant { return String(localized: "Granted") }
+        if isWaitingForNativePermissionPrompt(permissionName) { return String(localized: "Waiting for macOS...") }
+        if grantingPermissionName == permissionName { return String(localized: "Open Settings") }
+        return String(localized: "Grant Permission")
     }
 
     private func isWaitingForNativePermissionPrompt(_ permissionName: String) -> Bool {
@@ -1038,7 +1038,7 @@ struct OnboardingView: View {
                 .frame(width: 28)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(name)
+                Text(LocalizedStringKey(name))
                     .font(GuesliTheme.headline())
                     .foregroundStyle(GuesliTheme.textPrimary)
                 Text(description)
@@ -1205,7 +1205,7 @@ struct OnboardingView: View {
 
             VStack(spacing: GuesliTheme.spacing16) {
                 // Current hotkey display
-                Text(selectedHotkey.label)
+                Text(selectedHotkey.localizedLabel)
                     .font(.system(size: 24, weight: .semibold, design: .rounded))
                     .foregroundStyle(GuesliTheme.textPrimary)
                     .padding(.horizontal, GuesliTheme.spacing32)
@@ -1299,7 +1299,7 @@ struct OnboardingView: View {
                     if isModelPreparingAfterDownload {
                         IndeterminatePreparationBar()
                             .frame(width: 260, height: 7)
-                        Text(modelDownloadStatus ?? "Preparing \(selectedBackend.label)...")
+                        Text(modelDownloadStatus ?? String(localized: "Preparing \(selectedBackend.label)..."))
                             .font(.system(size: 11, weight: .medium, design: .rounded))
                             .foregroundStyle(GuesliTheme.textTertiary)
                         Text("This usually takes 20-60 seconds the first time.")
@@ -1310,13 +1310,13 @@ struct OnboardingView: View {
                     } else if let modelDownloadProgress {
                         ProgressView(value: modelDownloadProgress, total: 1.0)
                             .frame(width: 260)
-                        Text(modelDownloadStatus ?? "\(Int((modelDownloadProgress * 100).rounded()))% complete")
+                        Text(modelDownloadStatus ?? String(localized: "\(Int((modelDownloadProgress * 100).rounded()))% complete"))
                             .font(.system(size: 11, weight: .medium, design: .rounded))
                             .foregroundStyle(GuesliTheme.textTertiary)
                     } else {
                         ProgressView()
                             .controlSize(.regular)
-                        Text(modelDownloadStatus ?? "Preparing \(selectedBackend.label)...")
+                        Text(modelDownloadStatus ?? String(localized: "Preparing \(selectedBackend.label)..."))
                             .font(.system(size: 11, weight: .medium, design: .rounded))
                             .foregroundStyle(GuesliTheme.textTertiary)
                     }
@@ -1342,7 +1342,7 @@ struct OnboardingView: View {
                 }
             } else {
                 VStack(spacing: GuesliTheme.spacing16) {
-                    Text(dictationTestResult ?? "Your transcription will appear here...")
+                    Text(dictationTestResult ?? String(localized: "Your transcription will appear here..."))
                         .font(dictationTestResult != nil ? .system(size: 14, design: .monospaced) : .system(size: 13, design: .rounded))
                         .foregroundStyle(dictationTestResult != nil ? GuesliTheme.textPrimary : GuesliTheme.textTertiary)
                         .italic(dictationTestResult == nil)
@@ -1359,7 +1359,7 @@ struct OnboardingView: View {
                         HStack(spacing: 8) {
                             ProgressView()
                                 .controlSize(.small)
-                            Text("Listening... release \(selectedHotkey.label) when done")
+                            Text("Listening... release \(selectedHotkey.localizedLabel) when done")
                                 .font(GuesliTheme.caption())
                                 .foregroundStyle(GuesliTheme.textSecondary)
                         }
@@ -1367,7 +1367,7 @@ struct OnboardingView: View {
                         HStack(spacing: 6) {
                             Image(systemName: "keyboard")
                                 .font(.system(size: 14))
-                            Text("Hold \(selectedHotkey.label) to start")
+                            Text("Hold \(selectedHotkey.localizedLabel) to start")
                                 .font(GuesliTheme.body())
                         }
                         .foregroundStyle(GuesliTheme.textTertiary)
@@ -1404,7 +1404,7 @@ struct OnboardingView: View {
             }
             controller.dictationTestCallback = { text in
                 if text.isEmpty {
-                    dictationTestError = "No speech detected. Try again."
+                    dictationTestError = String(localized: "No speech detected. Try again.")
                 } else {
                     withAnimation { dictationTestResult = text }
                     advanceAfterSuccessfulDictationTest(text: text)
@@ -1592,7 +1592,7 @@ struct OnboardingView: View {
 
     private func providerTab(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(.system(size: 12, weight: selected ? .semibold : .regular))
                 .foregroundStyle(selected ? GuesliTheme.textPrimary : GuesliTheme.textSecondary)
                 .frame(width: 80)
@@ -1640,11 +1640,11 @@ struct OnboardingView: View {
             isModelStillDownloading = false
             modelDownloadProgress = 1.0
             isModelPreparingAfterDownload = false
-            modelDownloadStatus = "\(selectedBackend.label) ready"
+            modelDownloadStatus = String(localized: "\(selectedBackend.label) ready")
             modelDownloadError = nil
             publishModelPreparationStatus(
-                title: "\(selectedBackend.label) ready",
-                detail: "Ready for transcription",
+                title: String(localized: "\(selectedBackend.label) ready"),
+                detail: String(localized: "Ready for transcription"),
                 progress: 1.0,
                 isPreparing: false,
                 isComplete: true
@@ -1678,7 +1678,7 @@ struct OnboardingView: View {
         modelDownloadStatus = initialChoice.status
         modelDownloadError = nil
         publishModelPreparationStatus(
-            title: "Preparing \(backend.label)",
+            title: String(localized: "Preparing \(backend.label)"),
             detail: modelDownloadStatus,
             progress: modelDownloadProgress,
             isPreparing: isModelPreparingAfterDownload,
@@ -1706,12 +1706,12 @@ struct OnboardingView: View {
                     modelReadyBackend = backend
                     modelDownloadProgress = 1.0
                     isModelPreparingAfterDownload = false
-                    modelDownloadStatus = "\(backend.label) ready"
+                    modelDownloadStatus = String(localized: "\(backend.label) ready")
                     modelDownloadError = nil
                     withAnimation { isModelStillDownloading = false }
                     publishModelPreparationStatus(
-                        title: "\(backend.label) ready",
-                        detail: "Ready for transcription",
+                        title: String(localized: "\(backend.label) ready"),
+                        detail: String(localized: "Ready for transcription"),
                         progress: 1.0,
                         isPreparing: false,
                         isComplete: true
@@ -1726,12 +1726,12 @@ struct OnboardingView: View {
                 await MainActor.run {
                     guard selectedBackend == backend else { return }
                     modelDownloadError = modelPreparationFailureMessage(for: backend)
-                    modelDownloadStatus = backend.isDownloaded ? "Model setup paused" : "Download paused"
+                    modelDownloadStatus = backend.isDownloaded ? String(localized: "Model setup paused") : String(localized: "Download paused")
                     modelDownloadProgress = nil
                     isModelPreparingAfterDownload = false
                     isModelStillDownloading = false
                     publishModelPreparationStatus(
-                        title: backend.isDownloaded ? "Model setup paused" : "Download paused",
+                        title: backend.isDownloaded ? String(localized: "Model setup paused") : String(localized: "Download paused"),
                         detail: modelDownloadError,
                         progress: nil,
                         isPreparing: false,
@@ -1744,20 +1744,21 @@ struct OnboardingView: View {
     }
 
     private func applyModelPreparationProgress(_ progress: Double, status: String?, backend: BackendOption) {
-        let detail = status ?? "Preparing \(backend.label)..."
+        let detail = status ?? String(localized: "Preparing \(backend.label)...")
         let lowercasedDetail = detail.lowercased()
         let isPreparing = lowercasedDetail.contains("compiling")
             || lowercasedDetail.contains("warming")
             || lowercasedDetail.contains("readying")
+            || detail == String(localized: "Warming up \(backend.label)...")
 
         modelDownloadError = nil
         isModelStillDownloading = true
 
         if isPreparing {
             isModelPreparingAfterDownload = true
-            modelDownloadStatus = "Optimizing \(backend.label) for this Mac..."
+            modelDownloadStatus = String(localized: "Optimizing \(backend.label) for this Mac...")
             publishModelPreparationStatus(
-                title: "Preparing \(backend.label)",
+                title: String(localized: "Preparing \(backend.label)"),
                 detail: modelDownloadStatus,
                 progress: nil,
                 isPreparing: true,
@@ -1776,7 +1777,7 @@ struct OnboardingView: View {
         modelDownloadProgress = nextProgress
         modelDownloadStatus = detail
         publishModelPreparationStatus(
-            title: "Preparing \(backend.label)",
+            title: String(localized: "Preparing \(backend.label)"),
             detail: detail,
             progress: modelDownloadProgress,
             isPreparing: false,
@@ -1802,8 +1803,8 @@ struct OnboardingView: View {
 
     private func modelPreparationFailureMessage(for backend: BackendOption) -> String {
         backend.isDownloaded
-            ? "Model setup failed. Restart Guesli or retry from Models."
-            : "Download failed. Check your connection and retry."
+            ? String(localized: "Model setup failed. Restart Guesli or retry from Models.")
+            : String(localized: "Download failed. Check your connection and retry.")
     }
 
     private func publishModelPreparationStatus(
@@ -1968,8 +1969,8 @@ struct OnboardingView: View {
             )
         } else if isModelStillDownloading || modelReadyBackend == selectedBackend {
             publishModelPreparationStatus(
-                title: modelReadyBackend == selectedBackend ? "\(selectedBackend.label) ready" : "Preparing \(selectedBackend.label)",
-                detail: modelReadyBackend == selectedBackend ? "Ready for transcription" : modelDownloadStatus,
+                title: modelReadyBackend == selectedBackend ? String(localized: "\(selectedBackend.label) ready") : String(localized: "Preparing \(selectedBackend.label)"),
+                detail: modelReadyBackend == selectedBackend ? String(localized: "Ready for transcription") : modelDownloadStatus,
                 progress: modelReadyBackend == selectedBackend ? 1.0 : modelDownloadProgress,
                 isPreparing: isModelPreparingAfterDownload,
                 isComplete: modelReadyBackend == selectedBackend

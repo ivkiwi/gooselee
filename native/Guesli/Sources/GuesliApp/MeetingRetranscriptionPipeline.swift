@@ -302,7 +302,7 @@ enum MeetingPostProcessingError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .suspiciouslyShortTranscript(let reason):
-            return "Meeting transcript needs attention: \(reason)"
+            return String(localized: "Meeting transcript needs attention: \(reason)")
         }
     }
 }

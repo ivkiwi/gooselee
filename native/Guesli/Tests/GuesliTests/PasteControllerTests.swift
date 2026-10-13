@@ -23,18 +23,33 @@ struct PasteControllerTests {
         pasteboard.clearContents()
         pasteboard.setString("clipboard-sentinel", forType: .string)
 
-        // Post a single space via CGEvent (minimal side-effect in test runner)
-        PasteController.typeText(" ")
+        PasteController.typeText(" ", postEvent: { _ in })
 
         // Clipboard must be unchanged — this is the whole point of typeText
         #expect(pasteboard.string(forType: .string) == "clipboard-sentinel")
     }
 
-    @Test("common ASCII text uses physical keyboard path")
-    func commonASCIIUsesPhysicalKeyboardPath() {
-        #expect(PasteController.canTypeUsingPhysicalKeys("Hello, world! 123"))
-        #expect(PasteController.canTypeUsingPhysicalKeys("this has been created using computer use"))
-        #expect(!PasteController.canTypeUsingPhysicalKeys("नमस्ते"))
+    @Test("streaming text uses Unicode events for ASCII and non-ASCII without posting them")
+    func streamingTextUsesUnicodeEvents() {
+        let text = "Hello,\nпривет\t👩🏽‍💻"
+        var events: [CGEvent] = []
+        PasteController.typeText(text, postEvent: { events.append($0) })
+        #expect(events.count == text.count * 2)
+        for (index, character) in text.enumerated() {
+            for offset in 0...1 {
+                guard events.indices.contains(index * 2 + offset) else { continue }
+                let event = events[index * 2 + offset]
+                #expect(event.type == (offset == 0 ? .keyDown : .keyUp))
+                #expect(event.getIntegerValueField(.keyboardEventKeycode) == 0)
+                #expect(event.flags.isEmpty)
+                var units = [UniChar](repeating: 0, count: 32)
+                var length = 0
+                units.withUnsafeMutableBufferPointer { buffer in
+                    event.keyboardGetUnicodeString(maxStringLength: buffer.count, actualStringLength: &length, unicodeString: buffer.baseAddress)
+                }
+                #expect(Array(units.prefix(length)) == Array(character.utf16))
+            }
+        }
     }
 
     @Test("UTF-16 encoding of SentencePiece leading-space deltas is correct")
@@ -85,7 +100,8 @@ struct PasteControllerTests {
             text: "dictated text",
             pasteboard: pasteboard,
             shortcut: .commandShiftV,
-            simulatePasteAction: { simulated = true }
+            simulatePasteAction: { simulated = true },
+            pasteTargetCheck: { .unknown }
         )
 
         #expect(pasteboard.string(forType: .string) == "dictated text")
@@ -101,7 +117,7 @@ struct PasteControllerTests {
         pasteboard.clearContents()
         pasteboard.setString("original", forType: .string)
 
-        PasteController.paste(text: "", pasteboard: pasteboard, simulatePasteAction: {})
+        PasteController.paste(text: "", pasteboard: pasteboard, simulatePasteAction: {}, pasteTargetCheck: { .unknown })
 
         #expect(pasteboard.string(forType: .string) == "original")
     }
@@ -112,7 +128,7 @@ struct PasteControllerTests {
         pasteboard.clearContents()
         pasteboard.setString("original", forType: .string)
 
-        PasteController.paste(text: "dictated text", pasteboard: pasteboard, simulatePasteAction: {})
+        PasteController.paste(text: "dictated text", pasteboard: pasteboard, simulatePasteAction: {}, pasteTargetCheck: { .unknown })
 
         // Immediately after paste(), the clipboard holds the dictation text
         // (restoration happens asynchronously after ~500ms)
@@ -129,7 +145,8 @@ struct PasteControllerTests {
             text: "Готово.",
             appendDictationSentenceSpace: true,
             pasteboard: dictationPasteboard,
-            simulatePasteAction: {}
+            simulatePasteAction: {},
+            pasteTargetCheck: { .unknown }
         )
         #expect(dictationPasteboard.string(forType: .string) == "Готово. ")
 
@@ -138,7 +155,8 @@ struct PasteControllerTests {
         PasteController.paste(
             text: "Computer Use output.",
             pasteboard: verbatimPasteboard,
-            simulatePasteAction: {}
+            simulatePasteAction: {},
+            pasteTargetCheck: { .unknown }
         )
         #expect(verbatimPasteboard.string(forType: .string) == "Computer Use output.")
 
@@ -152,7 +170,7 @@ struct PasteControllerTests {
         pasteboard.clearContents()
         pasteboard.setString("user-copied-text", forType: .string)
 
-        PasteController.paste(text: "dictated text", pasteboard: pasteboard, simulatePasteAction: {})
+        PasteController.paste(text: "dictated text", pasteboard: pasteboard, simulatePasteAction: {}, pasteTargetCheck: { .unknown })
 
         let restored = await waitForClipboardString(in: pasteboard, expected: "user-copied-text")
 
@@ -164,7 +182,7 @@ struct PasteControllerTests {
         let pasteboard = makePasteboard()
         pasteboard.clearContents()
 
-        PasteController.paste(text: "dictated text", pasteboard: pasteboard, simulatePasteAction: {})
+        PasteController.paste(text: "dictated text", pasteboard: pasteboard, simulatePasteAction: {}, pasteTargetCheck: { .unknown })
 
         let restored = await waitForClipboardString(in: pasteboard, expected: nil)
 
@@ -186,7 +204,7 @@ struct PasteControllerTests {
         let countBefore = pasteboard.pasteboardItems?.count ?? 0
         #expect(countBefore == 2)
 
-        PasteController.paste(text: "dictated text", pasteboard: pasteboard, simulatePasteAction: {})
+        PasteController.paste(text: "dictated text", pasteboard: pasteboard, simulatePasteAction: {}, pasteTargetCheck: { .unknown })
 
         let (countAfter, texts) = await waitForClipboardItems(
             in: pasteboard,
@@ -204,7 +222,7 @@ struct PasteControllerTests {
         pasteboard.clearContents()
         pasteboard.setString("original", forType: .string)
 
-        PasteController.paste(text: "dictated text", pasteboard: pasteboard, simulatePasteAction: {})
+        PasteController.paste(text: "dictated text", pasteboard: pasteboard, simulatePasteAction: {}, pasteTargetCheck: { .unknown })
         try await Task.sleep(nanoseconds: 100_000_000)
 
         pasteboard.clearContents()

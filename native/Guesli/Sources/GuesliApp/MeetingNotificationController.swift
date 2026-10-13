@@ -23,6 +23,8 @@ final class MeetingNotificationController {
     private(set) var isVisible = false
     private(set) var currentPromptID: String?
     private(set) var shownAt: Date?
+    /// Bumped on every show, so a fade that outlives its panel cannot close the next one.
+    private var showGeneration = 0
 
     private static let dismissDuration: TimeInterval = 15
 
@@ -64,7 +66,7 @@ final class MeetingNotificationController {
         promptID: String? = nil,
         title: String,
         subtitle: String,
-        actionLabel: String = "Start Recording",
+        actionLabel: String = String(localized: "Start Recording"),
         meetingURL: URL? = nil,
         preferredScreen: NSScreen? = nil,
         platform explicitPlatform: MeetingPlatform? = nil,
@@ -75,12 +77,14 @@ final class MeetingNotificationController {
         onJoinOnly: (() -> Void)? = nil,
         onDismiss: (() -> Void)? = nil,
         onAutoDismiss: (() -> Void)? = nil,
-        onClose: (() -> Void)? = nil
+        onClose: (() -> Void)? = nil,
+        body: String? = nil
     ) -> Bool {
         // Nil out onClose before close() so the old panel's teardown
         // doesn't fire its callback (e.g. resetting isShowingCalendarNotification).
         self.onClose = nil
         close()
+        showGeneration += 1
 
         let duration = dismissAfter ?? Self.dismissDuration
         self.onStartRecording = onStartRecording
@@ -119,7 +123,14 @@ final class MeetingNotificationController {
                 minimumWidth: minimumCardWidth
             )
         }
-        let cardHeight: CGFloat = 60
+        let bodyHeight: CGFloat = body.map {
+            min(160, ceil(($0 as NSString).boundingRect(
+                with: NSSize(width: cardWidth - 28, height: CGFloat.greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: [.font: subtitleFont]
+            ).height))
+        } ?? 0
+        let cardHeight: CGFloat = 60 + (body == nil ? 0 : bodyHeight + 12)
         let closeButtonSize: CGFloat = 22
         let cardX = closeButtonSize / 2 + 1
         let topGutter: CGFloat = closeButtonSize / 2 + 1
@@ -132,7 +143,7 @@ final class MeetingNotificationController {
             height: height,
             margin: margin
         ) else {
-            Self.logger.error("notification_frame_unavailable title=\(title, privacy: .public)")
+            Self.logger.error("notification_frame_unavailable")
             return false
         }
         self.onClose = onClose
@@ -193,7 +204,7 @@ final class MeetingNotificationController {
         dismissButton.focusRingType = .none
         dismissButton.isBordered = false
         dismissButton.contentTintColor = NSColor.white.withAlphaComponent(0.86)
-        dismissButton.toolTip = "Dismiss"
+        dismissButton.toolTip = String(localized: "Dismiss")
         contentView.addSubview(dismissButton)
         contentView.hoverFrames = [cardView.frame, dismissButton.frame]
 
@@ -201,7 +212,7 @@ final class MeetingNotificationController {
         if let icon = platformIcon {
             let iconView = NSImageView(image: icon)
             iconView.imageScaling = .scaleProportionallyUpOrDown
-            iconView.frame = NSRect(x: 14, y: (cardHeight - iconSize) / 2 + 1, width: iconSize, height: iconSize)
+            iconView.frame = NSRect(x: 14, y: cardHeight - (60 + iconSize) / 2 + 1, width: iconSize, height: iconSize)
             cardView.addSubview(iconView)
         }
 
@@ -209,15 +220,26 @@ final class MeetingNotificationController {
         let titleLabel = NSTextField(labelWithString: title)
         titleLabel.font = titleFont
         titleLabel.textColor = .white
-        titleLabel.frame = NSRect(x: textX, y: 32, width: 144, height: 18)
+        titleLabel.frame = NSRect(x: textX, y: cardHeight - 28, width: 144, height: 18)
+        titleLabel.toolTip = title
         cardView.addSubview(titleLabel)
 
         // Subtitle label
         let subtitleLabel = NSTextField(labelWithString: subtitle)
         subtitleLabel.font = subtitleFont
         subtitleLabel.textColor = NSColor.white.withAlphaComponent(0.55)
-        subtitleLabel.frame = NSRect(x: textX, y: 14, width: 144, height: 16)
+        subtitleLabel.frame = NSRect(x: textX, y: cardHeight - 46, width: 144, height: 16)
         cardView.addSubview(subtitleLabel)
+
+        if let body {
+            let bodyLabel = NSTextField(wrappingLabelWithString: body)
+            bodyLabel.font = subtitleFont
+            bodyLabel.textColor = NSColor.white.withAlphaComponent(0.85)
+            bodyLabel.maximumNumberOfLines = 12
+            bodyLabel.lineBreakMode = .byTruncatingTail
+            bodyLabel.frame = NSRect(x: 14, y: 10, width: cardWidth - 28, height: bodyHeight)
+            cardView.addSubview(bodyLabel)
+        }
 
         if hasJoinButton {
             // Split button: the armed action (main) + chevron dropdown with the others
@@ -240,7 +262,7 @@ final class MeetingNotificationController {
                 action: Self.selector(for: armedAction)
             )
             joinButton.font = Self.splitButtonFont
-            joinButton.frame = NSRect(x: buttonX, y: 15, width: buttonWidth, height: 30)
+            joinButton.frame = NSRect(x: buttonX, y: cardHeight - 45, width: buttonWidth, height: 30)
             joinButton.wantsLayer = true
             joinButton.layer?.backgroundColor = greenColor.cgColor
             joinButton.layer?.cornerRadius = 6
@@ -252,7 +274,7 @@ final class MeetingNotificationController {
             // Chevron dropdown button
             let chevronButton = NSButton(title: "▾", target: self, action: #selector(handleChevronClick(_:)))
             chevronButton.font = .systemFont(ofSize: 9, weight: .medium)
-            chevronButton.frame = NSRect(x: buttonX + buttonWidth, y: 15, width: chevronWidth, height: 30)
+            chevronButton.frame = NSRect(x: buttonX + buttonWidth, y: cardHeight - 45, width: chevronWidth, height: 30)
             chevronButton.wantsLayer = true
             chevronButton.layer?.backgroundColor = greenDarker.cgColor
             chevronButton.layer?.cornerRadius = 6
@@ -271,7 +293,7 @@ final class MeetingNotificationController {
 
             let startButton = NSButton(title: actionLabel, target: self, action: #selector(handleStartRecording))
             startButton.font = .systemFont(ofSize: 12, weight: .medium)
-            startButton.frame = NSRect(x: buttonX, y: 15, width: buttonWidth, height: 30)
+            startButton.frame = NSRect(x: buttonX, y: cardHeight - 45, width: buttonWidth, height: 30)
             startButton.wantsLayer = true
             startButton.layer?.backgroundColor = NSColor(red: 0.2, green: 0.5, blue: 1.0, alpha: 1.0).cgColor
             startButton.layer?.cornerRadius = 6
@@ -363,8 +385,8 @@ final class MeetingNotificationController {
 
     private func autoDismissNow() {
         guard !isDismissPaused else { return }
-        animateOut { [weak self] in
-            guard let self else { return }
+        animateOut { [weak self] isCurrent in
+            guard let self, isCurrent else { return }
             let wasPaused = self.isDismissPaused
             let autoDismiss = self.onAutoDismiss
             let shouldFireAutoDismiss = Self.firesAutoDismissCallbackAfterFade(wasDismissPaused: wasPaused)
@@ -408,34 +430,38 @@ final class MeetingNotificationController {
         progressLayer.beginTime = resumeHostTime - pausedTime
     }
 
-    private func animateOut(completion: @escaping () -> Void) {
-        guard let panel else { completion(); return }
+    /// `isCurrent` is false when another notification was shown while this one faded out.
+    private func animateOut(completion: @escaping (_ isCurrent: Bool) -> Void) {
+        guard let panel else { completion(true); return }
+        let generation = showGeneration
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.2
             panel.animator().alphaValue = 0
-        }, completionHandler: completion)
+        }, completionHandler: { [weak self] in
+            completion(self?.showGeneration == generation)
+        })
     }
 
     @objc private func handleStartRecording() {
         let action = onStartRecording
-        animateOut { [weak self] in
-            self?.close()
+        animateOut { [weak self] isCurrent in
+            if isCurrent { self?.close() }
             action?()
         }
     }
 
     @objc private func handleJoinAndRecord() {
         let action = onJoinAndRecord
-        animateOut { [weak self] in
-            self?.close()
+        animateOut { [weak self] isCurrent in
+            if isCurrent { self?.close() }
             action?()
         }
     }
 
     @objc private func handleJoinOnly() {
         let action = onJoinOnly
-        animateOut { [weak self] in
-            self?.close()
+        animateOut { [weak self] isCurrent in
+            if isCurrent { self?.close() }
             action?()
         }
     }
@@ -466,8 +492,8 @@ final class MeetingNotificationController {
 
     @objc private func handleDismiss() {
         let action = onDismiss
-        animateOut { [weak self] in
-            self?.close()
+        animateOut { [weak self] isCurrent in
+            if isCurrent { self?.close() }
             action?()
         }
     }

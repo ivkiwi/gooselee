@@ -15,14 +15,14 @@ enum GoogleCalendarAuthError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notAuthenticated: return "Not signed in to Google Calendar"
-        case .notAvailable: return "Google Calendar credentials not configured"
-        case .callbackTimeout: return "Sign-in timed out — no response from browser"
-        case .callbackMissingCode: return "OAuth callback missing authorization code"
-        case .callbackStateMismatch: return "OAuth state mismatch — possible CSRF attack"
-        case .tokenExchangeFailed(let msg): return "Token exchange failed: \(msg)"
-        case .refreshFailed(let msg): return "Token refresh failed: \(msg)"
-        case .portInUse: return "Callback port 1456 is already in use"
+        case .notAuthenticated: return String(localized: "Not signed in to Google Calendar")
+        case .notAvailable: return String(localized: "Google Calendar credentials not configured")
+        case .callbackTimeout: return String(localized: "Sign-in timed out — no response from browser")
+        case .callbackMissingCode: return String(localized: "OAuth callback missing authorization code")
+        case .callbackStateMismatch: return String(localized: "OAuth state mismatch — possible CSRF attack")
+        case .tokenExchangeFailed(let msg): return String(localized: "Token exchange failed: \(msg)")
+        case .refreshFailed(let msg): return String(localized: "Token refresh failed: \(msg)")
+        case .portInUse: return String(localized: "Callback port 1456 is already in use")
         }
     }
 }
@@ -34,10 +34,15 @@ final class GoogleCalendarAuthManager {
     private static let authURL = "https://accounts.google.com/o/oauth2/v2/auth"
     private static let tokenURL = "https://oauth2.googleapis.com/token"
     private static let redirectURI = "http://localhost:1456/auth/callback"
-    private static let scopes = "https://www.googleapis.com/auth/calendar.events.readonly"
+    // calendarList.list needs its own scope; events.readonly alone answers it with 403.
+    private static let scopes = "https://www.googleapis.com/auth/calendar.events.readonly https://www.googleapis.com/auth/calendar.calendarlist.readonly"
     private static let callbackTimeoutSeconds: TimeInterval = 300
 
     private let credentials: GoogleCalendarCredentials?
+    /// Bumped on sign-out and sign-in so a refresh that finishes afterwards cannot restore old tokens.
+    private var authGeneration = 0
+    /// Cancels the pending browser sign-in so a new attempt can take over the callback port.
+    private var cancelPendingCallback: (() -> Void)?
 
     private var tokenFileURL: URL {
         AppIdentity.supportDirectoryURL.appendingPathComponent("google-calendar-auth.json")
@@ -65,6 +70,7 @@ final class GoogleCalendarAuthManager {
     }
 
     func signIn() async throws {
+        let generation = authGeneration
         guard let credentials else { throw GoogleCalendarAuthError.notAvailable }
         let (verifier, challenge) = generatePKCE()
         let code = try await startCallbackServerAndOpenBrowser(
@@ -76,11 +82,14 @@ final class GoogleCalendarAuthManager {
             codeVerifier: verifier,
             credentials: credentials
         )
+        guard generation == authGeneration else { throw GoogleCalendarAuthError.notAuthenticated }
+        authGeneration += 1
         saveTokens(tokens, reason: "save")
         fputs("[google-cal] signed in successfully\n", stderr)
     }
 
     func signOut() {
+        authGeneration += 1
         deleteTokens()
         fputs("[google-cal] signed out\n", stderr)
     }
@@ -99,13 +108,16 @@ final class GoogleCalendarAuthManager {
                 return accessToken
             }
             fputs("[google-cal] token expired, refreshing...\n", stderr)
-            guard let refreshToken = tokenRead(key: "refresh_token") else {
+            guard let refreshToken = tokenRead(key: "refresh_token"), !refreshToken.isEmpty else {
+                signOut()
                 throw GoogleCalendarAuthError.notAuthenticated
             }
+            let generation = authGeneration
             let tokens = try await refreshAccessToken(
                 refreshToken: refreshToken,
                 credentials: credentials
             )
+            guard generation == authGeneration else { throw GoogleCalendarAuthError.notAuthenticated }
             saveTokens(tokens, reason: "save")
             return tokens.accessToken
         }
@@ -149,10 +161,13 @@ final class GoogleCalendarAuthManager {
     }
 
     private func startCallbackServerAndOpenBrowser(codeChallenge: String, clientId: String) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
+        cancelPendingCallback?()
+        return try await withCheckedThrowingContinuation { continuation in
             let port: NWEndpoint.Port = 1456
             let params = NWParameters.tcp
             params.requiredLocalEndpoint = NWEndpoint.hostPort(host: .ipv4(.loopback), port: port)
+            // The cancelled previous listener may still be releasing the port.
+            params.allowLocalEndpointReuse = true
 
             guard let listener = try? NWListener(using: params) else {
                 continuation.resume(throwing: GoogleCalendarAuthError.portInUse)
@@ -170,6 +185,13 @@ final class GoogleCalendarAuthManager {
                 deadline: .now() + Self.callbackTimeoutSeconds,
                 execute: timeoutWork
             )
+            self.cancelPendingCallback = { [weak listener] in
+                guard !resumed else { return }
+                resumed = true
+                timeoutWork.cancel()
+                listener?.cancel()
+                continuation.resume(throwing: GoogleCalendarAuthError.callbackTimeout)
+            }
 
             let expectedState = self.generateState()
 
@@ -206,7 +228,10 @@ final class GoogleCalendarAuthManager {
                         listener.cancel()
                         timeoutWork.cancel()
                     }
-                    guard !resumed else { return }
+                    guard !resumed else {
+                        connection.cancel()
+                        return
+                    }
                     resumed = true
 
                     guard let data, let request = String(data: data, encoding: .utf8) else {
@@ -391,6 +416,7 @@ final class GoogleCalendarAuthManager {
     }
 
     private func deleteTokens() {
+        authGeneration += 1
         tokenStore.signOut()
     }
 }

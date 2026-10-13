@@ -1,0 +1,15 @@
+"TODAY" = "СЕГОДНЯ";
+"YESTERDAY" = "ВЧЕРА";
+"Copy CUA Trace" = "Скопировать трейс CUA";
+"Click Record Voice Note to capture your first note" = "Нажмите «Голосовая заметка», чтобы записать первую";
+"Hold %@ to start dictating" = "Удерживайте %@ для диктовки";
+"Record Voice Note" = "Голосовая заметка";
+"Stop Voice Note" = "Остановить";
+"Delete Dictation" = "Удалить диктовку";
+"Are you sure you want to delete this dictation? This cannot be undone." = "Удалить диктовку? Это нельзя отменить.";
+"Step %lld" = "Шаг %lld";
+"Run" = "Запуск";
+"Timed out" = "Тайм-аут";
+"Failed" = "Ошибка";
+"Confirm" = "Подтвердить";
+"Cancelled" = "Отменено";

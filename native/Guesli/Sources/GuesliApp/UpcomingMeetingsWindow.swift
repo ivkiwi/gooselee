@@ -17,11 +17,11 @@ enum UpcomingMeetingsWindow: Int, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .today:
-            return "Today only"
+            return String(localized: "Today only")
         case .twoDays:
-            return "Two days"
+            return String(localized: "Two days")
         case .threeDays:
-            return "Three days"
+            return String(localized: "Three days")
         }
     }
 

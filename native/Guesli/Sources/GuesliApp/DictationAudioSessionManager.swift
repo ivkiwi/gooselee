@@ -29,6 +29,7 @@ enum DictationAudioSessionEvent {
     case cancelled(UUID?, reason: String)
     case failed(UUID?, error: Error)
     case latency(String, Date)
+    case interrupted(UUID?, wavURL: URL, error: Error)
 }
 
 enum DictationWarmupIntent: Equatable {
@@ -93,12 +94,15 @@ extension MicrophoneRecorder: DictationAudioRecording {}
 final class DictationAudioSessionManager: @unchecked Sendable {
     private enum StartupError: LocalizedError {
         case noAudioBuffer
+        case microphoneStartStalled
         case staleSession(mode: String)
 
         var errorDescription: String? {
             switch self {
             case .noAudioBuffer:
-                return "Microphone capture did not deliver audio."
+                return String(localized: "Microphone capture did not deliver audio.")
+            case .microphoneStartStalled:
+                return String(localized: "The microphone did not start, so nothing was recorded. Please try again.")
             case .staleSession(let mode):
                 return "Stale dictation session was ignored for \(mode)."
             }
@@ -147,6 +151,12 @@ final class DictationAudioSessionManager: @unchecked Sendable {
     private let sessionHintLock = NSLock()
     private var sessionHint: UUID?
     private var externalSessionHint = false
+    // Guarded by sessionHintLock; the recorder queue may be blocked in CoreAudio.
+    private var startupWatchdogSessionID: UUID?
+    private var awaitingFirstAudioSessionID: UUID?
+    private var stalledSessionIDs: Set<UUID> = []
+    private let startupTimeout: TimeInterval
+    private let startupWatchdogQueue = DispatchQueue(label: "com.guesli.dictation-audio-startup-watchdog")
 
     var onEvent: ((DictationAudioSessionEvent) -> Void)?
 
@@ -156,8 +166,10 @@ final class DictationAudioSessionManager: @unchecked Sendable {
         mediaPlaybackController: MediaPlaybackManaging = MediaPlaybackController(),
         routingController: DictationAudioRouting,
         queue: DispatchQueue = DispatchQueue(label: "com.guesli.dictation-audio-session-manager"),
-        eventQueue: DispatchQueue = .main
+        eventQueue: DispatchQueue = .main,
+        startupTimeout: TimeInterval = 3
     ) {
+        self.startupTimeout = startupTimeout
         self.recorder = recorder
         self.duckingController = duckingController
         self.mediaPlaybackController = mediaPlaybackController
@@ -171,12 +183,6 @@ final class DictationAudioSessionManager: @unchecked Sendable {
             debugDescription: routingController.currentRouteDebugDescription()
         )
 
-        recorder.onFirstCapturedAudioBuffer = { [weak self] capturedAt in
-            self?.handleFirstAudioBuffer(capturedAt: capturedAt)
-        }
-        recorder.onFirstSpeechDetected = { [weak self] capturedAt in
-            self?.handleFirstSpeech(capturedAt: capturedAt)
-        }
         recorder.onNoAudioTimeout = { [weak self] at in
             self?.handleNoAudioTimeout(at: at)
         }
@@ -262,6 +268,7 @@ final class DictationAudioSessionManager: @unchecked Sendable {
         } else {
             sessionID = ensureSession()
         }
+        scheduleStartupWatchdog(sessionID)
         queue.async { [self] in
             self.cancelPendingRouteRefreshLocked()
             guard self.sessionHintMatches(sessionID) else {
@@ -300,6 +307,12 @@ final class DictationAudioSessionManager: @unchecked Sendable {
             let recorderInputDeviceID = self.recorderInputDeviceID(for: self.routeSnapshot)
             self.recorder.preferredInputDeviceID = recorderInputDeviceID
             self.recorder.keepsAudioGraphWarm = self.routeSnapshot.canSpeculativelyWarmRecorder
+            self.recorder.onFirstCapturedAudioBuffer = { [weak self] capturedAt in
+                self?.handleFirstAudioBuffer(capturedAt: capturedAt, sessionID: sessionID)
+            }
+            self.recorder.onFirstSpeechDetected = { [weak self] capturedAt in
+                self?.handleFirstSpeech(capturedAt: capturedAt, sessionID: sessionID)
+            }
             do {
                 self.emitLatency("activation_begin:\(mode)")
                 if self.routeSnapshot.canSpeculativelyWarmRecorder {
@@ -353,6 +366,7 @@ final class DictationAudioSessionManager: @unchecked Sendable {
             self.activeRecorderRunID = nil
             self.recorder.preferredInputDeviceID = nil
             self.stateStorage = .idle
+            self.finishStartupWatchdog(sessionID)
             self.clearSessionHint(sessionID)
             self.emit(.stopped(sessionID, wavURL: wavURL))
             self.restoreSessionAudioState {
@@ -374,6 +388,7 @@ final class DictationAudioSessionManager: @unchecked Sendable {
             self.setExternalSessionHint(false)
             self.restoreSessionAudioState()
             self.emitLatency("cancelled:\(reason)")
+            self.finishStartupWatchdog(sessionID)
             self.emit(.cancelled(sessionID, reason: reason))
         }
     }
@@ -547,12 +562,65 @@ final class DictationAudioSessionManager: @unchecked Sendable {
         recorder.preferredInputDeviceID = nil
         clearSessionHint(sessionID)
         restoreSessionAudioState()
+        guard !finishStartupWatchdog(sessionID) else { return }
         emit(.failed(sessionID, error: error))
     }
 
-    private func handleFirstAudioBuffer(capturedAt: Date) {
+    private func scheduleStartupWatchdog(_ sessionID: UUID) {
+        let isNew = sessionHintLock.withLock {
+            guard sessionHint == sessionID, startupWatchdogSessionID != sessionID else { return false }
+            startupWatchdogSessionID = sessionID
+            awaitingFirstAudioSessionID = sessionID
+            return true
+        }
+        guard isNew else { return }
+        startupWatchdogQueue.asyncAfter(deadline: .now() + startupTimeout) { [weak self] in
+            self?.handleStartupWatchdogFired(sessionID)
+        }
+    }
+
+    private func handleStartupWatchdogFired(_ sessionID: UUID) {
+        let stalled = sessionHintLock.withLock {
+            guard awaitingFirstAudioSessionID == sessionID, sessionHint == sessionID else { return false }
+            awaitingFirstAudioSessionID = nil
+            stalledSessionIDs.insert(sessionID)
+            sessionHint = nil
+            // Queue teardown before reporting failure so a retry follows it.
+            queue.async { [self] in
+                defer { self.sessionHintLock.withLock { _ = self.stalledSessionIDs.remove(sessionID) } }
+                guard self.stateStorage.sessionID == sessionID else { return }
+                self.recorder.keepsAudioGraphWarm = false
+                self.recorder.cancel()
+                self.failedSessionID = sessionID
+                self.stateStorage = .idle
+                self.activeRecorderRunID = nil
+                self.recorder.preferredInputDeviceID = nil
+                self.restoreSessionAudioState()
+            }
+            return true
+        }
+        guard stalled else { return }
+        emitLatency("startup_watchdog_fired")
+        emit(.failed(sessionID, error: StartupError.microphoneStartStalled))
+    }
+
+    @discardableResult
+    private func finishStartupWatchdog(_ sessionID: UUID?) -> Bool {
+        sessionHintLock.withLock {
+            if awaitingFirstAudioSessionID == sessionID { awaitingFirstAudioSessionID = nil }
+            return sessionID.map { stalledSessionIDs.contains($0) } ?? false
+        }
+    }
+
+    private func handleFirstAudioBuffer(capturedAt: Date, sessionID: UUID) {
+        let isActive = sessionHintLock.withLock {
+            guard sessionHint == sessionID, !stalledSessionIDs.contains(sessionID) else { return false }
+            if awaitingFirstAudioSessionID == sessionID { awaitingFirstAudioSessionID = nil }
+            return true
+        }
+        guard isActive else { return }
         queue.async { [self] in
-            guard let sessionID = self.stateStorage.sessionID else { return }
+            guard self.sessionHintMatches(sessionID), self.isCurrent(sessionID) else { return }
             switch self.stateStorage {
             case .acquiringAudio(let id) where id == sessionID,
                  .armed(let id) where id == sessionID:
@@ -565,9 +633,9 @@ final class DictationAudioSessionManager: @unchecked Sendable {
         }
     }
 
-    private func handleFirstSpeech(capturedAt: Date) {
+    private func handleFirstSpeech(capturedAt: Date, sessionID: UUID) {
         queue.async { [self] in
-            guard let sessionID = self.stateStorage.sessionID else { return }
+            guard self.sessionHintMatches(sessionID), self.isCurrent(sessionID) else { return }
             self.stateStorage = .speechDetected(sessionID)
             self.emitLatency("first_speech", at: capturedAt)
             self.emit(.speechDetected(sessionID, capturedAt: capturedAt))
@@ -598,6 +666,19 @@ final class DictationAudioSessionManager: @unchecked Sendable {
                   self.activeRecorderRunID == recorderRunID else { return }
             self.emitLatency("recorder_failed")
             self.recorder.keepsAudioGraphWarm = false
+            let wavURL = self.recorder.stop()
+            if let wavURL, DictationRecordingRecovery.containsAudio(wavURL) {
+                let sessionID = self.stateStorage.sessionID
+                self.activeRecorderRunID = nil
+                self.recorder.preferredInputDeviceID = nil
+                self.stateStorage = .idle
+                self.finishStartupWatchdog(sessionID)
+                self.clearSessionHint(sessionID)
+                self.emit(.interrupted(sessionID, wavURL: wavURL, error: error))
+                self.restoreSessionAudioState()
+                return
+            }
+            if let wavURL { try? FileManager.default.removeItem(at: wavURL) }
             self.recorder.cancel()
             self.failCurrentSession(error: error)
         }

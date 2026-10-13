@@ -45,7 +45,7 @@ struct MeetingTemplatesManagerView: View {
                     }
                     .disabled(isEditingTemplateInProgress)
                     .opacity(isEditingTemplateInProgress ? 0.55 : 1)
-                    .help(isEditingTemplateInProgress ? "Finish or cancel template editing before closing." : "Close template manager")
+                    .help(isEditingTemplateInProgress ? String(localized: "Finish or cancel template editing before closing.") : String(localized: "Close template manager"))
                 }
             }
 
@@ -123,7 +123,7 @@ struct MeetingTemplatesManagerView: View {
                         Image(systemName: template.icon)
                             .font(.system(size: 10))
                             .foregroundStyle(GuesliTheme.accent)
-                        Text(template.name)
+                        Text(verbatim: template.name)
                             .font(GuesliTheme.captionMedium())
                             .foregroundStyle(GuesliTheme.textPrimary)
                     }
@@ -155,7 +155,7 @@ struct MeetingTemplatesManagerView: View {
     @ViewBuilder
     private var customTemplateEditor: some View {
         VStack(alignment: .leading, spacing: GuesliTheme.spacing12) {
-            Text(isCreatingTemplate ? "New template" : "Edit template")
+            Text(isCreatingTemplate ? String(localized: "New template") : String(localized: "Edit template"))
                 .font(GuesliTheme.captionMedium())
                 .foregroundStyle(GuesliTheme.textPrimary)
 
@@ -315,7 +315,7 @@ struct MeetingTemplatesManagerView: View {
                     .frame(width: 24, height: 24)
                     .background(GuesliTheme.accentSubtle)
                     .clipShape(RoundedRectangle(cornerRadius: GuesliTheme.cornerSmall))
-                Text(selectedIconLabel)
+                Text(LocalizedStringKey(selectedIconLabel))
                     .font(GuesliTheme.caption())
                     .foregroundStyle(GuesliTheme.textSecondary)
             }
@@ -352,7 +352,7 @@ struct MeetingTemplatesManagerView: View {
                             )
                     }
                     .buttonStyle(.plain)
-                    .help(icon.label)
+                    .help(LocalizedStringKey(icon.label))
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -365,7 +365,7 @@ struct MeetingTemplatesManagerView: View {
 
     @ViewBuilder
     private func actionButton(
-        _ title: String,
+        _ title: LocalizedStringKey,
         systemImage: String,
         role: ButtonRole? = nil,
         action: @escaping () -> Void

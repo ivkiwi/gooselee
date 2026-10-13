@@ -6,7 +6,7 @@ enum PasteShortcut: String, Codable, CaseIterable {
 
     var label: String {
         switch self {
-        case .commandV: return "⌘V (default)"
+        case .commandV: return String(localized: "⌘V (default)")
         case .commandShiftV: return "⌘⇧V"
         }
     }

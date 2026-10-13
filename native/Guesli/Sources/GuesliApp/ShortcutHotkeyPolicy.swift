@@ -28,8 +28,8 @@ enum ShortcutHotkeyUpdateResult: Equatable {
 }
 
 struct ShortcutHotkeyPolicy {
-    static let conflictMessage = "These shortcuts need different keys."
-    static let commonGlobalShortcutWarning = "This shortcut is commonly used by other apps. Guesli listens globally, so choose a less common combination if it conflicts with your workflow."
+    static let conflictMessage = String(localized: "These shortcuts need different keys.")
+    static let commonGlobalShortcutWarning = String(localized: "This shortcut is commonly used by other apps. Guesli listens globally, so choose a less common combination if it conflicts with your workflow.")
 
     static func hotkeysConflict(_ a: HotkeyConfig, _ b: HotkeyConfig) -> Bool {
         if a.isCombination != b.isCombination { return false }
@@ -78,6 +78,19 @@ struct ShortcutHotkeyPolicy {
         ]
         let signature = HotkeySignature(modifiers: modifiers, keyCode: keyCode)
         return commonAppShortcuts.contains(signature) ? commonGlobalShortcutWarning : nil
+    }
+
+    static func validateMeetingBookmarkHotkey(
+        _ hotkey: HotkeyConfig,
+        dictationHotkey: HotkeyConfig,
+        meetingRecordingHotkey: HotkeyConfig,
+        isMeetingRecordingEnabled: Bool
+    ) -> ShortcutHotkeyUpdateResult {
+        if hotkeysConflict(hotkey, dictationHotkey)
+            || (isMeetingRecordingEnabled && hotkeysConflict(hotkey, meetingRecordingHotkey)) {
+            return .conflict(message: String(localized: "This shortcut is already used by another action."))
+        }
+        return .updated
     }
 
     private struct HotkeySignature: Hashable {

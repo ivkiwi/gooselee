@@ -1,0 +1,8 @@
+"Follow-up Email" = "Письмо по итогам";
+"Close" = "Закрыть";
+"Regenerate" = "Заново";
+"Regenerate email?" = "Сгенерировать заново?";
+"Your edits to the draft will be replaced with a new email." = "Ваши правки заменит новое письмо.";
+"Drafting email…" = "Готовлю письмо…";
+"Could not draft the email. %@" = "Не удалось подготовить письмо. %@";
+"Summary backend is not set up. Choose it and add a key or model in Settings → Meeting Summaries." = "Сервис итогов не настроен. Выберите его и задайте ключ или модель в Настройках → «Итоги встреч».";

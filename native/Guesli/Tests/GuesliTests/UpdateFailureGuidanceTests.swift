@@ -130,7 +130,7 @@ struct UpdateActionRoutingTests {
         let source = try sidebarViewSource()
 
         #expect(source.contains("private var pendingUpdateCTA: UpdateCTA?"))
-        #expect(source.contains("label: \"Update\""))
+        #expect(source.contains("label: String(localized: \"Update\")"))
         #expect(source.contains("Open About for update instructions"))
         #expect(!source.contains("if updateCTA != nil"))
         #expect(!source.contains("Update Now"))

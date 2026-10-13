@@ -439,11 +439,23 @@ final class AudioQueueInputRecorder: StreamingDictationRecording, StreamingDicta
         let powerDB = max(-160, min(0, rawDB))
         let pcmData = int16Samples.withUnsafeBufferPointer { Data(buffer: $0) }
 
-        stateLock.withLock { state in
-            state.fileHandle?.write(pcmData)
+        let (didWrite, writeFailure) = stateLock.withLock { state -> (Bool, Error?) in
+            guard let fileHandle = state.fileHandle else { return (false, nil) }
+            do {
+                try RecordingWAVFileIO.append(pcmData, to: fileHandle, bytesWritten: state.bytesWritten)
+            } catch {
+                if let count = RecordingWAVFileIO.finalizePreservingFile(fileHandle) {
+                    state.bytesWritten = count
+                }
+                state.fileHandle = nil
+                return (false, error)
+            }
             state.bytesWritten += pcmData.count
             state.latestPowerDB = powerDB
+            return (true, nil)
         }
+        if let writeFailure { reportFailure(writeFailure) }
+        guard didWrite else { return }
         onAudioBuffer?(samples)
     }
 
@@ -520,15 +532,15 @@ final class AudioQueueInputRecorder: StreamingDictationRecording, StreamingDicta
         guard let handle = FileHandle(forWritingAtPath: url.path) else {
             throw Self.runtimeError(code: 9, message: "Could not open file for writing")
         }
-        handle.write(WavWriter.header(dataSize: 0))
+        try handle.write(contentsOf: WavWriter.header(dataSize: 0))
         return FileState(fileHandle: handle, fileURL: url, bytesWritten: 0)
     }
 
     private func finalizeFile(_ state: FileState) -> URL? {
-        guard let handle = state.fileHandle, let url = state.fileURL else { return nil }
-        handle.seek(toFileOffset: 0)
-        handle.write(WavWriter.header(dataSize: UInt32(state.bytesWritten)))
-        handle.closeFile()
+        guard let url = state.fileURL else { return nil }
+        if let handle = state.fileHandle {
+            RecordingWAVFileIO.finalizePreservingFile(handle)
+        }
 
         if state.bytesWritten == 0 {
             try? FileManager.default.removeItem(at: url)

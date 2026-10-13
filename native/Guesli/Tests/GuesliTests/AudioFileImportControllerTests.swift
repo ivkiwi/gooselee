@@ -212,6 +212,32 @@ struct AudioFileImportControllerTests {
         #expect(!result.contains("## Speaker Segments"))
     }
 
+    @Test("imported transcript timestamps seek within the saved recording")
+    func importedTimestampsSeekRecording() throws {
+        let duration: TimeInterval = 10
+        let startTime = try #require(ISO8601DateFormatter().date(from: "2026-10-13T14:00:00Z"))
+        let transcription = SpeechTranscriptionResult(
+            text: "Hello world\nHi there",
+            segments: [
+                SpeechSegment(start: 0, end: 4, text: "Hello world"),
+                SpeechSegment(start: 6, end: 9, text: "Hi there"),
+            ]
+        )
+        let result = AudioFileImportController.formatTranscriptWithSpeakers(
+            transcription: transcription,
+            diarizationSegments: [
+                makeDiarSeg(speakerId: "SPEAKER_0", start: 0, end: 5),
+                makeDiarSeg(speakerId: "SPEAKER_1", start: 5, end: 10),
+            ],
+            meetingStart: startTime
+        )
+        let labels = result.split(separator: "\n").map { String($0.dropFirst().prefix(8)) }
+
+        #expect(labels.map {
+            TranscriptRecordingSeek.offset(for: $0, meetingStart: startTime, duration: duration)
+        } == [0, 6])
+    }
+
     @Test("formatTranscriptWithSpeakers keeps imported token fragments intact")
     func formatTranscriptWithSpeakersKeepsImportedWordsIntact() {
         let segments = [

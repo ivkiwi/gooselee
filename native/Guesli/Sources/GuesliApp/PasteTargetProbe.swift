@@ -29,10 +29,10 @@ enum PasteTargetProbe {
         switch role {
         case kAXTextFieldRole, kAXTextAreaRole, kAXComboBoxRole:
             return .target
-        case kAXStaticTextRole, kAXImageRole, kAXListRole, kAXTableRole, kAXOutlineRole:
+        case kAXStaticTextRole, kAXImageRole:
             return .none
         default:
-            // Custom controls and browser containers may still accept a paste.
+            // Custom controls, browser containers and table cells (Numbers, Excel) may still accept a paste.
             return .unknown
         }
     }

@@ -2,5 +2,5 @@
 "Interface" = "Интерфейс";
 "Restart" = "Перезапустить";
 "Restart GooseLee to apply." = "Перезапустите GooseLee.";
-"Stop the meeting recording to restart." = "Остановите запись для перезапуска.";
+"Available after recording, dictation and meeting processing finish." = "Доступно после записи, диктовки и обработки встреч.";
 "System" = "Системный";

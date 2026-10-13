@@ -17,11 +17,16 @@ struct PasteTargetProbeTests {
         #expect(PasteTargetProbe.verdict(for: .init(role: role)) == .target)
     }
 
-    @Test("static content and file lists have no text target", arguments: [
-        kAXStaticTextRole, kAXImageRole, kAXListRole, kAXTableRole, kAXOutlineRole,
-    ])
+    @Test("static content has no text target", arguments: [kAXStaticTextRole, kAXImageRole])
     func staticRole(role: String) {
         #expect(PasteTargetProbe.verdict(for: .init(role: role)) == .none)
+    }
+
+    @Test("tables, outlines and lists stay uncertain because a selected cell may accept paste", arguments: [
+        kAXTableRole, kAXOutlineRole, kAXListRole,
+    ])
+    func cellContainerRole(role: String) {
+        #expect(PasteTargetProbe.verdict(for: .init(role: role)) == .unknown)
     }
 
     @Test("each text capability wins over a static role")

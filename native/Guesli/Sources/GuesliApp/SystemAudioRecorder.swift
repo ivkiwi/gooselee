@@ -5,7 +5,18 @@ import GuesliCore
 import os
 
 final class SystemAudioRecorder: NSObject, SCStreamOutput, SystemAudioCapturing, SystemAudioDiagnosticsProviding {
-    var onPCMSamples: (([Int16]) -> Void)?
+    /// Read on sampleQueue for every buffer, cleared from the session's stop thread.
+    var onPCMSamples: (([Int16]) -> Void)? {
+        get { callbackLock.withLock { $0.onPCMSamplesStorage } }
+        set { callbackLock.withLock { $0.onPCMSamplesStorage = newValue } }
+    }
+    private let callbackLock = OSAllocatedUnfairLock(initialState: CallbackState())
+    /// Sample handler queue; recording flags change on it so stop cannot race a callback.
+    private let sampleQueue = DispatchQueue(label: "com.guesli.system-audio")
+
+    private struct CallbackState {
+        var onPCMSamplesStorage: (([Int16]) -> Void)?
+    }
 
     private var stream: SCStream?
     private var outputFile: FileHandle?
@@ -104,8 +115,12 @@ final class SystemAudioRecorder: NSObject, SCStreamOutput, SystemAudioCapturing,
 
     func stop() -> URL? {
         guard isRecording || outputFile != nil || outputURL != nil else { return nil }
-        isRecording = false
-        isPaused = false
+        // Barrier: an in-flight callback finishes first and later ones bail out,
+        // even if stopCapture times out, so the file is finalized without live writes.
+        sampleQueue.sync {
+            isRecording = false
+            isPaused = false
+        }
         onPCMSamples = nil
 
         if let stream {
@@ -136,13 +151,17 @@ final class SystemAudioRecorder: NSObject, SCStreamOutput, SystemAudioCapturing,
     }
 
     func pause() {
-        guard isRecording else { return }
-        isPaused = true
+        sampleQueue.sync {
+            guard isRecording else { return }
+            isPaused = true
+        }
     }
 
     func resume() {
-        guard isRecording else { return }
-        isPaused = false
+        sampleQueue.sync {
+            guard isRecording else { return }
+            isPaused = false
+        }
     }
 
     // MARK: - SCStream setup
@@ -174,7 +193,7 @@ final class SystemAudioRecorder: NSObject, SCStreamOutput, SystemAudioCapturing,
         config.excludesCurrentProcessAudio = true
 
         let stream = SCStream(filter: filter, configuration: config, delegate: nil)
-        try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: DispatchQueue(label: "com.guesli.system-audio"))
+        try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: sampleQueue)
         try await stream.startCapture()
         self.stream = stream
     }
@@ -304,8 +323,10 @@ final class SystemAudioRecorder: NSObject, SCStreamOutput, SystemAudioCapturing,
     }
 
     private func cleanupFailedStart() {
-        isRecording = false
-        isPaused = false
+        sampleQueue.sync {
+            isRecording = false
+            isPaused = false
+        }
         stream = nil
         onPCMSamples = nil
 

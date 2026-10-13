@@ -1988,14 +1988,14 @@ struct TranscriptChatBubble: View {
                                 Button {
                                     onRenameSpeaker(speaker)
                                 } label: {
-                                    Text(verbatim: speaker)
+                                    Text(verbatim: Self.displayName(for: speaker))
                                         .font(.system(size: 10, weight: .medium))
                                         .foregroundStyle(GuesliTheme.textTertiary)
                                 }
                                 .buttonStyle(.plain)
                                 .help("Rename Speaker…")
                             } else {
-                                Text(verbatim: speaker)
+                                Text(verbatim: Self.displayName(for: speaker))
                                     .font(.system(size: 10, weight: .medium))
                                     .foregroundStyle(GuesliTheme.textTertiary)
                                     .textSelection(.enabled)
@@ -2029,5 +2029,14 @@ struct TranscriptChatBubble: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: message.isUser ? .trailing : .leading)
+    }
+
+    /// System labels match LiveTranscriptView; other names (renamed speakers) stay verbatim.
+    private static func displayName(for speaker: String) -> String {
+        switch speaker {
+        case "You": return String(localized: "You")
+        case "Others": return String(localized: "Others")
+        default: return speaker
+        }
     }
 }

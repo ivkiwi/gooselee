@@ -31,7 +31,7 @@ struct TranscriptCleanupPromptsManagerView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: GuesliTheme.spacing16) {
-                    presetSection(title: "Built-in Presets") {
+                    presetSection(title: String(localized: "Built-in Presets")) {
                         VStack(spacing: GuesliTheme.spacing8) {
                             ForEach(builtInPresets) { preset in
                                 builtInPresetRow(preset)
@@ -39,7 +39,7 @@ struct TranscriptCleanupPromptsManagerView: View {
                         }
                     }
 
-                    presetSection(title: "Custom Prompts") {
+                    presetSection(title: String(localized: "Custom Prompts")) {
                         if customPresets.isEmpty {
                             emptyState
                         } else {
@@ -113,7 +113,7 @@ struct TranscriptCleanupPromptsManagerView: View {
                 }
                 .disabled(isEditingPromptInProgress)
                 .opacity(isEditingPromptInProgress ? 0.55 : 1)
-                .help(isEditingPromptInProgress ? "Finish or cancel prompt editing before closing." : "Close prompt manager")
+                .help(isEditingPromptInProgress ? String(localized: "Finish or cancel prompt editing before closing.") : String(localized: "Close prompt manager"))
             }
         }
     }
@@ -235,7 +235,7 @@ struct TranscriptCleanupPromptsManagerView: View {
 
     private var promptEditor: some View {
         VStack(alignment: .leading, spacing: GuesliTheme.spacing12) {
-            Text(isCreatingPrompt ? "New prompt" : "Edit prompt")
+            Text(isCreatingPrompt ? String(localized: "New prompt") : String(localized: "Edit prompt"))
                 .font(GuesliTheme.captionMedium())
                 .foregroundStyle(GuesliTheme.textPrimary)
 
@@ -325,7 +325,7 @@ struct TranscriptCleanupPromptsManagerView: View {
     private func beginDuplicatingPrompt(name: String, prompt: String) {
         isCreatingPrompt = true
         editingPromptID = nil
-        draftPromptName = suggestedUniqueName(for: "\(name) Copy")
+        draftPromptName = suggestedUniqueName(for: String(localized: "\(name) Copy"))
         draftPrompt = prompt
         clearValidationErrors()
     }
@@ -352,9 +352,9 @@ struct TranscriptCleanupPromptsManagerView: View {
         nameValidationMessage = nil
         showPromptValidationError = trimmedPrompt.isEmpty
         if trimmedName.isEmpty {
-            nameValidationMessage = "Enter a prompt name."
+            nameValidationMessage = String(localized: "Enter a prompt name.")
         } else if presetNameExists(trimmedName, excludingID: editingPromptID) {
-            nameValidationMessage = "Use a unique prompt name."
+            nameValidationMessage = String(localized: "Use a unique prompt name.")
         }
         guard nameValidationMessage == nil, !trimmedPrompt.isEmpty else { return }
 
@@ -394,7 +394,7 @@ struct TranscriptCleanupPromptsManagerView: View {
 
     private func suggestedUniqueName(for baseName: String) -> String {
         let trimmedBase = baseName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let fallbackBase = trimmedBase.isEmpty ? "Custom Cleanup" : trimmedBase
+        let fallbackBase = trimmedBase.isEmpty ? String(localized: "Custom Cleanup") : trimmedBase
         if !presetNameExists(fallbackBase, excludingID: nil) {
             return fallbackBase
         }
@@ -414,7 +414,7 @@ struct TranscriptCleanupPromptsManagerView: View {
     }
 
     private func actionButton(
-        _ title: String,
+        _ title: LocalizedStringKey,
         systemImage: String? = nil,
         role: ButtonRole? = nil,
         action: @escaping () -> Void

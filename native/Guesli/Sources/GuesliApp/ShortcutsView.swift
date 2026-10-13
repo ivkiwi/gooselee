@@ -140,10 +140,10 @@ struct ShortcutsView: View {
         VStack(alignment: .leading, spacing: GuesliTheme.spacing16) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: GuesliTheme.spacing4) {
-                    Text("Метка во встрече")
+                    Text("Meeting Bookmark")
                         .font(GuesliTheme.headline())
                         .foregroundStyle(GuesliTheme.textPrimary)
-                    Text("Добавляет в заметки идущей встречи строку ⭐ со временем")
+                    Text("Adds a timestamped ⭐ line to the current meeting notes")
                         .font(GuesliTheme.caption())
                         .foregroundStyle(GuesliTheme.textSecondary)
                 }
@@ -185,7 +185,7 @@ struct ShortcutsView: View {
     }
 
     private func hotkeyBadge(_ hotkey: HotkeyConfig) -> some View {
-        Text(hotkey.displayLabel)
+        Text(LocalizedStringKey(hotkey.displayLabel))
             .font(.system(size: 12, weight: .medium, design: .rounded))
             .foregroundStyle(GuesliTheme.textPrimary)
             .padding(.horizontal, GuesliTheme.spacing12)
@@ -196,7 +196,7 @@ struct ShortcutsView: View {
                 RoundedRectangle(cornerRadius: GuesliTheme.cornerSmall)
                     .strokeBorder(GuesliTheme.surfaceBorder, lineWidth: 1)
             )
-            .help(hotkey.label)
+            .help(LocalizedStringKey(hotkey.label))
     }
 
     private func shortcutControls(
@@ -280,7 +280,7 @@ struct ShortcutsView: View {
                 startRecording(target)
             }
         } label: {
-            Text(recordingTarget == target ? recordingPrompt(for: target) : "Change Shortcut")
+            Text(recordingTarget == target ? recordingPrompt(for: target) : String(localized: "Change Shortcut"))
                 .font(GuesliTheme.body())
                 .foregroundStyle(recordingTarget == target ? GuesliTheme.accent : GuesliTheme.textPrimary)
         }
@@ -298,11 +298,11 @@ struct ShortcutsView: View {
     private func recordingPrompt(for target: ShortcutTarget) -> String {
         switch target {
         case .meetingRecording:
-            return "Press a key or modifier..."
+            return String(localized: "Press a key or modifier...")
         case .dictation:
-            return "Press a modifier key..."
+            return String(localized: "Press a modifier key...")
         case .meetingBookmark:
-            return "Нажмите сочетание клавиш..."
+            return String(localized: "Press a key combination...")
         }
     }
 

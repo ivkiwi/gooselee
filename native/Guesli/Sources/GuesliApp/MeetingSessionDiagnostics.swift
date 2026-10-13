@@ -223,7 +223,6 @@ final class MeetingSessionDiagnostics {
             } catch {
                 RecordingWAVFileIO.finalizePreservingFile(cleanedMicFile)
                 state.isClosed = true
-                self.cleanedMicFile = nil
                 fputs("[meeting-diagnostics] audio write failed: \(error)\n", stderr)
                 return
             }
@@ -306,12 +305,13 @@ final class MeetingSessionDiagnostics {
 
     private func finalizeCleanedMic() -> AudioSampleStatsSnapshot? {
         guard let cleanedMicFile else { return nil }
-        let finalState = lock.withLock { state -> CleanedMicState in
+        let (finalState, wasClosed) = lock.withLock { state -> (CleanedMicState, Bool) in
+            let wasClosed = state.isClosed
             state.isClosed = true
-            return state
+            return (state, wasClosed)
         }
-        RecordingWAVFileIO.finalizePreservingFile(cleanedMicFile)
-        self.cleanedMicFile = nil
+        // A failed write already finalized the file.
+        if !wasClosed { RecordingWAVFileIO.finalizePreservingFile(cleanedMicFile) }
         return finalState.stats.snapshot()
     }
 

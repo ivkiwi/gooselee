@@ -1,0 +1,11 @@
+"Voice commands" = "Голосовые команды";
+"Choose a dictation shortcut without Shift to use voice commands." = "Для команд выбери хоткей без Shift.";
+"Hold the dictation shortcut with Shift to give an instruction. Selected text will be rewritten using your cleanup provider. Screen text is included; external providers receive this context." = "Хоткей диктовки + Shift — команда. Выделение будет переписано выбранной моделью. Контекст экрана передаётся ей, в том числе внешнему провайдеру.";
+"Voice command" = "Голосовая команда";
+"Running command" = "Выполняю команду";
+"Voice command failed" = "Команда не выполнена";
+"Your instruction is in the clipboard." = "Команда в буфере.";
+"Check your text processing model or account and try again." = "Проверь модель или аккаунт и повтори.";
+"No command recognized. Select text to improve or try again." = "Команда не распознана. Выдели текст или повтори.";
+"The model returned an empty response." = "Модель вернула пустой ответ.";
+"Local voice commands require macOS 15 or later." = "Локальные команды требуют macOS 15+.";

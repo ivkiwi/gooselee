@@ -186,6 +186,7 @@ final class FloatingIndicatorController: NSObject {
     var onPositionSaved: ((CGPoint) -> Void)?
     var onOpenMeetingNotes: (() -> Void)?
     var isToggleDictation = false
+    private var isVoiceCommand = false
     private var stopLayer: CALayer?
     private var transcribingTitle = "Transcribing"
     private var loadingSpinner: NSProgressIndicator?
@@ -328,6 +329,12 @@ final class FloatingIndicatorController: NSObject {
         onPositionSaved?(center)
     }
 
+    func setVoiceCommand(_ active: Bool, config: AppConfig) {
+        guard isVoiceCommand != active else { return }
+        isVoiceCommand = active
+        setState(state, config: config)
+    }
+
     func setToggleDictation(_ active: Bool, config: AppConfig) {
         isToggleDictation = active
         if active {
@@ -425,6 +432,8 @@ final class FloatingIndicatorController: NSObject {
             createPanel(config: config)
         }
         guard let panel, let contentView, let iconLabel, let textLabel else { return }
+
+        contentView.setAccessibilityLabel(isVoiceCommand ? String(localized: "Voice command") : nil)
 
         let preservesWaveformAcrossTransition = previousState == .preparing && state == .recording
         if (previousState == .recording || previousState == .preparing)
@@ -987,7 +996,7 @@ final class FloatingIndicatorController: NSObject {
             tintHex = "1e1e2e"
         case .recording:
             tintAlpha = 0.85
-            tintHex = themeHex
+            tintHex = isVoiceCommand && !isMeetingRecording ? "30659B" : themeHex
         case .transcribing:
             tintAlpha = 0.62
             tintHex = "1e1e2e"
@@ -1454,7 +1463,7 @@ final class FloatingIndicatorController: NSObject {
         case .preparing: size = NSSize(width: 76, height: 22)
         case .recording: size = NSSize(width: 76, height: 22)
         case .transcribing:
-            size = Self.transcribingPillSize(title: transcribingTitle, screenWidth: screen.width)
+            size = Self.transcribingPillSize(title: isVoiceCommand ? String(localized: "Running command") : transcribingTitle, screenWidth: screen.width)
         }
 
         // Use the pill's current on-screen center if it exists, so state
@@ -1580,7 +1589,7 @@ final class FloatingIndicatorController: NSObject {
         case .transcribing:
             return (
                 .clear, .colorWith(hex: 0xFFFFFF, alpha: 0.16),
-                "", transcribingTitle,
+                "", isVoiceCommand ? String(localized: "Running command") : transcribingTitle,
                 .white, .colorWith(hex: 0xFFFFFF, alpha: 0.82), 1.0
             )
         }

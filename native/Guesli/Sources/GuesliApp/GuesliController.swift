@@ -527,6 +527,8 @@ public final class GuesliController: NSObject {
     private var lastExternalApp: NSRunningApplication?
     private var capturedDictationContext: DictationContext?
     private var capturedDictationCorrectionTargetApp: DictationCorrectionTargetApp?
+    private var isVoiceCommandSession = false
+    private var voiceCommandContextTask: Task<DictationContext, Never>?
     private var workspaceObserver: NSObjectProtocol?
     private var dataDidChangeObserver: NSObjectProtocol?
     private var iCloudAppActiveObserver: NSObjectProtocol?
@@ -687,9 +689,18 @@ public final class GuesliController: NSObject {
         hotkeyMonitor.onStart = { [weak self] in self?.handleStart() }
         hotkeyMonitor.onStop = { [weak self] in self?.handleStop() }
         hotkeyMonitor.onCancel = { [weak self] in self?.handleCancel() }
-        hotkeyMonitor.onToggleStart = { [weak self] in self?.handleToggleStart() }
+        hotkeyMonitor.onToggleStart = { [weak self] in
+            guard let self else { return }
+            self.handleToggleStart(voiceCommand: self.hotkeyMonitor.isVoiceCommand)
+        }
         hotkeyMonitor.onToggleStop = { [weak self] in self?.handleToggleStop() }
         hotkeyMonitor.doubleTapEnabled = config.enableDoubleTapDictation
+        hotkeyMonitor.voiceCommandsEnabled = config.enableVoiceCommands
+        hotkeyMonitor.onVoiceCommandModeChanged = { [weak self] in
+            guard let self, !self.isDictationTestMode,
+                  self.dictationState == .preparing || self.dictationState == .recording else { return }
+            self.beginVoiceCommandSession(true)
+        }
         configureHotkeyMonitorTiming()
 
         meetingRecordingHotkeyMonitor.onStart = { [weak self] in
@@ -1421,6 +1432,7 @@ public final class GuesliController: NSObject {
         statusBarController?.refreshIcon()
         indicator.refreshIcon()
         hotkeyMonitor.doubleTapEnabled = config.enableDoubleTapDictation
+        hotkeyMonitor.voiceCommandsEnabled = config.enableVoiceCommands
         if hotkeyTriggerThresholdChanged {
             configureHotkeyMonitorTiming()
         }
@@ -8241,7 +8253,7 @@ public final class GuesliController: NSObject {
         if dictationStartedAt == nil {
             dictationStartedAt = capturedAt
         }
-        capturedDictationContext = nil
+        if !isVoiceCommandSession { capturedDictationContext = nil }
         activateDictationRecordingIndicator()
         markDictationLatency("sound_start_requested:stream-active")
         SoundController.playDictationStart(enabled: shouldPlayDictationLifecycleSounds && !isDictationTestMode)
@@ -8272,7 +8284,7 @@ public final class GuesliController: NSObject {
     }
 
     private var shouldCaptureDictationContext: Bool {
-        config.enableScreenContext && config.enablePostProcessor && !isDictationTestMode
+        config.enableScreenContext && config.enablePostProcessor && !isDictationTestMode && !isVoiceCommandSession
     }
 
     private func captureDictationContextAsync() {
@@ -8296,6 +8308,20 @@ public final class GuesliController: NSObject {
     private func clearCapturedDictationSessionContext() {
         capturedDictationContext = nil
         capturedDictationCorrectionTargetApp = nil
+        isVoiceCommandSession = false
+        voiceCommandContextTask?.cancel()
+        voiceCommandContextTask = nil
+        indicator.setVoiceCommand(false, config: config)
+    }
+
+    private func beginVoiceCommandSession(_ active: Bool) {
+        isVoiceCommandSession = active && !isDictationTestMode
+        indicator.setVoiceCommand(isVoiceCommandSession, config: config)
+        if isVoiceCommandSession {
+            currentDictationOutputMode = .paste
+            appState.isVoiceNoteRecording = false
+            voiceCommandContextTask = VoiceCommandScreenContext.captureAsync()
+        }
     }
 
     private func captureDictationCorrectionTargetApp() {
@@ -8323,6 +8349,7 @@ public final class GuesliController: NSObject {
         dictationStartedAt = nil
         clearCapturedDictationSessionContext()
         captureDictationCorrectionTargetApp()
+        beginVoiceCommandSession(config.enableVoiceCommands && hotkeyMonitor.isVoiceCommand)
         setState(.preparing)
         dictationAudioSessionManager.beginRecording(
             mode: "hold-start",
@@ -8482,7 +8509,7 @@ public final class GuesliController: NSObject {
     }
 
     @discardableResult
-    private func handleToggleStart(outputMode: DictationOutputMode? = nil) -> Bool {
+    private func handleToggleStart(outputMode: DictationOutputMode? = nil, voiceCommand: Bool = false) -> Bool {
         guard ensureDictationBackendReady() else { return false }
         if isMeetingRecording() { return false }
         if blockDictationForMeetingActivityIfNeeded() { return false }
@@ -8496,10 +8523,11 @@ public final class GuesliController: NSObject {
         dictationStartedAt = nil
         clearCapturedDictationSessionContext()
         captureDictationCorrectionTargetApp()
+        beginVoiceCommandSession(config.enableVoiceCommands && voiceCommand)
         setState(.preparing)
 
         // Nemotron streaming: live text at cursor in handsfree mode too
-        if isStreamingDictationBackend {
+        if isStreamingDictationBackend && !isVoiceCommandSession {
             if #available(macOS 15, *) {
                 let sessionID = UUID()
                 isNemotron35Streaming = true
@@ -8736,30 +8764,39 @@ public final class GuesliController: NSObject {
         syncDictationRecorderWarmup(intent: .postDictation(.dictationStop))
         let isTestMode = isDictationTestMode
         let outputMode = currentDictationOutputMode
+        let isCommand = isVoiceCommandSession
+        let commandConfig = config
+        let commandContextTask = voiceCommandContextTask
         let transcriptionBackend = isTestMode ? (dictationTestBackend ?? selectedBackend) : selectedBackend
         let capturedContext = capturedDictationContext
         let promptContext = capturedContext.map { DictationContextCapture.formatForPrompt($0) }
         let correctionTargetApp = capturedDictationCorrectionTargetApp
-        let storageContext = capturedContext.map { DictationContextCapture.formatForStorage($0) }
+        let storageContext = (isCommand ? nil : capturedContext.map { DictationContextCapture.formatForStorage($0) })
             ?? correctionTargetApp?.appContext
             ?? ""
         let task = Task { [weak self] in
             guard let self else { return }
+            var recognizedCommand: String?
             defer {
                 try? FileManager.default.removeItem(at: wavURL)
             }
 
             do {
-                let result = try await self.transcriptionCoordinator.transcribeDictation(
-                    at: wavURL,
-                    backend: transcriptionBackend,
-                    enablePostProcessor: self.isPostProcessorReady,
-                    customWords: self.serializedCustomWords(),
-                    appContext: promptContext
-                )
+                let result: SpeechTranscriptionResult
+                if isCommand {
+                    result = try await self.transcriptionCoordinator.transcribeVoiceCommand(at: wavURL, backend: transcriptionBackend)
+                } else {
+                    result = try await self.transcriptionCoordinator.transcribeDictation(
+                        at: wavURL,
+                        backend: transcriptionBackend,
+                        enablePostProcessor: self.isPostProcessorReady,
+                        customWords: self.serializedCustomWords(),
+                        appContext: promptContext
+                    )
+                }
                 // Drop result if test was cancelled (user navigated away)
                 try Task.checkCancellation()
-                let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                var text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
 
                 // Test mode: route result to callback, skip history/paste
                 if isTestMode {
@@ -8774,6 +8811,12 @@ public final class GuesliController: NSObject {
                     return
                 }
 
+                if isCommand {
+                    recognizedCommand = text
+                    let commandContext = await commandContextTask?.value
+                    text = try await VoiceCommandProcessor.process(instruction: text, context: commandContext, config: commandConfig, coordinator: self.transcriptionCoordinator)
+                    try Task.checkCancellation()
+                }
                 guard !text.isEmpty else {
                     await MainActor.run {
                         self.clearCapturedDictationSessionContext()
@@ -8800,10 +8843,10 @@ public final class GuesliController: NSObject {
                     if outputMode != .voiceNote {
                         PasteController.paste(
                             text: text,
-                            appendDictationSentenceSpace: true,
+                            appendDictationSentenceSpace: !isCommand,
                             shortcut: self.config.pasteShortcut
                         )
-                        if self.config.enableDictionaryCorrectionPrompts {
+                        if self.config.enableDictionaryCorrectionPrompts && !isCommand {
                             // Dictionary correction prompts are an explicit opt-in
                             // screen-context feature: they briefly read focused app
                             // text via Accessibility after dictation, then stop when
@@ -8822,7 +8865,7 @@ public final class GuesliController: NSObject {
                     self.meetingMonitor.resumeAfterCooldown()
                     self.syncDictationRecorderWarmup(intent: .postDictation(.transcriptionComplete))
                 }
-            } catch is CancellationError {
+            } catch is CancellationError where recognizedCommand == nil {
                 fputs("[guesli-native] test dictation cancelled\n", stderr)
                 await MainActor.run {
                     self.clearCapturedDictationSessionContext()
@@ -8832,9 +8875,16 @@ public final class GuesliController: NSObject {
                     self.syncDictationRecorderWarmup(intent: .postDictation(.transcriptionCancelled))
                 }
             } catch {
-                fputs("[guesli-native] transcription failed: \(error)\n", stderr)
+                if recognizedCommand == nil { fputs("[guesli-native] transcription failed: \(error)\n", stderr) }
                 await MainActor.run {
-                    if self.isDictationTestMode {
+                    if let recognizedCommand {
+                        let preserved = recognizedCommand.isEmpty ? VoiceCommandPrompt.defaultRewrite : recognizedCommand
+                        self.copyToClipboard(preserved)
+                        _ = try? self.dictationStore.insertDictation(text: preserved, durationSeconds: duration, appContext: storageContext, startedAt: startedAt, endedAt: Date())
+                        self.scheduleICloudSyncAfterLocalChange()
+                        self.historyWindowController?.reload()
+                        self.presentErrorAlert(title: String(localized: "Voice command failed"), message: VoiceCommandProcessor.failureMessage(error))
+                    } else if self.isDictationTestMode {
                         self.dictationTestFailureCallback?(self.userFacingDictationTestError(error))
                     } else {
                         self.recordDiagnosticIncident(

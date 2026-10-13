@@ -182,7 +182,8 @@ enum ExternalTranscriptCleanupClient {
         appContext: String?,
         settings: TranscriptCleanupSettings,
         chatGPTRequest: ChatGPTTranscriptCleanupRequest = defaultChatGPTRequest,
-        clock: () -> Date = { Date() }
+        clock: () -> Date = { Date() },
+        isVoiceCommand: Bool = false
     ) async throws -> String {
         let effectiveSystemPrompt = systemPromptWithAppContextGuidance(settings.systemPrompt, appContext: appContext)
         switch settings.provider {
@@ -192,16 +193,18 @@ enum ExternalTranscriptCleanupClient {
             guard let raw = try await callChatGPTCleanup(
                 provider: settings.provider.label,
                 systemPrompt: effectiveSystemPrompt,
-                userPrompt: userPrompt(text: text, appContext: appContext),
+                userPrompt: isVoiceCommand ? text : userPrompt(text: text, appContext: appContext),
                 model: AppConfig.resolvedChatGPTModel(
                     settings.chatGPTModel,
                     defaultModel: AppConfig.defaultChatGPTDictationCleanupModel
                 ),
                 chatGPTRequest: chatGPTRequest,
-                clock: clock
+                clock: clock,
+                logFailures: !isVoiceCommand
             ) else {
                 throw TranscriptCleanupError.emptyResponse(settings.provider.label)
             }
+            if isVoiceCommand { return try VoiceCommandResponseCleaner.validated(raw) }
             return try validateOutput(raw, input: text, provider: settings.provider.label)
         case .openAI:
             let apiKey = resolvedAPIKey(environmentName: "OPENAI_API_KEY", configured: settings.openAIAPIKey)
@@ -215,7 +218,8 @@ enum ExternalTranscriptCleanupClient {
                 text: text,
                 appContext: appContext,
                 systemPrompt: effectiveSystemPrompt,
-                extraHeaders: [:]
+                extraHeaders: [:],
+                isVoiceCommand: isVoiceCommand
             )
         case .openRouter:
             let apiKey = resolvedAPIKey(environmentName: "OPENROUTER_API_KEY", configured: settings.openRouterAPIKey)
@@ -229,7 +233,8 @@ enum ExternalTranscriptCleanupClient {
                 text: text,
                 appContext: appContext,
                 systemPrompt: effectiveSystemPrompt,
-                extraHeaders: ["X-OpenRouter-Title": AppIdentity.displayName]
+                extraHeaders: ["X-OpenRouter-Title": AppIdentity.displayName],
+                isVoiceCommand: isVoiceCommand
             )
         case .customLLM:
             let format = CustomLLMFormat(rawValue: settings.customLLMFormat) ?? .openAI
@@ -245,7 +250,8 @@ enum ExternalTranscriptCleanupClient {
                 text: text,
                 appContext: appContext,
                 systemPrompt: effectiveSystemPrompt,
-                extraHeaders: [:]
+                extraHeaders: [:],
+                isVoiceCommand: isVoiceCommand
             )
         }
     }
@@ -256,7 +262,8 @@ enum ExternalTranscriptCleanupClient {
         userPrompt: String,
         model: String,
         chatGPTRequest: ChatGPTTranscriptCleanupRequest,
-        clock: () -> Date
+        clock: () -> Date,
+        logFailures: Bool
     ) async throws -> String? {
         let startedAt = clock()
         var didRetry = false
@@ -276,7 +283,9 @@ enum ExternalTranscriptCleanupClient {
                     throw cleanupError
                 }
                 didRetry = true
-                DiagnosticsLog.write("[transcript-cleanup] retrying ChatGPT cleanup after transient failure (1/1): \(cleanupError.localizedDescription)")
+                if logFailures {
+                    DiagnosticsLog.write("[transcript-cleanup] retrying ChatGPT cleanup after transient failure (1/1): \(cleanupError.localizedDescription)")
+                }
             }
         }
     }
@@ -381,13 +390,14 @@ enum ExternalTranscriptCleanupClient {
         text: String,
         appContext: String?,
         systemPrompt: String,
-        extraHeaders: [String: String]
+        extraHeaders: [String: String],
+        isVoiceCommand: Bool
     ) async throws -> String {
         var body: [String: Any] = [
             "model": model,
             "messages": [
                 ["role": "system", "content": systemPrompt],
-                ["role": "user", "content": userPrompt(text: text, appContext: appContext)],
+                ["role": "user", "content": isVoiceCommand ? text : userPrompt(text: text, appContext: appContext)],
             ],
             "temperature": 0,
         ]
@@ -412,6 +422,7 @@ enum ExternalTranscriptCleanupClient {
         else {
             throw TranscriptCleanupError.emptyResponse(provider)
         }
+        if isVoiceCommand { return try VoiceCommandResponseCleaner.validated(raw) }
         return try validateOutput(raw, input: text, provider: provider)
     }
 

@@ -472,6 +472,15 @@ actor TranscriptionCoordinator {
         }
     }
 
+    func transcribeVoiceCommand(at url: URL, backend: BackendOption) async throws -> SpeechTranscriptionResult {
+        removeArtifacts(try await route(url: url, backend: backend))
+    }
+
+    func generateVoiceCommand(_ prompt: String) async throws -> String {
+        guard #available(macOS 15, *) else { throw VoiceCommandError.requiresNewerMacOS }
+        return try await qwen3PostProcessor.generateVoiceCommand(prompt)
+    }
+
     func transcribeDictation(
         at url: URL,
         backend: BackendOption,

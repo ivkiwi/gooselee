@@ -24,6 +24,7 @@ let pendingScanTimer = 0;
 let lastScanAt = 0;
 let lastKnownParticipants = [];
 let bridgeAcceptedPath = "";
+let bridgeAcceptedAt = 0;
 let captionsHandledPath = "";
 const recentCaptionSpeakers = new Map();
 
@@ -218,10 +219,14 @@ function maybeEnableCaptions() {
   }
 
   const enableButton = controls.find((control) => actionOf(control) === "enable");
-  if (enableButton) {
-    captionsHandledPath = callPath;
-    enableButton.click();
+  if (!enableButton) return;
+  // Recording may have stopped since the last accepted sample: re-ask the app and click on a later scan.
+  if (Date.now() - bridgeAcceptedAt > scanIntervalFloorMs() + 1500) {
+    lastParticipantSentAt = 0;
+    return;
   }
+  captionsHandledPath = callPath;
+  enableButton.click();
 }
 
 function tileHasSpeakingState(tile) {
@@ -373,11 +378,19 @@ function removeBackupObservations(ids) {
 }
 
 async function postBridgePayload(payload) {
-  const response = await sendBackgroundMessage({ type: "guesli.postBridgePayload", payload });
+  let response;
+  try {
+    response = await sendBackgroundMessage({ type: "guesli.postBridgePayload", payload });
+  } catch (error) {
+    bridgeAcceptedPath = "";
+    throw error;
+  }
   if (!response?.ok) {
+    bridgeAcceptedPath = "";
     throw new Error(response?.error || "Guesli bridge request failed");
   }
   bridgeAcceptedPath = location.pathname;
+  bridgeAcceptedAt = Date.now();
 }
 
 function sendBackgroundMessage(message) {

@@ -115,6 +115,7 @@ function loadContentScript() {
   const vm = require("node:vm");
   const captionsButton = {
     clicks: 0,
+    visible: true,
     getAttribute: (name) => (name === "aria-label" ? "Включить субтитры (c)" : null),
     getBoundingClientRect: () => ({ width: 10, height: 10 }),
     click() { this.clicks += 1; }
@@ -139,7 +140,7 @@ function loadContentScript() {
       documentElement: {},
       addEventListener() {},
       querySelectorAll(selector) {
-        if (selector.startsWith("button[aria-label]")) return [captionsButton];
+        if (selector.startsWith("button[aria-label]")) return captionsButton.visible ? [captionsButton] : [];
         if (selector === ".notranslate") return [participantName];
         return [];
       }
@@ -173,4 +174,18 @@ test("captions are enabled once, only after the bridge accepts a sample", async 
   await sampleNow();
   await sampleNow();
   assert.equal(captionsButton.clicks, 1);
+});
+
+test("captions stay untouched when the bridge rejects samples after recording stops", async () => {
+  const { bridge, captionsButton, sampleNow } = loadContentScript();
+  captionsButton.visible = false;
+  bridge.ok = true;
+  await sampleNow();
+
+  bridge.ok = false;
+  await sampleNow();
+  captionsButton.visible = true;
+  await sampleNow();
+  await sampleNow();
+  assert.equal(captionsButton.clicks, 0);
 });

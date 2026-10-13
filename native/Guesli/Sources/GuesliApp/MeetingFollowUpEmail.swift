@@ -57,7 +57,7 @@ struct MeetingFollowUpEmailButton: View {
             HStack(spacing: 6) {
                 Image(systemName: "envelope")
                     .font(.system(size: 10, weight: .semibold))
-                Text("Письмо по итогам")
+                Text("Follow-up Email")
                     .font(.system(size: 12, weight: .semibold))
             }
             .foregroundStyle(GuesliTheme.textSecondary)
@@ -97,7 +97,7 @@ private struct MeetingFollowUpEmailSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: GuesliTheme.spacing12) {
-            Text("Письмо по итогам")
+            Text("Follow-up Email")
                 .font(GuesliTheme.title3())
                 .foregroundStyle(GuesliTheme.textPrimary)
 
@@ -108,14 +108,14 @@ private struct MeetingFollowUpEmailSheet: View {
             }
 
             HStack(spacing: GuesliTheme.spacing8) {
-                Button(isGenerating ? "Отменить" : "Закрыть") {
+                Button(isGenerating ? String(localized: "Cancel") : String(localized: "Close")) {
                     generationTask?.cancel()
                     dismiss()
                 }
                 .keyboardShortcut(.cancelAction)
                 Spacer()
                 if isBackendConfigured && !isGenerating {
-                    Button(draft.isEmpty ? "Повторить" : "Сгенерировать заново") {
+                    Button(draft.isEmpty ? String(localized: "Retry") : String(localized: "Regenerate")) {
                         if draft == generatedDraft {
                             generate()
                         } else {
@@ -123,7 +123,7 @@ private struct MeetingFollowUpEmailSheet: View {
                         }
                     }
                 }
-                Button(didCopy ? "Скопировано" : "Скопировать") {
+                Button(didCopy ? String(localized: "Copied") : String(localized: "Copy")) {
                     controller.copyToClipboard(draft)
                     didCopy = true
                 }
@@ -139,13 +139,13 @@ private struct MeetingFollowUpEmailSheet: View {
                 generate()
             }
         }
-        .alert("Сгенерировать письмо заново?", isPresented: $showRegenerateConfirmation) {
-            Button("Сгенерировать", role: .destructive) {
+        .alert("Regenerate email?", isPresented: $showRegenerateConfirmation) {
+            Button("Regenerate", role: .destructive) {
                 generate()
             }
-            Button("Отмена", role: .cancel) {}
+            Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Ваши правки в черновике будут заменены новым письмом.")
+            Text("Your edits to the draft will be replaced with a new email.")
         }
         .onDisappear {
             generationTask?.cancel()
@@ -158,13 +158,13 @@ private struct MeetingFollowUpEmailSheet: View {
             HStack(spacing: GuesliTheme.spacing8) {
                 ProgressView()
                     .controlSize(.small)
-                Text("Готовлю письмо…")
+                Text("Drafting email…")
                     .font(GuesliTheme.callout())
                     .foregroundStyle(GuesliTheme.textSecondary)
             }
         }
         if let errorMessage {
-            Text("Не удалось подготовить письмо. \(errorMessage)")
+            Text("Could not draft the email. \(errorMessage)")
                 .font(GuesliTheme.callout())
                 .foregroundStyle(GuesliTheme.recording)
                 .textSelection(.enabled)
@@ -192,11 +192,11 @@ private struct MeetingFollowUpEmailSheet: View {
 
     private var notConfiguredHint: some View {
         VStack(alignment: .leading, spacing: GuesliTheme.spacing8) {
-            Text("Бэкенд итогов не настроен. Выберите его и укажите ключ или модель в настройках, раздел «Meeting Summaries».")
+            Text("Summary backend is not set up. Choose it and add a key or model in Settings → Meeting Summaries.")
                 .font(GuesliTheme.callout())
                 .foregroundStyle(GuesliTheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("Открыть настройки") {
+            Button("Open Settings") {
                 dismiss()
                 controller.openHistoryWindow(tab: .settings)
             }
@@ -213,7 +213,7 @@ private struct MeetingFollowUpEmailSheet: View {
                 let email = try await MeetingFollowUpEmail.generate(meeting: meeting, config: config)
                 guard !Task.isCancelled else { return }
                 if email.isEmpty {
-                    errorMessage = "Модель вернула пустой ответ."
+                    errorMessage = String(localized: "The model returned an empty response.")
                 } else {
                     draft = email
                     generatedDraft = email

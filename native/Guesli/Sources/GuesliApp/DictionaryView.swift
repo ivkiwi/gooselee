@@ -152,9 +152,9 @@ struct DictionaryView: View {
 
     private func importDictionary() {
         let panel = NSOpenPanel()
-        panel.title = "Import Guesli Dictionary"
-        panel.message = "Choose a JSON dictionary file"
-        panel.prompt = "Import"
+        panel.title = String(localized: "Import Guesli Dictionary")
+        panel.message = String(localized: "Choose a JSON dictionary file")
+        panel.prompt = String(localized: "Import")
         panel.allowedContentTypes = [.json]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
@@ -173,25 +173,25 @@ struct DictionaryView: View {
                 let totalChanged = result.addedCount + result.updatedCount
                 if totalChanged == 0 {
                     dictionaryAlertMessage = imported.isEmpty
-                        ? "The selected dictionary did not contain any entries."
-                        : "All dictionary entries were already present."
+                        ? String(localized: "The selected dictionary did not contain any entries.")
+                        : String(localized: "All dictionary entries were already present.")
                 } else {
-                    var details = ["Imported \(result.addedCount) new", "updated \(result.updatedCount)"]
+                    var details = [String(localized: "Imported \(result.addedCount) new"), String(localized: "updated \(result.updatedCount)")]
                     if result.skippedCount > 0 {
-                        details.append("skipped \(result.skippedCount)")
+                        details.append(String(localized: "skipped \(result.skippedCount)"))
                     }
-                    dictionaryAlertMessage = details.joined(separator: ", ") + " dictionary entries."
+                    dictionaryAlertMessage = details.joined(separator: ", ") + String(localized: " dictionary entries.")
                 }
             } catch {
-                dictionaryAlertMessage = "Could not import the dictionary. \(error.localizedDescription)"
+                dictionaryAlertMessage = String(localized: "Could not import the dictionary. \(error.localizedDescription)")
             }
         }
     }
 
     private func exportDictionary() {
         let panel = NSSavePanel()
-        panel.title = "Export Guesli Dictionary"
-        panel.prompt = "Export"
+        panel.title = String(localized: "Export Guesli Dictionary")
+        panel.prompt = String(localized: "Export")
         panel.nameFieldStringValue = "guesli-dictionary.json"
         panel.allowedContentTypes = [.json]
         panel.canCreateDirectories = true
@@ -200,9 +200,9 @@ struct DictionaryView: View {
             do {
                 let data = try CustomWordDictionaryCodec.encode(appState.config.customWords)
                 try data.write(to: url, options: .atomic)
-                dictionaryAlertMessage = "Exported \(appState.config.customWords.count) dictionary entries."
+                dictionaryAlertMessage = String(localized: "Exported \(appState.config.customWords.count) dictionary entries.")
             } catch {
-                dictionaryAlertMessage = "Could not export the dictionary. \(error.localizedDescription)"
+                dictionaryAlertMessage = String(localized: "Could not export the dictionary. \(error.localizedDescription)")
             }
         }
     }
@@ -280,7 +280,7 @@ struct DictionaryView: View {
         guard count > 0 else { return "" }
         let start = boundedSuggestionPage * DictionaryRowMetrics.suggestionPageSize + 1
         let end = min(start + DictionaryRowMetrics.suggestionPageSize - 1, count)
-        return "\(start)-\(end) of \(count)"
+        return String(localized: "\(start)-\(end) of \(count)")
     }
 
     private var suggestionPaginationControls: some View {
@@ -471,7 +471,7 @@ private struct DictionarySuggestionRow: View {
     }
 
     private var detailText: String {
-        var parts = ["Seen \(suggestion.occurrenceCount)x"]
+        var parts = [String(localized: "Seen \(suggestion.occurrenceCount)x")]
         if !suggestion.appDisplayName.isEmpty {
             parts.append(suggestion.appDisplayName)
         }
@@ -736,7 +736,7 @@ private struct ThresholdSlider: View {
 
 private struct DictionaryIconButton: View {
     let systemName: String
-    let label: String
+    let label: LocalizedStringKey
     let tint: Color
     var weight: Font.Weight = .bold
     var isDisabled = false

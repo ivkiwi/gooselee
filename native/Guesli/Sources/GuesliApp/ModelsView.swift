@@ -157,7 +157,7 @@ struct ModelsView: View {
 
                 Spacer()
 
-                Text(isActive ? "Active" : (isLiveCaptionModelDownloaded ? "Ready" : "Not downloaded"))
+                Text(isActive ? String(localized: "Active") : (isLiveCaptionModelDownloaded ? String(localized: "Ready") : String(localized: "Not downloaded")))
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(isActive ? GuesliTheme.success : GuesliTheme.textTertiary)
                     .padding(.horizontal, 8)
@@ -182,7 +182,7 @@ struct ModelsView: View {
                         cancelLiveCaptionDownload()
                     }
                 } else if isLiveCaptionModelDownloaded {
-                    Button(isActive ? "Disable" : "Enable") {
+                    Button(isActive ? String(localized: "Disable") : String(localized: "Enable")) {
                         controller.updateConfig { $0.enableLiveStreamingPartials = !isActive }
                     }
 
@@ -984,8 +984,8 @@ struct ModelsView: View {
                     }
                     let cancelled = error is CancellationError || (error as? URLError)?.code == .cancelled
                     downloadMessages[option.model] = cancelled
-                        ? "Paused — resume is available"
-                        : "Download failed — retry"
+                        ? String(localized: "Paused — resume is available")
+                        : String(localized: "Download failed — retry")
                 }
                 if !(error is CancellationError) {
                     DiagnosticsLog.write("[guesli-native] model download failed for \(option.backend)/\(option.model): \(error.localizedDescription)")
@@ -1009,7 +1009,7 @@ struct ModelsView: View {
                     downloadProgress.removeValue(forKey: option.model)
                     downloadTasks.removeValue(forKey: option.model)
                 }
-                downloadMessages[option.model] = "Paused — resume is available"
+                downloadMessages[option.model] = String(localized: "Paused — resume is available")
             }
         }
     }
@@ -1104,14 +1104,14 @@ struct ModelsView: View {
         if let snapshot = downloadSnapshots[option.model] {
             if let message = snapshot.message, !message.isEmpty { return message }
             switch snapshot.phase {
-            case .preparing: return "Preparing model..."
-            case .ready: return "Model ready"
-            case .paused: return "Paused — resume is available"
-            case .failed: return "Download failed — retry"
+            case .preparing: return String(localized: "Preparing model...")
+            case .ready: return String(localized: "Model ready")
+            case .paused: return String(localized: "Paused — resume is available")
+            case .failed: return String(localized: "Download failed — retry")
             case .downloading: break
             }
         }
-        return downloadMessages[option.model] ?? "\(Int(progress * 100))% downloading..."
+        return downloadMessages[option.model] ?? String(localized: "\(Int(progress * 100))% downloading...")
     }
 
     private func removeItemIfPresent(at url: URL, fileManager: FileManager) throws {

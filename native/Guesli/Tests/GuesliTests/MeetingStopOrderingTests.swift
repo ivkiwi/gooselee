@@ -64,6 +64,45 @@ struct MeetingStopOrderingTests {
         #expect(diagnostics.contains("[live-collector] stop mic registered="))
     }
 
+    @Test("write failure finalizes retained audio before failing stop")
+    func writeFailureKeepsRetainedAudio() async throws {
+        let events = LockedStopEvents()
+        let session = makeSession()
+        let writer = try MeetingRecordingWriter()
+        defer { writer.cancel() }
+        writer.appendMic([1, 2])
+        writer.appendSystem([3, 4])
+        try writer.failWritesForTesting()
+        session.setRetainedRecordingWriterForTesting(writer)
+        session.setRecordingForTesting(true)
+        session.onRetainedRecordingReady = { request in
+            events.append("retained_audio_kept")
+            events.setRetainedSamples(try readMonoPCM16WAVSamples(from: request.tempURL))
+            try? FileManager.default.removeItem(at: request.tempURL)
+            return nil
+        }
+        writer.appendMic([5, 6])
+        writer.appendSystem([7, 8])
+        do {
+            _ = try await session.stop()
+            Issue.record("Expected stop to report the write failure")
+        } catch {
+            #expect(events.contains("retained_audio_kept"))
+            #expect(events.retainedSamples() == [2, 3])
+        }
+    }
+
+    @Test("stop reports collector losses for every meeting backend", arguments: [
+        BackendOption.gigaAMV3Russian, .parakeetMultilingual, .nemotron35Multilingual
+    ])
+    func stopReportsCollectorLossesForEveryBackend(_ backend: BackendOption) async throws {
+        let session = makeSession(backend: backend)
+        session.setRecordingForTesting(true)
+        session.addPendingMicChunkForTesting(stalledTask(), drainTimeout: 0.01)
+        let result = try await session.stop()
+        #expect(result.liveCollectorDrainTimeoutDroppedChunkCount == 1)
+    }
+
     @Test("start fails when retained recording writer cannot be prepared")
     func startFailsWhenRetainedRecordingWriterCannotBePrepared() async throws {
         let micRecorder = StopOrderingMicRecorder()
@@ -153,6 +192,7 @@ struct MeetingStopOrderingTests {
 
 #if DEBUG
     private func makeSession(
+        backend: BackendOption = .parakeetMultilingual,
         meetingMicRecorder: MeetingMicRecording = StopOrderingMicRecorder(),
         systemAudioRecorder: SystemAudioCapturing = StopOrderingSystemRecorder()
     ) -> MeetingSession {
@@ -167,7 +207,7 @@ struct MeetingStopOrderingTests {
         return MeetingSession(
             title: "Stop ordering",
             calendarEventID: nil,
-            backend: .parakeetMultilingual,
+            backend: backend,
             runtime: RuntimePaths(
                 repoRoot: FileManager.default.temporaryDirectory,
                 menuIcon: nil,

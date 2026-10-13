@@ -140,12 +140,16 @@ final class MeetingNeuralAec {
     }
 
     /// Pre-load the meeting AEC processor so it's ready for processing.
-    func preload() async {
+    func preload(
+        localVQELoader: (Bool) async throws -> LocalVQEAudioProcessor = {
+            try await LocalVQEAudioProcessor.load(downloadModelIfMissing: $0)
+        }
+    ) async {
         guard !isLoaded else { return }
 
         if selection != .dtlnOnly {
             do {
-                let localVQE = try await LocalVQEAudioProcessor.load()
+                let localVQE = try await localVQELoader(false)
                 processor = localVQE
                 frameSize = localVQE.frameSize
                 isLoaded = true
@@ -414,10 +418,9 @@ final class MeetingNeuralAec {
         trimMicHistory(before: micRetentionFloor)
         // systemHistory is used by both estimator and AEC. systemRetentionFloor already
         // covers the estimator's window (retentionSamples = windowSamples + maxCandidateDelaySamples).
-        // Cap at oldestNeededForAec so we never trim frames that queued mic frames still need
-        // for echo cancellation — this prevents returning zero/partial references when system
-        // audio gets ahead of mic audio during a long mic pause.
-        trimSystemHistory(before: min(systemRetentionFloor, oldestNeededForAec))
+        // A stale partial mic frame must not retain unbounded system audio.
+        let boundedRetentionFloor = max(0, systemRetentionFloor - maxReferenceWaitSamples)
+        trimSystemHistory(before: max(boundedRetentionFloor, min(systemRetentionFloor, oldestNeededForAec)))
     }
 
     private func delayDecision(for result: MeetingAecDelayEstimator.Result) -> (shouldApply: Bool, reason: String) {

@@ -10,6 +10,7 @@ import os
 /// Protocol for system audio capture backends (ScreenCaptureKit vs CoreAudio tap).
 protocol SystemAudioCapturing: AnyObject {
     var onPCMSamples: (([Int16]) -> Void)? { get set }
+    var onRecordingFailed: ((Error) -> Void)? { get set }
     var isRecording: Bool { get }
     var isPaused: Bool { get }
     func start() async throws
@@ -45,6 +46,10 @@ protocol SystemAudioCapturing: AnyObject {
 }
 
 extension SystemAudioCapturing {
+    var onRecordingFailed: ((Error) -> Void)? {
+        get { nil }
+        set {}
+    }
     var captureHeartbeat: UInt64 { 0 }
     var isRebuilding: Bool { false }
     var supportsHeartbeatMonitoring: Bool { false }
@@ -91,6 +96,7 @@ final class CoreAudioSystemRecorder: SystemAudioCapturing, SystemAudioDiagnostic
     private struct CallbackState {
         var onPCMSamplesStorage: (([Int16]) -> Void)?
     }
+    var onRecordingFailed: ((Error) -> Void)?
 
     private var tapID: AudioObjectID = kAudioObjectUnknown
     private var aggregateDeviceID: AudioDeviceID = kAudioObjectUnknown
@@ -221,7 +227,7 @@ final class CoreAudioSystemRecorder: SystemAudioCapturing, SystemAudioDiagnostic
         guard let file = FileHandle(forWritingAtPath: url.path) else {
             throw RecorderError.fileCreationFailed
         }
-        file.write(WavWriter.header(dataSize: 0))
+        try file.write(contentsOf: WavWriter.header(dataSize: 0))
         outputFile = file
         outputURL = url
         totalBytesWritten = 0
@@ -262,10 +268,7 @@ final class CoreAudioSystemRecorder: SystemAudioCapturing, SystemAudioDiagnostic
         }
 
         if let file = outputFile {
-            let header = WavWriter.header(dataSize: totalBytesWritten)
-            file.seek(toFileOffset: 0)
-            file.write(header)
-            file.closeFile()
+            RecordingWAVFileIO.finalizePreservingFile(file)
         }
         outputFile = nil
 
@@ -472,7 +475,15 @@ final class CoreAudioSystemRecorder: SystemAudioCapturing, SystemAudioDiagnostic
         let rawData = int16Samples.withUnsafeBufferPointer { buf in
             Data(bytes: buf.baseAddress!, count: buf.count * MemoryLayout<Int16>.size)
         }
-        outputFile?.write(rawData)
+        guard let file = outputFile else { return }
+        do {
+            try RecordingWAVFileIO.append(rawData, to: file, bytesWritten: totalBytesWritten)
+        } catch {
+            RecordingWAVFileIO.finalizePreservingFile(file)
+            outputFile = nil
+            onRecordingFailed?(error)
+            return
+        }
         totalBytesWritten += rawData.count
         diagnosticsLock.withLock { state in
             state.bytesWritten += rawData.count

@@ -2,6 +2,7 @@ import Foundation
 import os
 
 final class PCMChunkRecorder {
+    var onRecordingFailed: ((Error) -> Void)?
     private struct State {
         var fileHandle: FileHandle?
         var fileURL: URL?
@@ -26,11 +27,21 @@ final class PCMChunkRecorder {
     func append(_ samples: [Int16]) {
         guard !samples.isEmpty else { return }
         let pcmData = samples.withUnsafeBufferPointer { Data(buffer: $0) }
-        lock.withLock { state in
-            state.fileHandle?.write(pcmData)
+        let failure = lock.withLock { state -> Error? in
+            guard let fileHandle = state.fileHandle else { return nil }
+            do {
+                try RecordingWAVFileIO.append(pcmData, to: fileHandle, bytesWritten: state.bytesWritten)
+            } catch {
+                if let count = RecordingWAVFileIO.finalizePreservingFile(fileHandle) {
+                    state.freshBytesWritten += max(0, count - state.bytesWritten)
+                    state.bytesWritten = count
+                }
+                state.fileHandle = nil
+                return error
+            }
             state.bytesWritten += pcmData.count
             state.freshBytesWritten += pcmData.count
-            guard overlapSampleCount > 0 else { return }
+            guard overlapSampleCount > 0 else { return nil }
             let combinedCount = state.tailSamples.count + samples.count
             if combinedCount > overlapSampleCount {
                 let excess = combinedCount - overlapSampleCount
@@ -43,10 +54,13 @@ final class PCMChunkRecorder {
             } else {
                 state.tailSamples.append(contentsOf: samples)
             }
+            return nil
         }
+        if let failure { onRecordingFailed?(failure) }
     }
 
     func rotateFile() -> URL? {
+        guard lock.withLock({ $0.fileHandle != nil }) else { return nil }
         let carryoverSamples = lock.withLock { state in
             state.tailSamples
         }
@@ -102,10 +116,10 @@ final class PCMChunkRecorder {
                 userInfo: [NSLocalizedDescriptionKey: "Could not open chunk recorder file for writing."]
             )
         }
-        fileHandle.write(WavWriter.header(dataSize: 0))
+        try fileHandle.write(contentsOf: WavWriter.header(dataSize: 0))
         if !carryoverSamples.isEmpty {
             let carryoverData = carryoverSamples.withUnsafeBufferPointer { Data(buffer: $0) }
-            fileHandle.write(carryoverData)
+            try fileHandle.write(contentsOf: carryoverData)
         }
         return State(
             fileHandle: fileHandle,
@@ -117,11 +131,10 @@ final class PCMChunkRecorder {
     }
 
     private func finalizeFile(_ state: State) -> URL? {
-        guard let fileHandle = state.fileHandle, let fileURL = state.fileURL else { return nil }
-
-        fileHandle.seek(toFileOffset: 0)
-        fileHandle.write(WavWriter.header(dataSize: UInt32(state.bytesWritten)))
-        fileHandle.closeFile()
+        guard let fileURL = state.fileURL else { return nil }
+        if let fileHandle = state.fileHandle {
+            RecordingWAVFileIO.finalizePreservingFile(fileHandle)
+        }
 
         guard state.freshBytesWritten > 0 else {
             try? FileManager.default.removeItem(at: fileURL)

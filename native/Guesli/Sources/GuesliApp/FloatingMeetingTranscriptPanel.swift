@@ -172,11 +172,11 @@ private struct FloatingMeetingTranscriptPanelView: View {
                 Text(model.isPaused ? "Paused" : "Live")
                     .font(GuesliTheme.caption())
                     .foregroundStyle(GuesliTheme.textSecondary)
-                Button("⭐ Метка", action: onBookmark)
+                Button("⭐ Bookmark", action: onBookmark)
                     .buttonStyle(.plain)
                     .font(GuesliTheme.caption())
                     .disabled(!model.isRecording)
-                    .help("Отметить важный момент в заметках встречи")
+                    .help("Mark an important moment in the meeting notes")
                 Button(action: model.copyToPasteboard) {
                     Image(systemName: model.didCopy ? "checkmark" : "doc.on.doc")
                 }

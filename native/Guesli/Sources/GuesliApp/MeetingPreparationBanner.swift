@@ -15,7 +15,7 @@ struct MeetingPreparationBanner: View {
                 Text("Preparing transcription")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(GuesliTheme.textPrimary)
-                Text(status ?? "Meeting transcription will start shortly.")
+                Text(status ?? String(localized: "Meeting transcription will start shortly."))
                     .font(GuesliTheme.caption())
                     .foregroundStyle(GuesliTheme.textSecondary)
                     .lineLimit(2)

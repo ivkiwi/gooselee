@@ -37,6 +37,8 @@ final class ChatGPTAuthManager {
     private static let redirectURI = "http://localhost:1455/auth/callback"
     private static let scopes = "openid profile email offline_access"
     private static let callbackTimeoutSeconds: TimeInterval = 300 // 5 minutes
+    /// Cancels the pending browser sign-in so a new attempt can take over the callback port.
+    private var cancelPendingCallback: (() -> Void)?
 
     private var tokenFileURL: URL {
         AppIdentity.supportDirectoryURL.appendingPathComponent("chatgpt-auth.json")
@@ -142,10 +144,13 @@ final class ChatGPTAuthManager {
     }
 
     private func startCallbackServerAndOpenBrowser(codeChallenge: String) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
+        cancelPendingCallback?()
+        return try await withCheckedThrowingContinuation { continuation in
             let port: NWEndpoint.Port = 1455
             let params = NWParameters.tcp
             params.requiredLocalEndpoint = NWEndpoint.hostPort(host: .ipv4(.loopback), port: port)
+            // The cancelled previous listener may still be releasing the port.
+            params.allowLocalEndpointReuse = true
 
             guard let listener = try? NWListener(using: params) else {
                 continuation.resume(throwing: ChatGPTAuthError.portInUse)
@@ -163,6 +168,13 @@ final class ChatGPTAuthManager {
                 deadline: .now() + Self.callbackTimeoutSeconds,
                 execute: timeoutWork
             )
+            self.cancelPendingCallback = { [weak listener] in
+                guard !resumed else { return }
+                resumed = true
+                timeoutWork.cancel()
+                listener?.cancel()
+                continuation.resume(throwing: ChatGPTAuthError.callbackTimeout)
+            }
 
             listener.stateUpdateHandler = { state in
                 if case .failed = state {
@@ -183,7 +195,10 @@ final class ChatGPTAuthManager {
                         listener.cancel()
                         timeoutWork.cancel()
                     }
-                    guard !resumed else { return }
+                    guard !resumed else {
+                        connection.cancel()
+                        return
+                    }
                     resumed = true
 
                     guard let data, let request = String(data: data, encoding: .utf8) else {

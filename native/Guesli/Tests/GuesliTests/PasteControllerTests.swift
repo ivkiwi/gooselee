@@ -85,7 +85,8 @@ struct PasteControllerTests {
             text: "dictated text",
             pasteboard: pasteboard,
             shortcut: .commandShiftV,
-            simulatePasteAction: { simulated = true }
+            simulatePasteAction: { simulated = true },
+            pasteTargetCheck: { .unknown }
         )
 
         #expect(pasteboard.string(forType: .string) == "dictated text")
@@ -101,7 +102,7 @@ struct PasteControllerTests {
         pasteboard.clearContents()
         pasteboard.setString("original", forType: .string)
 
-        PasteController.paste(text: "", pasteboard: pasteboard, simulatePasteAction: {})
+        PasteController.paste(text: "", pasteboard: pasteboard, simulatePasteAction: {}, pasteTargetCheck: { .unknown })
 
         #expect(pasteboard.string(forType: .string) == "original")
     }
@@ -112,7 +113,7 @@ struct PasteControllerTests {
         pasteboard.clearContents()
         pasteboard.setString("original", forType: .string)
 
-        PasteController.paste(text: "dictated text", pasteboard: pasteboard, simulatePasteAction: {})
+        PasteController.paste(text: "dictated text", pasteboard: pasteboard, simulatePasteAction: {}, pasteTargetCheck: { .unknown })
 
         // Immediately after paste(), the clipboard holds the dictation text
         // (restoration happens asynchronously after ~500ms)
@@ -129,7 +130,8 @@ struct PasteControllerTests {
             text: "Готово.",
             appendDictationSentenceSpace: true,
             pasteboard: dictationPasteboard,
-            simulatePasteAction: {}
+            simulatePasteAction: {},
+            pasteTargetCheck: { .unknown }
         )
         #expect(dictationPasteboard.string(forType: .string) == "Готово. ")
 
@@ -138,7 +140,8 @@ struct PasteControllerTests {
         PasteController.paste(
             text: "Computer Use output.",
             pasteboard: verbatimPasteboard,
-            simulatePasteAction: {}
+            simulatePasteAction: {},
+            pasteTargetCheck: { .unknown }
         )
         #expect(verbatimPasteboard.string(forType: .string) == "Computer Use output.")
 
@@ -152,7 +155,7 @@ struct PasteControllerTests {
         pasteboard.clearContents()
         pasteboard.setString("user-copied-text", forType: .string)
 
-        PasteController.paste(text: "dictated text", pasteboard: pasteboard, simulatePasteAction: {})
+        PasteController.paste(text: "dictated text", pasteboard: pasteboard, simulatePasteAction: {}, pasteTargetCheck: { .unknown })
 
         let restored = await waitForClipboardString(in: pasteboard, expected: "user-copied-text")
 
@@ -164,7 +167,7 @@ struct PasteControllerTests {
         let pasteboard = makePasteboard()
         pasteboard.clearContents()
 
-        PasteController.paste(text: "dictated text", pasteboard: pasteboard, simulatePasteAction: {})
+        PasteController.paste(text: "dictated text", pasteboard: pasteboard, simulatePasteAction: {}, pasteTargetCheck: { .unknown })
 
         let restored = await waitForClipboardString(in: pasteboard, expected: nil)
 
@@ -186,7 +189,7 @@ struct PasteControllerTests {
         let countBefore = pasteboard.pasteboardItems?.count ?? 0
         #expect(countBefore == 2)
 
-        PasteController.paste(text: "dictated text", pasteboard: pasteboard, simulatePasteAction: {})
+        PasteController.paste(text: "dictated text", pasteboard: pasteboard, simulatePasteAction: {}, pasteTargetCheck: { .unknown })
 
         let (countAfter, texts) = await waitForClipboardItems(
             in: pasteboard,
@@ -204,7 +207,7 @@ struct PasteControllerTests {
         pasteboard.clearContents()
         pasteboard.setString("original", forType: .string)
 
-        PasteController.paste(text: "dictated text", pasteboard: pasteboard, simulatePasteAction: {})
+        PasteController.paste(text: "dictated text", pasteboard: pasteboard, simulatePasteAction: {}, pasteTargetCheck: { .unknown })
         try await Task.sleep(nanoseconds: 100_000_000)
 
         pasteboard.clearContents()

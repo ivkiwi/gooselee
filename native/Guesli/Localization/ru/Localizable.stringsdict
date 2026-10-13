@@ -2,6 +2,26 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>%lld dictations</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>lld</string>
+			<key>one</key>
+			<string>%lld диктовка</string>
+			<key>few</key>
+			<string>%lld диктовки</string>
+			<key>many</key>
+			<string>%lld диктовок</string>
+			<key>other</key>
+			<string>%lld диктовки</string>
+		</dict>
+	</dict>
 	<key>%lld meetings</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>

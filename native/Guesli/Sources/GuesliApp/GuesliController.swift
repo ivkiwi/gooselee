@@ -558,7 +558,9 @@ public final class GuesliController: NSObject {
     private var isPresentingMeetingTerminationConfirmation = false
     private var isTerminatingAfterMeetingConfirmation = false
     private var terminateAfterMeetingProcessing = false
-    private var backgroundMeetingProcessingCount = 0
+    private var backgroundMeetingProcessingCount = 0 {
+        didSet { appState.isProcessingMeetingInBackground = backgroundMeetingProcessingCount > 0 }
+    }
     private var pendingMeetingCompletionNotification: PendingMeetingCompletionNotification?
     private var meetingStartTask: Task<Void, Never>?
     private var meetingStartMeetingID: Int64?
@@ -7008,7 +7010,9 @@ public final class GuesliController: NSObject {
                 if let liveMeetingID {
                     self.appState.meetingProcessingStages[liveMeetingID] = nil
                 }
-                if !self.isMeetingRecording() && !self.isStartingMeetingRecording && self.backgroundMeetingProcessingCount == 0 {
+                // A dictation started during background processing owns the state and its processing deadline.
+                if !self.isMeetingRecording() && !self.isStartingMeetingRecording && self.backgroundMeetingProcessingCount == 0
+                    && !self.isDictationInFlight {
                     self.setState(.idle)
                     self.statusBarController?.refresh()
                 }
@@ -7789,6 +7793,21 @@ public final class GuesliController: NSObject {
 
     private var isDictationActivityInProgress: Bool {
         dictationState != .idle || dictationStartedAt != nil || isNemotron35Streaming
+    }
+
+    /// Meeting processing also uses `.transcribing`, so only dictation-owned states and work count here.
+    private var isDictationInFlight: Bool {
+        dictationState == .preparing || dictationState == .recording || dictationStartedAt != nil
+            || dictationProcessingDeadline != nil || isNemotron35Streaming
+    }
+
+    /// A relaunch would cut a meeting recording, a dictation or background meeting processing.
+    /// Reads AppState mirrors so SwiftUI views refresh when it changes.
+    var isBusyForRelaunch: Bool {
+        appState.isMeetingRecording || appState.isMeetingStarting || appState.isProcessingMeetingInBackground
+            || appState.dictationState != .idle
+            || isMeetingRecording() || isStartingMeetingRecording || isStoppingMeetingRecording
+            || backgroundMeetingProcessingCount > 0 || isDictationActivityInProgress
     }
 
     private func configureHotkeyMonitorTiming() {

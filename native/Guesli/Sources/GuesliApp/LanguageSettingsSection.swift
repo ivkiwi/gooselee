@@ -100,21 +100,23 @@ struct LanguageSettingsSection: View {
             Image(systemName: "arrow.clockwise.circle.fill")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(GuesliTheme.accent)
-            // Restarting would cut the meeting recording, so it waits until recording stops.
-            if appState.isMeetingRecording {
-                Text("Stop the meeting recording to restart.")
-                    .font(GuesliTheme.caption())
-                    .foregroundStyle(GuesliTheme.textTertiary)
-            } else {
-                Text("Restart GooseLee to apply.")
-                    .font(GuesliTheme.caption())
-                    .foregroundStyle(GuesliTheme.textTertiary)
-                Spacer(minLength: GuesliTheme.spacing12)
-                Button("Restart") {
-                    guard !controller.isMeetingRecording() else { return }
-                    controller.relaunchApp()
+            // Relaunch exits the process, so it waits for recording, dictation and meeting processing.
+            let isBusy = controller.isBusyForRelaunch
+            Group {
+                if isBusy {
+                    Text("Available after recording, dictation and meeting processing finish.")
+                } else {
+                    Text("Restart GooseLee to apply.")
                 }
             }
+            .font(GuesliTheme.caption())
+            .foregroundStyle(GuesliTheme.textTertiary)
+            Spacer(minLength: GuesliTheme.spacing12)
+            Button("Restart") {
+                guard !controller.isBusyForRelaunch else { return }
+                controller.relaunchApp()
+            }
+            .disabled(isBusy)
         }
     }
 }

@@ -635,6 +635,8 @@ public final class GuesliController: NSObject {
         }) ?? .chatGPT
         self.indicator = FloatingIndicatorController(configStore: configStore)
         super.init()
+        indicator.configureMeetingQuickActions(appState: appState)
+        appState.meetingQuickActions.meetingRecordProvider = { [weak self] id in self?.meeting(id: id) }
         appState.canUseICloudSync = appleCloudCapabilities.canUseCloudKit
         Task { [weak self] in
             guard let self else { return }

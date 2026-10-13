@@ -402,6 +402,10 @@ final class FloatingIndicatorController: NSObject {
         )
     }
 
+    func configureMeetingQuickActions(appState: AppState) {
+        meetingTranscriptPanel.configureQuickActions(appState: appState)
+    }
+
     func setTranscribingTitle(_ title: String, config: AppConfig) {
         transcribingTitle = title
         guard state == .transcribing else { return }

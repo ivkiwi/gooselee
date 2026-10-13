@@ -132,6 +132,8 @@ struct MeetingDetailView: View {
                         )
                     }
 
+                    MeetingQuickActionsView(appState: appState, meeting: meeting)
+                        .padding(GuesliTheme.spacing16)
                     content(for: meeting)
                 }
                 .background(GuesliTheme.backgroundBase)

@@ -85,7 +85,11 @@ final class AppState {
     var isMeetingStarting: Bool = false
     var meetingStartStatus: String?
     var liveMeetingTranscript: String = ""
-    var liveMeetingTranscriptOwnerID: Int64? = nil
+    var liveMeetingTranscriptOwnerID: Int64? = nil {
+        didSet {
+            if oldValue != liveMeetingTranscriptOwnerID { meetingQuickActions.reset() }
+        }
+    }
     var liveMeetingPartialYou: String = ""
     var liveMeetingPartialOthers: String = ""
     var activeMeetingAudioWarning: ActiveMeetingAudioWarning?
@@ -159,4 +163,6 @@ final class AppState {
         guard selectedMeetingRecord?.id == id else { return nil }
         return selectedMeetingRecord
     }
+
+    var meetingQuickActions = MeetingQuickActionModel()
 }

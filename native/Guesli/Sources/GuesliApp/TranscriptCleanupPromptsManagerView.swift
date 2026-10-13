@@ -148,7 +148,7 @@ struct TranscriptCleanupPromptsManagerView: View {
 
     private func builtInPresetRow(_ preset: TranscriptCleanupPromptPreset) -> some View {
         presetRow(
-            name: preset.name,
+            name: preset.displayName,
             prompt: preset.prompt,
             isActive: activePromptID == preset.id,
             systemImage: "sparkles"
@@ -159,7 +159,7 @@ struct TranscriptCleanupPromptsManagerView: View {
             .disabled(activePromptID == preset.id)
 
             actionButton("Duplicate", systemImage: "doc.on.doc") {
-                beginDuplicatingPrompt(name: preset.name, prompt: preset.prompt)
+                beginDuplicatingPrompt(name: preset.displayName, prompt: preset.prompt)
             }
         }
     }

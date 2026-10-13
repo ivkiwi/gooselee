@@ -1,17 +1,13 @@
-"Shortcuts" = "Сочетания клавиш";
 "Choose your preferred shortcuts for dictation and meeting recording." = "Выберите сочетания для диктовки и записи встреч.";
 "Push to Talk" = "Нажми и говори";
 "Hold to record, release to transcribe" = "Держите для записи, отпустите для расшифровки";
-"Meeting Recording" = "Запись встречи";
 "Toggle meeting recording on/off" = "Вкл./выкл. запись встречи";
 "Meeting Bookmark" = "Метка во встрече";
 "Adds a timestamped ⭐ line to the current meeting notes" = "Добавляет в заметки встречи строку ⭐ со временем";
 "Hold" = "Удерж.";
 "ms" = "мс";
 "Hold threshold: %lld-%lld ms" = "Порог удержания: %lld–%lld мс";
-"Change Shortcut" = "Изменить";
 "Press a key or modifier..." = "Нажмите клавишу или модификатор…";
-"Press a modifier key..." = "Нажмите модификатор…";
 "Press a key combination..." = "Нажмите сочетание…";
 "Hands-Free Mode" = "Без рук";
 "Double-tap dictation to start, tap again to stop" = "Двойное нажатие — старт, ещё одно — стоп";

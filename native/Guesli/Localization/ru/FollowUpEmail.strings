@@ -7,5 +7,4 @@
 "Drafting email…" = "Готовлю письмо…";
 "Could not draft the email. %@" = "Не удалось подготовить письмо. %@";
 "Summary backend is not set up. Choose it and add a key or model in Settings → Meeting Summaries." = "Сервис итогов не настроен. Выберите его и задайте ключ или модель в Настройках → «Итоги встреч».";
-"Open Settings" = "Открыть настройки";
 "The model returned an empty response." = "Модель вернула пустой ответ.";

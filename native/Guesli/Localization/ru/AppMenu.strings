@@ -4,17 +4,8 @@
 "Hide Others" = "Скрыть остальные";
 "Show All" = "Показать все";
 "Quit %@" = "Завершить %@";
-"Undo" = "Отменить";
-"Redo" = "Повторить";
-"Cut" = "Вырезать";
-"Copy" = "Скопировать";
-"Paste" = "Вставить";
-"Delete" = "Удалить";
-"Select All" = "Выбрать все";
 "Find" = "Найти";
 "View" = "Вид";
-"Dictations" = "Диктовки";
-"Meetings" = "Встречи";
 "Window" = "Окно";
 "Minimize" = "Свернуть";
 "Zoom" = "Масштаб";
@@ -22,9 +13,6 @@
 "Bring All to Front" = "Все окна вперёд";
 
 // Update fallback alert (AppDelegate.swift)
-"Update did not finish" = "Обновление не завершено";
-"Open Download Page" = "Страница загрузки";
-"OK" = "ОК";
 "Please quit %@, reopen it from Applications, and try the update once more.\n\nIf this keeps happening, download the latest DMG and replace %@ manually. This can happen when the local updater cannot finish preparing or replacing the app." = "Закройте %1$@, откройте снова из «Программ» и повторите обновление.\n\nЕсли не помогает, скачайте свежий DMG и замените %2$@ вручную. Так бывает, когда обновлятор не может подготовить или заменить приложение.";
 
 // Status bar menu (StatusBarController.swift)
@@ -35,16 +23,9 @@
 "Discard Meeting Recording..." = "Удалить запись…";
 "Start Meeting Recording" = "Записать встречу";
 "Recent Dictations" = "Недавние диктовки";
-"No dictations yet" = "Диктовок пока нет";
 "Transcription Backend" = "Распознавание";
 "Meetings Backend" = "Бэкенд итогов";
-"Quit" = "Завершить";
 "Starts in %@" = "Через %@";
-"Today" = "Сегодня";
-"Tomorrow" = "Завтра";
-"%lldm" = "%lld мин";
-"%lldh" = "%lld ч";
-"%lldh %lldm" = "%lld ч %lld мин";
 "Check for Updates…" = "Проверить обновления…";
 
 // Shortcuts actions (GuesliAppShell/GuesliAppIntents.swift)
@@ -58,8 +39,3 @@
 "Title" = "Название";
 
 // Open panels in SettingsView.swift (hot file, wrapped by the integrator later)
-"Choose a hook script" = "Выберите скрипт-хук";
-"Choose Script" = "Выбрать";
-"Choose a folder for exported notes" = "Папка для экспорта заметок";
-"Choose Folder" = "Выбрать";
-"Choose recording folder" = "Папка для записей";

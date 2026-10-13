@@ -1,12 +1,10 @@
 // GuesliController.swift
 
 // Dictation backend readiness (indicator)
-"Warming up %@..." = "Прогрев %@...";
 "%@ unavailable" = "%@ недоступна";
 "AI cleanup failed" = "Ошибка ИИ-очистки";
 
 // Error descriptions
-"The updated meeting notes could not be saved." = "Не удалось сохранить обновлённые заметки.";
 "The updated meeting notes could not be saved. %@" = "Не удалось сохранить обновлённые заметки. %@";
 "That template no longer exists. Choose another template and try again." = "Шаблон удалён. Выберите другой и повторите.";
 "Meeting re-transcription could not continue because Guesli is no longer available." = "Повторная расшифровка прервана: Guesli недоступен.";
@@ -33,13 +31,11 @@
 "dictation" = "дикт.";
 "dictations" = "дикт.";
 "meeting" = "встр.";
-"meetings" = "встр.";
 
 // Model selection / calendar
 "Meeting model unavailable" = "Модель для встреч недоступна";
 "%@ is a live dictation model and cannot transcribe recordings." = "%@ — модель живой диктовки, записи она не расшифровывает.";
 "Download %@ before using it for meeting transcription." = "Загрузите %@, чтобы расшифровывать встречи.";
-"Custom Cleanup" = "Своя очистка";
 
 // Meeting notification panel
 "Meeting starting now" = "Встреча начинается";
@@ -48,7 +44,6 @@
 "starting now" = "начинается";
 "started %lld min ago" = "началась %lld мин назад";
 "Recording scheduled meeting" = "Запись запланированной встречи";
-"Open" = "Открыть";
 "Microphone issue" = "Проблема с микрофоном";
 "Transcription complete" = "Расшифровка готова";
 "View Notes" = "Заметки";
@@ -60,17 +55,7 @@
 "%@ · scheduled time is over" = "%@ · время вышло";
 
 // Model preparation
-"Preparing %@" = "Подготовка %@";
-"Preparing %@..." = "Подготовка %@...";
-"%@ ready" = "%@ готова";
-"Ready for transcription" = "Готова к расшифровке";
-"Model setup paused" = "Настройка модели приостановлена";
-"Download paused" = "Загрузка приостановлена";
 "Downloading %@..." = "Загрузка %@...";
-"%@ was not downloaded successfully." = "Не удалось загрузить %@.";
-"Optimizing %@ for this Mac..." = "Оптимизация %@ для этого Mac...";
-"Model setup failed. Restart Guesli or retry from Models." = "Ошибка настройки модели. Перезапустите Guesli или повторите в «Моделях».";
-"Download failed. Check your connection and retry." = "Ошибка загрузки. Проверьте подключение и повторите.";
 "Update checks are disabled for this build." = "В этой сборке проверка обновлений отключена.";
 
 // Delete / clear history
@@ -94,7 +79,6 @@
 "Meeting" = "Встреча";
 "Meeting failed to start" = "Встреча не запустилась";
 "Download a transcription model before recording a meeting." = "Загрузите модель расшифровки перед записью встречи.";
-"Meeting transcription will start shortly." = "Расшифровка встречи скоро начнётся.";
 "Requesting system audio permission..." = "Запрос доступа к системному аудио...";
 "Retrying meeting start..." = "Повторный запуск встречи...";
 "Preparing meeting..." = "Подготовка встречи...";
@@ -118,7 +102,6 @@
 "Discard recording?" = "Удалить запись?";
 "This will stop the meeting. Choose whether to delete the written notes too." = "Встреча будет остановлена. Удалить и написанные заметки?";
 "This will stop the meeting recording and delete all captured audio. This cannot be undone." = "Запись остановится, всё аудио будет удалено. Это необратимо.";
-"Discard" = "Удалить";
 "Discard Recording" = "Удалить запись";
 "Will delete:" = "Будет удалено:";
 "Recording audio" = "Аудиозапись";
@@ -129,7 +112,6 @@
 "Cleaning" = "Очистка";
 "Titling" = "Название";
 "Summarizing" = "Сводка";
-"Meeting Recording" = "Запись встречи";
 "Recording Not Found" = "Запись не найдена";
 
 // Save recording / start failure alerts

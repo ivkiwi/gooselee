@@ -3,14 +3,12 @@
 "Built-in Presets" = "Встроенные";
 "Custom Prompts" = "Свои промпты";
 "Duplicate" = "Дублировать";
-"Active" = "Активно";
 "Prompt" = "Промпт";
 "Save changes" = "Сохранить";
 "New prompt" = "Новый промпт";
 "Edit prompt" = "Изменить промпт";
 "Create prompt" = "Создать";
 "Context-aware cleanup" = "Очистка с контекстом";
-"Delete \"%@\"?" = "Удалить «%@»?";
 "This prompt will be removed. Existing dictations are not affected." = "Промпт будет удалён. Готовые диктовки не изменятся.";
 "No custom cleanup prompts yet." = "Своих промптов пока нет.";
 "Finish or cancel prompt editing before closing." = "Сначала сохраните или отмените правку промпта.";
@@ -19,8 +17,6 @@
 "Enter a prompt name." = "Введите название.";
 "Use a unique prompt name." = "Такое название уже есть.";
 "%@ Copy" = "%@ (копия)";
-"Custom Cleanup" = "Своя очистка";
-"Manage Templates" = "Шаблоны";
 "Create reusable prompt-based note formats for meetings." = "Свои форматы заметок для встреч на основе промптов.";
 "New template" = "Новый шаблон";
 "Edit template" = "Изменить шаблон";

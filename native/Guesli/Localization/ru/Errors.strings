@@ -53,13 +53,7 @@
 
 // Dictionary (CustomWordDictionary.swift, DictionaryView.swift, DictionarySuggestionPromptController.swift)
 "The file is not a valid Guesli dictionary." = "Это не словарь Guesli.";
-"Import Guesli Dictionary" = "Импорт словаря Guesli";
-"Choose a JSON dictionary file" = "Выберите JSON-файл словаря";
-"Import" = "Импорт";
-"Export Guesli Dictionary" = "Экспорт словаря Guesli";
-"Export" = "Экспорт";
 "Add correction?" = "Добавить исправление?";
-"Add" = "Добавить";
 "Ignore" = "Пропустить";
 
 // Model downloads (ModelDownloadCoordinator.swift)
@@ -73,23 +67,8 @@
 "Format:" = "Формат:";
 
 // Onboarding window (OnboardingWindowController.swift)
-"Welcome to Guesli" = "Добро пожаловать в Guesli";
 
 // Installer (PostInstallChecker.swift, already NSLocalizedString)
-"Install %@ to Applications?" = "Установить %@ в «Программы»?";
-"%@ will copy itself to your Applications folder and relaunch automatically." = "%@ скопируется в «Программы» и перезапустится.";
-"Install" = "Установить";
-"Cancel" = "Отменить";
-"Replace existing %@?" = "Заменить %@?";
-"An older version of %@ is already in Applications. Replace it?" = "В «Программах» уже есть старая версия %@. Заменить?";
-"Replace" = "Заменить";
-"Installing %@" = "Установка %@";
-"Copying %@ to Applications..." = "Копирование %@ в «Программы»…";
-"Installation failed." = "Установка не удалась.";
-"Eject %@ installer disk?" = "Извлечь установщик %@?";
-"%@ is already installed. It can eject the installer disk and move the downloaded DMG to Trash." = "%@ уже установлен. Можно извлечь диск установщика и удалить DMG в Корзину.";
-"Keep" = "Оставить";
-"Eject and Trash DMG" = "Извлечь и удалить";
 
 // Hot files, wrapped by the integrator later (MeetingSummaryClient.swift, DictationStore.swift)
 "%@ could not generate meeting notes.%@ %@ The selected model may be unavailable or retired." = "%1$@ не смог подготовить итоги.%2$@ %3$@ Возможно, модель недоступна или снята с поддержки.";

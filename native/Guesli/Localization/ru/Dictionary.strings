@@ -1,14 +1,7 @@
-"Enable Accessibility?" = "Включить Универсальный доступ?";
-"Dictionary suggestions briefly read focused app text via Accessibility after dictation. Grant access, then relaunch Guesli to turn suggestions on." = "После диктовки подсказки словаря кратко читают текст приложения через Универсальный доступ. Дайте доступ и перезапустите Guesli.";
-"Dictionary" = "Словарь";
-"Dictionary suggestions" = "Подсказки словаря";
-"Briefly reads focused app text after dictation to detect corrections." = "После диктовки кратко читает текст, чтобы заметить исправления.";
 "Import dictionary entries from a JSON file" = "Импорт словаря из JSON-файла";
 "Export the current dictionary as JSON" = "Экспорт словаря в JSON";
 "Add new" = "Добавить";
 "Add custom words for names, brands, and domain terms, and tune how aggressively each entry should fuzzy-match transcription errors." = "Добавляйте имена, бренды и термины и настраивайте, насколько смело каждое слово исправляет ошибки распознавания.";
-"Import Guesli Dictionary" = "Импорт словаря Guesli";
-"Choose a JSON dictionary file" = "Выберите JSON-файл словаря";
 "The selected dictionary did not contain any entries." = "В выбранном словаре нет записей.";
 "All dictionary entries were already present." = "Все записи уже есть в словаре.";
 "Imported %lld new" = "Добавлено: %lld";
@@ -16,7 +9,6 @@
 "skipped %lld" = "пропущено: %lld";
 " dictionary entries." = ".";
 "Could not import the dictionary. %@" = "Не удалось импортировать словарь. %@";
-"Export Guesli Dictionary" = "Экспорт словаря Guesli";
 "Exported %lld dictionary entries." = "Экспортировано записей: %lld.";
 "Could not export the dictionary. %@" = "Не удалось экспортировать словарь. %@";
 "Suggested Corrections" = "Предложенные исправления";
@@ -27,7 +19,6 @@
 "No custom words yet" = "Своих слов пока нет";
 "Add words that transcription frequently gets wrong" = "Добавьте слова, в которых распознавание часто ошибается";
 "Match" = "Слово";
-"Replace" = "Замена";
 "Threshold" = "Порог";
 "Word" = "Слово";
 "Replace with" = "Заменить на";

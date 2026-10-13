@@ -5,8 +5,6 @@
 "Clear Dictations" = "Очистить диктовки";
 "Clear Meetings" = "Очистить встречи";
 "Sync" = "Синхронизация";
-"Dictation" = "Диктовка";
-"Meetings" = "Встречи";
 "Appearance" = "Оформление";
 "Runs on the downloaded local cleanup model." = "Работает на загруженной локальной модели.";
 "Uses your ChatGPT subscription." = "Использует вашу подписку ChatGPT.";
@@ -16,8 +14,6 @@
 "Automatic" = "Авто";
 "Selected microphone unavailable" = "Микрофон недоступен";
 "Confirm Destructive Action" = "Подтвердите удаление";
-"Enable Accessibility?" = "Включить Универсальный доступ?";
-"Dictionary suggestions briefly read focused app text via Accessibility after dictation. Grant access, then relaunch Guesli to turn suggestions on." = "После диктовки подсказки словаря кратко читают текст приложения через Универсальный доступ. Дайте доступ и перезапустите Guesli.";
 "Blue" = "Синий";
 "Red" = "Красный";
 "Amber" = "Янтарный";
@@ -30,7 +26,6 @@
 "Custom (drag to reposition)" = "Своё (перетащите)";
 "Launch at login" = "Запуск при входе";
 "Open dashboard on launch" = "Окно при запуске";
-"Data" = "Данные";
 "Clear dictation history" = "Очистить диктовки";
 "Clear meeting history" = "Очистить встречи";
 "Stop the current meeting recording before clearing meeting history." = "Сначала остановите запись встречи.";
@@ -48,7 +43,6 @@
 "No linked device yet." = "Связанных устройств нет.";
 "Transcription" = "Распознавание";
 "Dictation model" = "Модель диктовки";
-"Microphone" = "Микрофон";
 "Automatic uses system input, or Mac mic with AirPods." = "«Авто» — системный вход или микрофон Mac при AirPods.";
 "AI transcript cleanup" = "ИИ-очистка текста";
 "Cleanup provider" = "Сервис очистки";
@@ -57,9 +51,7 @@
 "Cleanup account" = "Аккаунт очистки";
 "Last cleanup warning" = "Последнее предупреждение";
 "Download a cleanup model in Models" = "Загрузите модель очистки в «Моделях»";
-"Dictionary suggestions" = "Подсказки словаря";
 "Suggest words after corrections by briefly reading focused app text via Accessibility." = "Предлагает слова после исправлений, кратко читая текст через Универсальный доступ.";
-"Briefly reads focused app text after dictation to detect corrections." = "После диктовки кратко читает текст, чтобы заметить исправления.";
 "Pause media during dictation" = "Пауза медиа при диктовке";
 "Mute system audio during dictation" = "Выключать звук при диктовке";
 "Paste shortcut" = "Клавиши вставки";
@@ -70,12 +62,9 @@
 "Edit prompts..." = "Изменить промпты…";
 "Meeting Transcription" = "Распознавание встреч";
 "Meeting model" = "Модель встреч";
-"Meeting Summaries" = "Итоги встреч";
 "AI transcript cleanup (meetings)" = "ИИ-очистка (встречи)";
 "Summary backend" = "Сервис итогов";
 "Account" = "Аккаунт";
-"Model" = "Модель";
-"API Key" = "API-ключ";
 "Ollama URL" = "URL Ollama";
 "LM Studio URL" = "URL LM Studio";
 "Select a loaded LM Studio model" = "Выберите модель LM Studio";
@@ -90,8 +79,6 @@
 "Summary retries" = "Повторы итогов";
 "Retry transient AI summary failures before saving failed notes." = "Повторять запрос итогов при временных сбоях.";
 "Templates" = "Шаблоны";
-"Manage Templates…" = "Шаблоны…";
-"Recording" = "Запись";
 "Save meeting recording" = "Сохранять запись";
 "Recording format" = "Формат записи";
 "M4A is recommended for smaller files. WAV is lossless and uses more storage." = "M4A — файлы меньше. WAV — без потерь, но тяжелее.";
@@ -110,7 +97,6 @@
 "Upcoming meetings" = "Ближайшие встречи";
 "Controls how many calendar days appear in Coming Up, the menu bar, and scheduled meeting checks." = "Сколько дней календаря показывать в «Скоро», строке меню и проверках встреч.";
 "Calendar" = "Календарь";
-"Google Calendar" = "Google Календарь";
 "Live meeting transcription" = "Живое распознавание";
 "Experimental. The default records first and transcribes after the meeting for lower overhead and more reliable final notes." = "Экспериментально. По умолчанию распознавание идёт после встречи: меньше нагрузки, надёжнее итоги.";
 "Auto-record calendar meetings" = "Автозапись встреч календаря";
@@ -141,22 +127,10 @@
 "Play sound effects" = "Звуки";
 "Show next meeting in menu bar" = "Ближайшая встреча в меню";
 "Signed in · Sign Out" = "Вход выполнен · Выйти";
-"Signing in..." = "Вход…";
-"Sign in with ChatGPT" = "Войти через ChatGPT";
 "Connected · Disconnect" = "Подключено · Отключить";
-"Connecting..." = "Подключение…";
-"Connect Google Calendar" = "Подключить Google Календарь";
-"Google OAuth verification pending" = "Ждём проверку Google OAuth";
-"Choose a hook script" = "Выберите скрипт хука";
-"Choose Script" = "Выбрать";
-"Choose a folder for exported notes" = "Папка для экспорта заметок";
-"Choose Folder" = "Выбрать";
 "Permissions" = "Разрешения";
-"Accessibility" = "Универсальный доступ";
-"Input Monitoring" = "Мониторинг ввода";
 "Screen Recording" = "Запись экрана";
 "System Audio" = "Системный звук";
-"Granted" = "Разрешено";
 "Open in System Settings" = "Открыть в Системных настройках";
 "No retries" = "Без повторов";
 "1 retry" = "1 повтор";
@@ -181,7 +155,6 @@
 "Choose a folder..." = "Выберите папку…";
 "No destination folder selected" = "Папка не выбрана";
 "Use default recording folder" = "Папка по умолчанию";
-"Choose recording folder" = "Выбрать папку записей";
 "Default folder" = "По умолчанию";
 "Choose a script…" = "Выберите скрипт…";
 "No hook script selected" = "Скрипт не выбран";
@@ -204,9 +177,6 @@
 "1 min before" = "За 1 мин";
 "3 min before" = "За 3 мин";
 "5 min before" = "За 5 мин";
-"Join & Record" = "Войти + запись";
-"Join Only" = "Только войти";
-"Record Only" = "Только запись";
 "Today only" = "Только сегодня";
 "Two days" = "Два дня";
 "Three days" = "Три дня";

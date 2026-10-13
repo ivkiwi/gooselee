@@ -1,12 +1,8 @@
-"Models" = "Модели";
 "Download and manage transcription models. The active model is used for dictation." = "Загрузка и управление моделями. Активная модель используется для диктовки.";
 "COMING SOON" = "СКОРО";
-"Delete \"%@\"?" = "Удалить «%@»?";
 "The downloaded model files will be removed from this Mac. You can download the model again later." = "Файлы модели будут удалены с этого Mac. Модель можно загрузить снова.";
 "The optional live-caption model will be removed. Final meeting transcription is unaffected." = "Модель живых субтитров будет удалена. Итоговая расшифровка не затронута.";
 "Optional low-latency preview for English meetings only. Final transcript still uses the selected meeting model. Never downloaded or enabled automatically." = "Быстрый предпросмотр только для встреч на английском. Итоговая расшифровка — выбранной моделью встреч. Не загружается и не включается сама.";
-"Active" = "Активно";
-"Ready" = "Готова";
 "Not downloaded" = "Не загружена";
 "%lld%% downloading..." = "Загрузка: %lld%%…";
 "Delete live-caption model" = "Удалить модель субтитров";
@@ -16,7 +12,6 @@
 "System Prompt" = "Системный промпт";
 "Controls how the model cleans up transcriptions. Applies to the active post-processor model." = "Как модель очищает расшифровку. Действует для активной модели постобработки.";
 "Reset to Default" = "Сбросить";
-"Recommended" = "Рекомендуется";
 "A newer model build is available." = "Доступна новая сборка модели.";
 "Optional script filter for Parakeet v3; Auto-detect leaves decoding unfiltered." = "Фильтр письменности для Parakeet v3; «Автоопределение» его отключает.";
 "Experimental" = "Экспериментальная";

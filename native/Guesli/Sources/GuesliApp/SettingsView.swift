@@ -45,27 +45,27 @@ struct SettingsView: View {
         var title: String {
             switch self {
             case .dictations:
-                return "Clear dictation history?"
+                return String(localized: "Clear dictation history?")
             case .meetings:
-                return "Clear meeting history?"
+                return String(localized: "Clear meeting history?")
             }
         }
 
         var message: String {
             switch self {
             case .dictations:
-                return "This will permanently remove all saved dictations. This cannot be undone."
+                return String(localized: "This will permanently remove all saved dictations. This cannot be undone.")
             case .meetings:
-                return "This will permanently remove all saved meetings, notes, transcripts, and retained audio recordings. This cannot be undone."
+                return String(localized: "This will permanently remove all saved meetings, notes, transcripts, and retained audio recordings. This cannot be undone.")
             }
         }
 
         var confirmLabel: String {
             switch self {
             case .dictations:
-                return "Clear Dictations"
+                return String(localized: "Clear Dictations")
             case .meetings:
-                return "Clear Meetings"
+                return String(localized: "Clear Meetings")
             }
         }
     }
@@ -81,11 +81,11 @@ struct SettingsView: View {
 
         var title: String {
             switch self {
-            case .general: return "General"
-            case .sync: return "Sync"
-            case .dictation: return "Dictation"
-            case .meetings: return "Meetings"
-            case .appearance: return "Appearance"
+            case .general: return String(localized: "General")
+            case .sync: return String(localized: "Sync")
+            case .dictation: return String(localized: "Dictation")
+            case .meetings: return String(localized: "Meetings")
+            case .appearance: return String(localized: "Appearance")
             }
         }
     }
@@ -129,7 +129,7 @@ struct SettingsView: View {
         TranscriptCleanupPrompts.presets(custom: appState.config.customTranscriptCleanupPrompts)
     }
     private var selectedCleanupPromptName: String {
-        appState.config.resolvedTranscriptCleanupPrompt.name
+        appState.config.resolvedTranscriptCleanupPrompt.displayName
     }
     private var transcriptCleanupCredentialStatus: TranscriptCleanupCredentialStatus? {
         TranscriptCleanupCredentialStatus.dictationCleanup(
@@ -181,7 +181,7 @@ struct SettingsView: View {
         if meetingBackendOptions.contains(appState.selectedMeetingTranscriptionBackend) {
             return appState.selectedMeetingTranscriptionBackend.label
         }
-        return meetingBackendOptions.first?.label ?? "No downloaded models"
+        return meetingBackendOptions.first?.label ?? String(localized: "No downloaded models")
     }
 
     private var meetingBrowserOpenOptions: [MeetingBrowserOpenOption] {
@@ -200,20 +200,20 @@ struct SettingsView: View {
     }
 
     private var dictationMicrophoneOptions: [DictationMicrophoneOption] {
-        var options = [DictationMicrophoneOption(uid: nil, label: "Automatic")]
+        var options = [DictationMicrophoneOption(uid: nil, label: String(localized: "Automatic"))]
         options += dictationInputDevices.map { device in
             DictationMicrophoneOption(uid: device.uid, label: device.name)
         }
         if let selectedUID = appState.config.dictationInputDeviceUID,
            !options.contains(where: { $0.uid == selectedUID }) {
-            options.append(DictationMicrophoneOption(uid: selectedUID, label: "Selected microphone unavailable"))
+            options.append(DictationMicrophoneOption(uid: selectedUID, label: String(localized: "Selected microphone unavailable")))
         }
         return options
     }
 
     private var selectedDictationMicrophoneLabel: String {
         let selectedUID = appState.config.dictationInputDeviceUID
-        return dictationMicrophoneOptions.first(where: { $0.uid == selectedUID })?.label ?? "Automatic"
+        return dictationMicrophoneOptions.first(where: { $0.uid == selectedUID })?.label ?? String(localized: "Automatic")
     }
 
     var body: some View {
@@ -346,9 +346,9 @@ struct SettingsView: View {
 
     private var screenContextDescription: String {
         if !accessibilityGranted {
-            return "Grant Accessibility, then toggle again if needed."
+            return String(localized: "Grant Accessibility, then toggle again if needed.")
         }
-        return "Adds nearby focused-app text to dictation cleanup through Accessibility. No screenshots."
+        return String(localized: "Adds nearby focused-app text to dictation cleanup through Accessibility. No screenshots.")
     }
 
     @ViewBuilder
@@ -532,9 +532,9 @@ struct SettingsView: View {
 
     private var syncStatusText: String {
         if !appState.config.iCloudSyncEnabled {
-            return "Sync is off. Turn it on to keep text records in your private iCloud account."
+            return String(localized: "Sync is off. Turn it on to keep text records in your private iCloud account.")
         }
-        return appState.iCloudSyncStatus ?? "Private iCloud text sync is ready."
+        return appState.iCloudSyncStatus ?? String(localized: "Private iCloud text sync is ready.")
     }
 
     private var syncLastSyncedText: String? {
@@ -546,11 +546,11 @@ struct SettingsView: View {
         guard appState.config.iCloudSyncEnabled else { return nil }
         if let remoteDeviceName = appState.iCloudBridgeCompanionDeviceName {
             if let platform = appState.iCloudBridgeRemoteDevicePlatform {
-                return "Linked \(syncDeviceLabel(for: platform)): \(remoteDeviceName)"
+                return String(localized: "Linked \(syncDeviceLabel(for: platform)): \(remoteDeviceName)")
             }
-            return "Linked device: \(remoteDeviceName)"
+            return String(localized: "Linked device: \(remoteDeviceName)")
         }
-        return "No linked device yet."
+        return String(localized: "No linked device yet.")
     }
 
     private func syncDeviceLabel(for platform: String) -> String {
@@ -736,7 +736,7 @@ struct SettingsView: View {
             settingsRow("Cleanup preset") {
                 FixedWidthPopUp(
                     selection: selectedCleanupPromptName,
-                    options: cleanupPromptPresets.map(\.name),
+                    options: cleanupPromptPresets.map(\.displayName),
                     onSelectIndex: { index in
                         guard index >= 0, index < cleanupPromptPresets.count else { return }
                         controller.selectTranscriptCleanupPrompt(id: cleanupPromptPresets[index].id)
@@ -880,7 +880,7 @@ struct SettingsView: View {
                     settingsRow("Model", controlWidth: meetingControlWidth) {
                         settingsModelTextField(
                             currentModel: appState.config.lmStudioModel,
-                            placeholder: "Select a loaded LM Studio model"
+                            placeholder: String(localized: "Select a loaded LM Studio model")
                         ) { val in controller.updateConfig { $0.lmStudioModel = val } }
                     }
                 } else if appState.selectedMeetingSummaryBackend == .customLLM {
@@ -909,8 +909,8 @@ struct SettingsView: View {
                         PastableSecureField(
                             text: appState.config.customLLMAPIKey,
                             placeholder: appState.config.customLLMFormat == CustomLLMFormat.anthropic.rawValue
-                                ? "Required for Anthropic API"
-                                : "Optional for local servers",
+                                ? String(localized: "Required for Anthropic API")
+                                : String(localized: "Optional for local servers"),
                             onChange: { val in controller.updateConfig { $0.customLLMAPIKey = val } }
                         )
                         .frame(height: 22)
@@ -941,7 +941,7 @@ struct SettingsView: View {
                     settingsRow("Custom model ID", controlWidth: meetingControlWidth) {
                         settingsModelTextField(
                             currentModel: appState.config.openRouterModel,
-                            placeholder: "provider/model or openrouter/free"
+                            placeholder: String(localized: "provider/model or openrouter/free")
                         ) { val in controller.updateConfig { $0.openRouterModel = val } }
                     }
                     keyStatusRow(key: appState.config.openRouterAPIKey)
@@ -1523,8 +1523,8 @@ struct SettingsView: View {
 
     private func pickMeetingHookFile() {
         let panel = NSOpenPanel()
-        panel.title = "Choose a hook script"
-        panel.prompt = "Choose Script"
+        panel.title = String(localized: "Choose a hook script")
+        panel.prompt = String(localized: "Choose Script")
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
@@ -1537,8 +1537,8 @@ struct SettingsView: View {
 
     private func pickAutoExportFolder() {
         let panel = NSOpenPanel()
-        panel.title = "Choose a folder for exported notes"
-        panel.prompt = "Choose Folder"
+        panel.title = String(localized: "Choose a folder for exported notes")
+        panel.prompt = String(localized: "Choose Folder")
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -1819,11 +1819,11 @@ struct SettingsView: View {
         let clamped = MeetingSummaryRetryPolicy.clampedRetryCount(retryCount)
         switch clamped {
         case 0:
-            return "No retries"
+            return String(localized: "No retries")
         case 1:
-            return "1 retry"
+            return String(localized: "1 retry")
         default:
-            return "\(clamped) retries"
+            return String(localized: "\(clamped) retries")
         }
     }
 
@@ -2065,15 +2065,15 @@ struct SettingsView: View {
             let items = appState.availableGoogleCalendars.map { cal in
                 CalendarToggleItem(
                     id: cal.id,
-                    title: cal.summary + (cal.isPrimary ? " (Primary)" : ""),
+                    title: cal.summary + (cal.isPrimary ? String(localized: " (Primary)") : ""),
                     colorHex: cal.colorHex,
                     isEnabled: !disabled.contains(cal.id)
                 )
             }
             groups.append(CalendarSourceGroup(
                 id: "google_oauth",
-                title: "Google Calendar",
-                subtitle: "Connected directly to Guesli",
+                title: String(localized: "Google Calendar"),
+                subtitle: String(localized: "Connected directly to Guesli"),
                 iconName: "calendar.badge.plus",
                 items: items
             ))
@@ -2148,7 +2148,7 @@ struct SettingsView: View {
                         .foregroundStyle(GuesliTheme.textPrimary)
                         .lineLimit(1)
 
-                    Text("\(group.subtitle) • \(group.items.count) \(group.items.count == 1 ? "calendar" : "calendars")")
+                    Text("\(group.subtitle) • Calendars: \(group.items.count)")
                         .font(.system(size: 11))
                         .foregroundStyle(GuesliTheme.textTertiary)
                         .lineLimit(1)
@@ -2173,15 +2173,15 @@ struct SettingsView: View {
     private func calendarSourceSubtitle(for sourceTitle: String) -> String {
         let normalized = sourceTitle.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if normalized == "icloud" {
-            return "iCloud account in macOS Calendar"
+            return String(localized: "iCloud account in macOS Calendar")
         }
         if normalized == "subscribed calendars" {
-            return "Subscribed in macOS Calendar"
+            return String(localized: "Subscribed in macOS Calendar")
         }
         if normalized == "other" {
-            return "System calendars from macOS"
+            return String(localized: "System calendars from macOS")
         }
-        return "Calendar account in macOS"
+        return String(localized: "Calendar account in macOS")
     }
 
     private func calendarSourceIconName(for sourceTitle: String) -> String {
@@ -2332,13 +2332,13 @@ struct SettingsView: View {
 
     private var autoExportFolderLabel: String {
         let path = appState.config.autoExportMarkdownFolderPath.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !path.isEmpty else { return "Choose a folder..." }
+        guard !path.isEmpty else { return String(localized: "Choose a folder...") }
         return path
     }
 
     private var autoExportFolderHelp: String {
         let path = appState.config.autoExportMarkdownFolderPath.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !path.isEmpty else { return "No destination folder selected" }
+        guard !path.isEmpty else { return String(localized: "No destination folder selected") }
         return path
     }
 
@@ -2410,7 +2410,7 @@ struct SettingsView: View {
 
     private var meetingRecordingFolderLabel: String {
         let path = appState.config.meetingRecordingFolderPath.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !path.isEmpty else { return "Default folder" }
+        guard !path.isEmpty else { return String(localized: "Default folder") }
         return path
     }
 
@@ -2424,8 +2424,8 @@ struct SettingsView: View {
 
     private func pickMeetingRecordingFolder() {
         let panel = NSOpenPanel()
-        panel.title = "Choose recording folder"
-        panel.prompt = "Choose Folder"
+        panel.title = String(localized: "Choose recording folder")
+        panel.prompt = String(localized: "Choose Folder")
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
@@ -2480,7 +2480,7 @@ struct SettingsView: View {
                     .strokeBorder(GuesliTheme.surfaceBorder, lineWidth: 1)
             )
             .frame(maxWidth: .infinity)
-            .help(appState.config.meetingHookPath.isEmpty ? "No hook script selected" : appState.config.meetingHookPath)
+            .help(appState.config.meetingHookPath.isEmpty ? String(localized: "No hook script selected") : appState.config.meetingHookPath)
 
             if !appState.config.meetingHookPath.isEmpty {
                 Button {
@@ -2543,12 +2543,12 @@ struct SettingsView: View {
     @ViewBuilder
     private func meetingTemplateMenu(selectionID: String, onChange: @escaping (String) -> Void) -> some View {
         let allItems: [(id: String, label: String)] = {
-            var items: [(String, String)] = [(MeetingTemplates.autoID, MeetingTemplates.auto.title)]
-            items += controller.builtInMeetingTemplates().map { ($0.id, $0.title) }
+            var items: [(String, String)] = [(MeetingTemplates.autoID, MeetingTemplates.auto.displayTitle)]
+            items += controller.builtInMeetingTemplates().map { ($0.id, $0.displayTitle) }
             items += controller.customMeetingTemplates().map { ($0.id, $0.name) }
             return items
         }()
-        let selectedLabel = allItems.first(where: { $0.id == selectionID })?.label ?? "Auto"
+        let selectedLabel = allItems.first(where: { $0.id == selectionID })?.label ?? String(localized: "Auto")
         FixedWidthPopUp(
             selection: selectedLabel,
             options: allItems.map(\.label),
@@ -2591,9 +2591,12 @@ struct SettingsView: View {
     private func relabeledPresets(_ presets: [SummaryModelPreset], defaultModel: String?) -> [SummaryModelPreset] {
         guard let defaultModel else { return presets }
         return presets.map { preset in
-            var label = preset.label.replacingOccurrences(of: " (default)", with: "")
+            let suffix = String(localized: " (default)")
+            var label = preset.label
+                .replacingOccurrences(of: " (default)", with: "")
+                .replacingOccurrences(of: suffix, with: "")
             if preset.id == defaultModel {
-                label += " (default)"
+                label += suffix
             }
             return SummaryModelPreset(id: preset.id, label: label)
         }
@@ -2667,13 +2670,13 @@ struct SettingsView: View {
 
                 await MainActor.run {
                     openRouterFreeModels = presets
-                    openRouterFreeModelsError = presets.isEmpty ? "No free text models found" : nil
+                    openRouterFreeModelsError = presets.isEmpty ? String(localized: "No free text models found") : nil
                     isLoadingOpenRouterFreeModels = false
                 }
             } catch {
                 await MainActor.run {
                     openRouterFreeModels = []
-                    openRouterFreeModelsError = "Could not load"
+                    openRouterFreeModelsError = String(localized: "Could not load")
                     isLoadingOpenRouterFreeModels = false
                 }
             }
@@ -2687,7 +2690,7 @@ struct SettingsView: View {
             Circle()
                 .fill(key.isEmpty ? GuesliTheme.textTertiary : GuesliTheme.success)
                 .frame(width: 6, height: 6)
-            Text(key.isEmpty ? "No API key configured" : "Key configured")
+            Text(key.isEmpty ? String(localized: "No API key configured") : String(localized: "Key configured"))
                 .font(.system(size: 11))
                 .foregroundStyle(key.isEmpty ? GuesliTheme.textTertiary : GuesliTheme.success)
         }

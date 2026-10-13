@@ -142,8 +142,6 @@
 "No calendars detected. Make sure Calendar permission is granted in System Settings > Privacy & Security > Calendars." = "Календарей нет. Дайте доступ в Системных настройках > Конфиденциальность и безопасность > Календари.";
 "Open Calendar Privacy" = "Открыть доступ к календарям";
 "Google calendars may appear once from macOS Calendar and once from Guesli's Google connection. Turn off both copies to hide that calendar completely." = "Календарь Google может появиться дважды: из Календаря macOS и из подключения Google. Чтобы скрыть его, выключите обе копии.";
-"calendar" = "календарь";
-"calendars" = "календари";
 "iCloud account in macOS Calendar" = "iCloud в Календаре macOS";
 "Subscribed in macOS Calendar" = "Подписки в Календаре macOS";
 "System calendars from macOS" = "Системные календари macOS";
@@ -201,3 +199,5 @@
 "Dock — Inner Edge" = "Dock — внутренний край";
 "Dock — Above / Left" = "Dock — сверху / слева";
 "Dock — Below / Right" = "Dock — снизу / справа";
+"%@ • Calendars: %lld" = "%@ • календарей: %lld";
+"Default Cleanup" = "Стандартная очистка";

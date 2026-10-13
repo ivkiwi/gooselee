@@ -35,7 +35,7 @@ struct PasteTargetProbeTests {
     func uncertainty() {
         #expect(PasteTargetProbe.verdict(for: .init()) == .unknown)
         #expect(PasteTargetProbe.verdict(for: .init(role: kAXGroupRole, editable: false, valueSettable: false)) == .unknown)
-        #expect(PasteTargetProbe.verdict(for: .init(role: kAXWebAreaRole)) == .unknown)
+        #expect(PasteTargetProbe.verdict(for: .init(role: "AXWebArea")) == .unknown)
         #expect(PasteTargetProbe.verdict(for: .init(role: kAXListRole, reliable: false)) == .unknown)
     }
 

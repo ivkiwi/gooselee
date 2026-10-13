@@ -356,7 +356,7 @@ struct SettingsView: View {
         let width = rowControlWidth ?? controlWidth
         HStack(alignment: .top, spacing: 20) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(GuesliTheme.body())
                     .foregroundStyle(GuesliTheme.textPrimary)
                 Text(screenContextDescription)
@@ -1631,7 +1631,7 @@ struct SettingsView: View {
                 Circle()
                     .fill(granted ? GuesliTheme.success : GuesliTheme.recording)
                     .frame(width: 8, height: 8)
-                Text(name)
+                Text(LocalizedStringKey(name))
                     .font(GuesliTheme.body())
                     .foregroundStyle(GuesliTheme.textPrimary)
             }
@@ -1829,7 +1829,7 @@ struct SettingsView: View {
     @ViewBuilder
     private func settingsSection(_ title: String, @ViewBuilder content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: GuesliTheme.spacing8) {
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(GuesliTheme.textTertiary)
                 .textCase(.uppercase)
@@ -1854,7 +1854,7 @@ struct SettingsView: View {
     private func settingsRow(_ label: String, controlWidth rowControlWidth: CGFloat? = nil, @ViewBuilder control: () -> some View) -> some View {
         let width = rowControlWidth ?? controlWidth
         HStack(alignment: .center) {
-            Text(label)
+            Text(LocalizedStringKey(label))
                 .font(GuesliTheme.body())
                 .foregroundStyle(GuesliTheme.textPrimary)
                 .layoutPriority(1)
@@ -1879,10 +1879,10 @@ struct SettingsView: View {
         let width = rowControlWidth ?? controlWidth
         HStack(alignment: .center, spacing: 20) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(label)
+                Text(LocalizedStringKey(label))
                     .font(GuesliTheme.body())
                     .foregroundStyle(GuesliTheme.textPrimary)
-                Text(description)
+                Text(LocalizedStringKey(description))
                     .font(GuesliTheme.caption())
                     .foregroundStyle(GuesliTheme.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1898,7 +1898,7 @@ struct SettingsView: View {
     }
 
     private func settingsDescription(_ text: String) -> some View {
-        Text(text)
+        Text(LocalizedStringKey(text))
             .font(GuesliTheme.caption())
             .foregroundStyle(GuesliTheme.textTertiary)
             .padding(.horizontal, GuesliTheme.spacing16)
@@ -1921,7 +1921,16 @@ struct SettingsView: View {
 
     @ViewBuilder
     private func settingsMenu(selection: String, options: [String], onChange: @escaping (String) -> Void) -> some View {
-        FixedWidthPopUp(selection: selection, options: options, onChange: onChange)
+        // Only the shown titles are localized; selection still reports the English option by index.
+        let titles = options.map { String(localized: String.LocalizationValue($0)) }
+        FixedWidthPopUp(
+            selection: options.firstIndex(of: selection).map { titles[$0] } ?? selection,
+            options: titles,
+            onSelectIndex: { index in
+                guard options.indices.contains(index) else { return }
+                onChange(options[index])
+            }
+        )
             .frame(height: 24)
     }
 
@@ -2726,7 +2735,7 @@ struct SettingsView: View {
         let isDestructive = role == .destructive
         Button(action: action) {
             HStack(spacing: GuesliTheme.spacing8) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                 if let systemImage {
                     Image(systemName: systemImage)
                         .font(.system(size: 13, weight: .semibold))

@@ -174,7 +174,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         menu.addItem(actionItem(title: "Settings…", action: #selector(GuesliController.openSettingsTab)))
         menu.addItem(checkForUpdatesItem())
         menu.addItem(.separator())
-        menu.addItem(actionItem(title: "Quit", action: #selector(GuesliController.quitApp)))
+        menu.addItem(actionItem(title: String(localized: "Quit"), action: #selector(GuesliController.quitApp)))
     }
 
     private func addUpcomingEventsSection(_ events: [UnifiedCalendarEvent]) {

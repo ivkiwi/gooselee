@@ -10,7 +10,7 @@ import os
 ///   controller.onPartialText = { fullText in /* paste delta */ }
 ///   controller.start()
 ///   // ... user speaks ...
-///   controller.stop { finalText in /* persist final text */ }
+///   controller.stop { result in /* persist text and retain incomplete audio */ }
 @available(macOS 15, *)
 protocol NemotronStreamingTranscribing: AnyObject {
     func makeStreamState() async throws -> RNNTStreamState
@@ -30,7 +30,7 @@ final class StreamingDictationController {
     private enum StopSetup {
         case start(UUID)
         case attached
-        case immediate(String)
+        case immediate(StreamingDictationStopResult)
     }
 
     /// Called with the full accumulated transcript so far (on a background thread).
@@ -49,9 +49,11 @@ final class StreamingDictationController {
     private let drainLock = OSAllocatedUnfairLock()
     private struct StopState {
         let sessionID: UUID
-        var completions: [(String) -> Void]
+        var completions: [(StreamingDictationStopResult) -> Void]
+        var didFail = false
     }
     private var stopState: StopState?
+    private var lastStopResult: StreamingDictationStopResult?
     private let stopLock = OSAllocatedUnfairLock()
     private var fullTranscript = ""
     private var isActive = false
@@ -116,6 +118,7 @@ final class StreamingDictationController {
             return true
         }
         guard didStartSession else { return true }
+        stopLock.withLock { lastStopResult = nil }
         streamLock.withLock {
             fullTranscript = ""
             streamState = nil
@@ -129,7 +132,7 @@ final class StreamingDictationController {
 
         // Start mic IMMEDIATELY — don't block on state init or warmup
         recorder.onAudioBuffer = { [weak self] samples in
-            self?.handleAudioBuffer(samples)
+            self?.handleAudioBuffer(samples, sessionID: sessionID)
         }
         recorder.onRecordingFailed = { [weak self] error in
             self?.failActiveSession(sessionID: sessionID, error: error)
@@ -158,6 +161,7 @@ final class StreamingDictationController {
             } catch {
                 guard let self, self.isCurrentSession(sessionID) else { return }
                 fputs("[streaming-dictation] failed to create stream state: \(error)\n", stderr)
+                self.markStopFailed(sessionID: sessionID)
                 self.failActiveSession(sessionID: sessionID, error: error)
             }
         }
@@ -166,37 +170,22 @@ final class StreamingDictationController {
     }
 
     /// Stop recording and finish queued audio off the caller's thread.
-    func stop(completion: @escaping (String) -> Void) {
+    func stop(completion: @escaping (StreamingDictationStopResult) -> Void) {
         let setup = stopLock.withLock { () -> StopSetup in
-            let sessionIDs = bufferLock.withLock {
-                (active: activeSessionID, stopping: stoppingSessionID)
+            if var stopState {
+                stopState.completions.append(completion)
+                self.stopState = stopState
+                return .attached
             }
-            if let activeSessionID = sessionIDs.active {
-                if var stopState {
-                    guard stopState.sessionID == activeSessionID else {
-                        return .immediate(currentTranscript())
-                    }
-                    stopState.completions.append(completion)
-                    self.stopState = stopState
-                    return .attached
-                }
+            if let activeSessionID = bufferLock.withLock({ self.activeSessionID }) {
                 stopState = StopState(sessionID: activeSessionID, completions: [completion])
                 bufferLock.withLock {
-                    isActive = false
                     self.activeSessionID = nil
                     stoppingSessionID = activeSessionID
                 }
                 return .start(activeSessionID)
             }
-            if let stoppingSessionID = sessionIDs.stopping {
-                guard var stopState, stopState.sessionID == stoppingSessionID else {
-                    return .immediate(currentTranscript())
-                }
-                stopState.completions.append(completion)
-                self.stopState = stopState
-                return .attached
-            }
-            return .immediate(currentTranscript())
+            return .immediate(lastStopResult ?? StreamingDictationStopResult(text: currentTranscript()))
         }
 
         let sessionID: UUID
@@ -205,19 +194,20 @@ final class StreamingDictationController {
             sessionID = id
         case .attached:
             return
-        case .immediate(let transcript):
-            completion(transcript)
+        case .immediate(let result):
+            completion(result)
             return
         }
 
-        if let wavURL = recorder.stop() {
-            try? FileManager.default.removeItem(at: wavURL)
-        }
+        let wavURL = recorder.stop()
         recorder.onAudioBuffer = nil
         recorder.onRecordingFailed = nil
+        // stop() finalized the file; cancel() now releases the AudioQueue callback retain.
+        recorder.cancel()
 
         // Collect remaining buffered samples
         let remaining: [Float] = bufferLock.withLock {
+            isActive = false
             let samples = sampleBuffer
             sampleBuffer.removeAll()
             return samples
@@ -243,18 +233,16 @@ final class StreamingDictationController {
                 timeout: self.stopStreamStateTimeout
             )
             guard self.isCurrentSession(sessionID) else {
-                self.completeStop(sessionID: sessionID, with: self.currentTranscript())
+                if let wavURL { try? FileManager.default.removeItem(at: wavURL) }
                 return
             }
             guard streamStateReady || self.hasStreamState() else {
-                let transcript = self.finishStoppedSession(sessionID: sessionID)
-                self.completeStop(sessionID: sessionID, with: transcript)
+                self.finishStop(sessionID: sessionID, wavURL: wavURL, isComplete: false)
                 return
             }
             self.startDrainIfNeeded(sessionID: sessionID)
-            await self.waitForDrain(sessionID: sessionID, timeout: self.stopDrainTimeout)
-            let transcript = self.finishStoppedSession(sessionID: sessionID)
-            self.completeStop(sessionID: sessionID, with: transcript)
+            let drained = await self.waitForDrain(sessionID: sessionID, timeout: self.stopDrainTimeout)
+            self.finishStop(sessionID: sessionID, wavURL: wavURL, isComplete: drained)
         }
     }
 
@@ -284,7 +272,7 @@ final class StreamingDictationController {
         streamStateTask?.cancel()
         streamStateTask = nil
         if let completionSessionID {
-            completeStop(sessionID: completionSessionID, with: currentTranscript())
+            completeStop(sessionID: completionSessionID, with: StreamingDictationStopResult(text: currentTranscript(), isComplete: false))
         }
         if cancelRecorder {
             recorder.cancel()
@@ -302,27 +290,47 @@ final class StreamingDictationController {
         }
     }
 
-    private func completeStop(sessionID: UUID, with transcript: String) {
-        let completions: [(String) -> Void] = stopLock.withLock {
+    private func finishStop(sessionID: UUID, wavURL: URL?, isComplete: Bool) {
+        guard isCurrentSession(sessionID) else {
+            if let wavURL { try? FileManager.default.removeItem(at: wavURL) }
+            return
+        }
+        let completed = isComplete && !stopLock.withLock({ stopState?.didFail ?? false })
+        let transcript = finishStoppedSession(sessionID: sessionID)
+        if completed, let wavURL { try? FileManager.default.removeItem(at: wavURL) }
+        completeStop(sessionID: sessionID, with: StreamingDictationStopResult(
+            text: transcript, recordingURL: completed ? nil : wavURL, isComplete: completed
+        ))
+    }
+
+    private func markStopFailed(sessionID: UUID) {
+        stopLock.withLock {
+            if stopState?.sessionID == sessionID { stopState?.didFail = true }
+        }
+    }
+
+    private func completeStop(sessionID: UUID, with result: StreamingDictationStopResult) {
+        let completions: [(StreamingDictationStopResult) -> Void] = stopLock.withLock {
             guard let state = stopState else { return [] }
             if state.sessionID != sessionID {
                 return []
             }
             stopState = nil
+            lastStopResult = result
             let completions = state.completions
             return completions
         }
         for completion in completions {
-            completion(transcript)
+            completion(result)
         }
     }
 
     // MARK: - Audio Buffer Handling
 
     /// Called on AVAudioEngine's audio processing thread (4096 samples per call).
-    private func handleAudioBuffer(_ samples: [Float]) {
+    private func handleAudioBuffer(_ samples: [Float], sessionID: UUID) {
         let capture = bufferLock.withLock { () -> (sessionID: UUID?, chunks: [[Float]]) in
-            guard isActive, let sessionID = activeSessionID else { return (nil, []) }
+            guard isActive, activeSessionID == sessionID || stoppingSessionID == sessionID else { return (nil, []) }
             var chunks: [[Float]] = []
             sampleBuffer.append(contentsOf: samples)
             while sampleBuffer.count >= chunkSamples {
@@ -365,6 +373,7 @@ final class StreamingDictationController {
     }
 
     private func markDrainFinished(sessionID: UUID) {
+        guard isCurrentSession(sessionID) else { return }
         let shouldContinue = hasStreamState() && queueLock.withLock { !chunkQueue.isEmpty }
         drainLock.withLock {
             isDraining = false
@@ -375,6 +384,7 @@ final class StreamingDictationController {
     }
 
     private func markDrainPausedForStreamState(sessionID: UUID) {
+        guard isCurrentSession(sessionID) else { return }
         let shouldContinue = hasStreamState() && queueLock.withLock { !chunkQueue.isEmpty }
         drainLock.withLock {
             isDraining = false
@@ -396,16 +406,17 @@ final class StreamingDictationController {
         }
     }
 
-    private func waitForDrain(sessionID: UUID, timeout: TimeInterval) async {
+    private func waitForDrain(sessionID: UUID, timeout: TimeInterval) async -> Bool {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            guard isCurrentSession(sessionID) else { return }
+            guard isCurrentSession(sessionID) else { return false }
             let queueIsEmpty = queueLock.withLock { chunkQueue.isEmpty }
             let currentlyDraining = drainLock.withLock { isDraining }
-            if queueIsEmpty && !currentlyDraining { return }
+            if queueIsEmpty && !currentlyDraining { return true }
             try? await Task.sleep(nanoseconds: 10_000_000)
         }
         fputs("[streaming-dictation] stop drain timed out\n", stderr)
+        return false
     }
 
     private func waitForStreamStateInitialization(
@@ -452,7 +463,7 @@ final class StreamingDictationController {
             streamState = nil
             return fullTranscript
         }
-        fputs("[streaming-dictation] stopped, transcript (\(transcript.count) chars): \(transcript.prefix(100))...\n", stderr)
+        fputs("[streaming-dictation] stopped, transcript \(transcript.count) chars\n", stderr)
         return transcript
     }
 
@@ -495,7 +506,7 @@ final class StreamingDictationController {
                     return fullTranscript
                 }
                 if !newText.isEmpty {
-                    fputs("[streaming-dictation] chunk → \"\(newText)\" (\(String(format: "%.0f", elapsed * 1000))ms)\n", stderr)
+                    fputs("[streaming-dictation] chunk \(newText.count) chars (\(String(format: "%.0f", elapsed * 1000))ms)\n", stderr)
                     if let transcript {
                         onPartialText?(transcript)
                     }
@@ -508,6 +519,7 @@ final class StreamingDictationController {
                 streamLock.withLock {
                     streamState = nil
                 }
+                markStopFailed(sessionID: sessionID)
                 failActiveSession(sessionID: sessionID, error: error)
                 return .finished
             }

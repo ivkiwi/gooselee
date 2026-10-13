@@ -275,6 +275,8 @@ private extension Data {
 
 struct MeetingRecordingPlayerView: View {
     let recordingPath: String
+    let meetingID: Int64
+    @Binding var seekRequest: MeetingRecordingSeekRequest?
 
     @State private var waveform: RecordingWaveformData?
     @State private var player: AVAudioPlayer?
@@ -345,6 +347,9 @@ struct MeetingRecordingPlayerView: View {
         .task(id: recordingPath) {
             await loadRecording()
         }
+        .onChange(of: seekRequest) { _, _ in
+            seekToRequestedTimestamp()
+        }
         .onReceive(timer) { _ in
             guard let player else { return }
             currentTime = player.currentTime
@@ -386,11 +391,14 @@ struct MeetingRecordingPlayerView: View {
             let loadedWaveform = try await Task.detached(priority: .utility) {
                 try await RecordingWaveformCache.shared.waveform(for: url)
             }.value
+            try Task.checkCancellation()
             let loadedPlayer = try AVAudioPlayer(contentsOf: url)
             loadedPlayer.prepareToPlay()
             waveform = loadedWaveform
             player = loadedPlayer
+            seekToRequestedTimestamp()
         } catch {
+            guard !Task.isCancelled else { return }
             loadFailed = true
         }
     }
@@ -413,8 +421,28 @@ struct MeetingRecordingPlayerView: View {
     private func seek(to progress: CGFloat) {
         guard let player else { return }
         let clamped = min(max(progress, 0), 1)
-        player.currentTime = player.duration * Double(clamped)
+        seek(toSeconds: player.duration * Double(clamped))
+    }
+
+    private func seek(toSeconds seconds: TimeInterval) {
+        guard seconds.isFinite, let player else { return }
+        player.currentTime = min(max(seconds, 0), player.duration)
         currentTime = player.currentTime
+    }
+
+    private func seekToRequestedTimestamp() {
+        guard let request = seekRequest,
+              request.meetingID == meetingID,
+              request.recordingPath == recordingPath,
+              let player, player.url?.path == recordingPath else { return }
+        seekRequest = nil
+        guard let seconds = TranscriptRecordingSeek.offset(
+            for: request.timestamp,
+            meetingStart: request.meetingStart,
+            duration: player.duration
+        ) else { return }
+        seek(toSeconds: seconds)
+        isPlaying = player.play()
     }
 
     private func formatTime(_ seconds: TimeInterval) -> String {

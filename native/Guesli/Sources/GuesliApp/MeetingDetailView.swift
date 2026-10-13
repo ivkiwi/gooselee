@@ -86,6 +86,7 @@ struct MeetingDetailView: View {
     @State private var showNewFolderPrompt = false
     @State private var newFolderName = ""
     @State private var threadContext: MeetingThreadContext?
+    @State private var recordingSeekRequest: MeetingRecordingSeekRequest?
 
     init(
         meeting: MeetingRecord?,
@@ -314,7 +315,12 @@ struct MeetingDetailView: View {
 
             if let savedRecordingPath = meeting.savedRecordingPath,
                FileManager.default.fileExists(atPath: savedRecordingPath) {
-                MeetingRecordingPlayerView(recordingPath: savedRecordingPath)
+                MeetingRecordingPlayerView(
+                    recordingPath: savedRecordingPath,
+                    meetingID: meeting.id,
+                    seekRequest: $recordingSeekRequest
+                )
+                .id(meeting.id)
             }
 
             activeMeetingAudioWarningBanner(for: meeting)
@@ -458,7 +464,13 @@ struct MeetingDetailView: View {
                         .allowsHitTesting(documentMode == .notes)
                         .accessibilityHidden(documentMode != .notes)
 
-                    MeetingTranscriptView(transcript: meeting.rawTranscript)
+                    MeetingTranscriptView(
+                        transcript: meeting.rawTranscript,
+                        seekUnavailableReason: TranscriptRecordingSeek.unavailableReason(for: meeting),
+                        onSeekTimestamp: { timestamp in
+                            recordingSeekRequest = MeetingRecordingSeekRequest(meeting: meeting, timestamp: timestamp)
+                        }
+                    )
                         .opacity(documentMode == .transcript ? 1 : 0)
                         .allowsHitTesting(documentMode == .transcript)
                         .accessibilityHidden(documentMode != .transcript)
@@ -1586,6 +1598,7 @@ struct MeetingDetailView: View {
             editableTranscript = meeting?.rawTranscript ?? ""
         }
         if meetingChanged {
+            recordingSeekRequest = nil
             editableManualNotes = meeting?.manualNotes ?? ""
             manualNotesSaveStatus = .saved
             transcriptResummaryPromptMeetingID = nil
@@ -1860,10 +1873,14 @@ struct TranscriptChatMessage: Identifiable, Equatable {
 
 private struct MeetingTranscriptView: View {
     let transcript: String
+    let seekUnavailableReason: String?
+    let onSeekTimestamp: (String) -> Void
     @State private var messages: [TranscriptChatMessage]
 
-    init(transcript: String) {
+    init(transcript: String, seekUnavailableReason: String?, onSeekTimestamp: @escaping (String) -> Void) {
         self.transcript = transcript
+        self.seekUnavailableReason = seekUnavailableReason
+        self.onSeekTimestamp = onSeekTimestamp
         _messages = State(initialValue: TranscriptChatMessage.messages(from: transcript))
     }
 
@@ -1878,7 +1895,11 @@ private struct MeetingTranscriptView: View {
                         .padding(GuesliTheme.spacing24)
                 } else {
                     ForEach(messages) { message in
-                        TranscriptChatBubble(message: message)
+                        TranscriptChatBubble(
+                            message: message,
+                            seekUnavailableReason: seekUnavailableReason,
+                            onSeekTimestamp: onSeekTimestamp
+                        )
                     }
                 }
             }
@@ -1895,6 +1916,8 @@ private struct MeetingTranscriptView: View {
 
 struct TranscriptChatBubble: View {
     let message: TranscriptChatMessage
+    let seekUnavailableReason: String?
+    let onSeekTimestamp: (String) -> Void
 
     var body: some View {
         HStack(alignment: .bottom, spacing: GuesliTheme.spacing8) {
@@ -1903,11 +1926,20 @@ struct TranscriptChatBubble: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                if let metadata = metadata {
-                    Text(metadata)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(GuesliTheme.textTertiary)
-                        .textSelection(.enabled)
+                if message.speaker != nil || message.timestamp != nil {
+                    HStack(spacing: 4) {
+                        if let speaker = message.speaker {
+                            Text(speaker)
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(GuesliTheme.textTertiary)
+                                .textSelection(.enabled)
+                        }
+                        if let timestamp = message.timestamp {
+                            TranscriptTimestampButton(timestamp: timestamp, unavailableReason: seekUnavailableReason) {
+                                onSeekTimestamp(timestamp)
+                            }
+                        }
+                    }
                 }
                 Text(message.text)
                     .font(.system(size: 14))
@@ -1930,18 +1962,5 @@ struct TranscriptChatBubble: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: message.isUser ? .trailing : .leading)
-    }
-
-    private var metadata: String? {
-        switch (message.speaker, message.timestamp) {
-        case let (speaker?, timestamp?):
-            return "\(speaker) \(timestamp)"
-        case let (speaker?, nil):
-            return speaker
-        case let (nil, timestamp?):
-            return timestamp
-        case (nil, nil):
-            return nil
-        }
     }
 }

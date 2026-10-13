@@ -37,7 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         } catch {
             let alert = NSAlert()
-            alert.messageText = "\(AppIdentity.displayName) failed to start"
+            alert.messageText = String(localized: "\(AppIdentity.displayName) failed to start")
             alert.informativeText = error.localizedDescription
             alert.runModal()
             NSApplication.shared.terminate(nil)

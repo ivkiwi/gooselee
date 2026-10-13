@@ -1,0 +1,5 @@
+/* Gaps found by scripts/l10n_coverage.py. */
+"%@ failed to start" = "Не удалось запустить %@";
+"Copy transcript" = "Скопировать расшифровку";
+"Hide live transcript" = "Скрыть расшифровку";
+"Live transcript" = "Живая расшифровка";

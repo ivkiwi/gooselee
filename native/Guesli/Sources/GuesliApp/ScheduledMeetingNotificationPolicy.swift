@@ -6,6 +6,24 @@ enum ScheduledMeetingNotificationPolicy {
     static let autoRecordCatchUpWindow: TimeInterval = 5 * 60
     static let autoRecordWakeHorizon: TimeInterval = 18 * 60 * 60
 
+    static let preparationLeadTime: TimeInterval = 15 * 60
+
+    static func preparationCandidates(
+        from events: [UnifiedCalendarEvent],
+        now: Date,
+        hiddenEventIDs: Set<String>
+    ) -> [UnifiedCalendarEvent] {
+        events.filter { event in
+            let preparationDate = event.startDate.addingTimeInterval(-preparationLeadTime)
+            return event.resolvedCalendarOccurrence.seriesID != nil
+                && !event.isAllDay
+                && !hiddenEventIDs.contains(event.id)
+                && event.startDate > now
+                && preparationDate > now.addingTimeInterval(-startPromptGracePeriod)
+                && preparationDate <= now.addingTimeInterval(autoRecordWakeHorizon)
+        }.sorted { $0.startDate < $1.startDate }
+    }
+
     static func upcomingCandidates(
         from events: [UnifiedCalendarEvent],
         now: Date,

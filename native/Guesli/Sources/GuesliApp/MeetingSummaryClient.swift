@@ -238,9 +238,9 @@ enum MeetingSummaryClient {
     private static let whamURL = URL(string: "https://chatgpt.com/backend-api/wham/responses")!
     private static let defaultOllamaBaseURL = URL(string: "http://localhost:11434")!
     private static let defaultLMStudioBaseURL = URL(string: "http://localhost:1234")!
-    private static let defaultOpenAIModel = "gpt-5.4-mini"
+    private static let defaultOpenAIModel = AppConfig.defaultOpenAIModel
     private static let defaultOpenRouterModel = "stepfun/step-3.5-flash:free"
-    private static let defaultChatGPTModel = "gpt-5.4-mini"
+    private static let defaultChatGPTModel = AppConfig.defaultChatGPTSummaryModel
     private static let defaultOllamaModel = "qwen3.5"
     private static let defaultSummaryMaxOutputTokens = 2500
     private static let remoteSummaryAttemptTimeout: TimeInterval = 90

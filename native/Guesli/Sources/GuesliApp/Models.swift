@@ -223,34 +223,17 @@ struct SummaryModelPreset {
     let id: String
     let label: String
 
-    static let openAIModels: [SummaryModelPreset] = [
-        SummaryModelPreset(id: "gpt-5.4-mini", label: "GPT-5.4 Mini (default)"),
-        SummaryModelPreset(id: "gpt-5.6-sol", label: "GPT-5.6 Sol"),
-        SummaryModelPreset(id: "gpt-5.6-terra", label: "GPT-5.6 Terra"),
-        SummaryModelPreset(id: "gpt-5.6-luna", label: "GPT-5.6 Luna"),
-        SummaryModelPreset(id: "gpt-5.4-nano", label: "GPT-5.4 Nano"),
-        SummaryModelPreset(id: "gpt-5.4", label: "GPT-5.4"),
-        SummaryModelPreset(id: "gpt-5.4-pro", label: "GPT-5.4 Pro"),
-        SummaryModelPreset(id: "gpt-5-mini", label: "GPT-5 Mini"),
-        SummaryModelPreset(id: "gpt-5.2", label: "GPT-5.2"),
-    ]
+    // Fallback when the live catalogs are unavailable; see GPTModelCatalogs.swift.
+    static let openAIModels: [SummaryModelPreset] = fallbackGPTModels
+    static let chatGPTModels: [SummaryModelPreset] = fallbackGPTModels
+    static let chatGPTTranscriptCleanupModels: [SummaryModelPreset] = fallbackGPTModels
 
-    static let chatGPTModels: [SummaryModelPreset] = [
-        SummaryModelPreset(id: "gpt-5.4-mini", label: "GPT-5.4 Mini (default)"),
-        SummaryModelPreset(id: "gpt-5.6-sol", label: "GPT-5.6 Sol"),
+    private static let fallbackGPTModels: [SummaryModelPreset] = [
+        SummaryModelPreset(id: "gpt-6.1-sol", label: "GPT-6.1 Sol"),
+        SummaryModelPreset(id: "gpt-6-luna", label: "GPT-6 Luna"),
+        SummaryModelPreset(id: "gpt-6-sol", label: "GPT-6 Sol"),
         SummaryModelPreset(id: "gpt-5.6-terra", label: "GPT-5.6 Terra"),
-        SummaryModelPreset(id: "gpt-5.6-luna", label: "GPT-5.6 Luna"),
-        SummaryModelPreset(id: "gpt-5.4-nano", label: "GPT-5.4 Nano"),
-        SummaryModelPreset(id: "gpt-5.4", label: "GPT-5.4"),
-        SummaryModelPreset(id: "gpt-5.2", label: "GPT-5.2"),
-        SummaryModelPreset(id: "gpt-4o", label: "GPT-4o"),
-    ]
-
-    static let chatGPTTranscriptCleanupModels: [SummaryModelPreset] = [
-        SummaryModelPreset(id: "gpt-5.6-terra", label: "GPT-5.6 Terra (default)"),
         SummaryModelPreset(id: "gpt-5.4-mini", label: "GPT-5.4 Mini"),
-        SummaryModelPreset(id: "gpt-5.6-sol", label: "GPT-5.6 Sol"),
-        SummaryModelPreset(id: "gpt-5.6-luna", label: "GPT-5.6 Luna"),
     ]
 
     static let openRouterModels: [SummaryModelPreset] = [
@@ -268,12 +251,8 @@ struct SummaryModelPreset {
     }
 
     static func reasoningEffort(for model: String) -> String? {
-        switch model.trimmingCharacters(in: .whitespacesAndNewlines) {
-        case "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna":
-            return "high"
-        default:
-            return nil
-        }
+        let model = model.trimmingCharacters(in: .whitespacesAndNewlines)
+        return model.hasPrefix("gpt-5.6") || model.hasPrefix("gpt-6") ? "medium" : nil
     }
 
     static func migratedFromGPT55(_ model: String) -> String {
@@ -996,8 +975,10 @@ enum MeetingProcessingMode: String, Codable, CaseIterable, Sendable {
 }
 
 struct AppConfig: Codable {
-    static let defaultChatGPTDictationCleanupModel = "gpt-5.6-terra"
-    static let defaultChatGPTMeetingCleanupModel = "gpt-5.6-terra"
+    static let defaultChatGPTDictationCleanupModel = "gpt-6.1-sol"
+    static let defaultChatGPTMeetingCleanupModel = "gpt-6.1-sol"
+    static let defaultChatGPTSummaryModel = "gpt-6.1-sol"
+    static let defaultOpenAIModel = "gpt-6.1-sol"
 
     var dictationHotkey: HotkeyConfig = .default
     var meetingRecordingHotkey: HotkeyConfig = .meetingRecordingDefault

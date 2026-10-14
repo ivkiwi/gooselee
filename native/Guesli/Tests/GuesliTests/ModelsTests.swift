@@ -213,19 +213,22 @@ struct SummaryModelPresetTests {
     @Test("OpenAI presets have valid model IDs")
     func openAIModels() {
         #expect(!SummaryModelPreset.openAIModels.isEmpty)
-        #expect(SummaryModelPreset.openAIModels.contains { $0.id == "gpt-5.6-sol" })
+        #expect(SummaryModelPreset.openAIModels.contains { $0.id == AppConfig.defaultOpenAIModel })
         for preset in SummaryModelPreset.openAIModels {
             #expect(!preset.id.isEmpty)
             #expect(!preset.label.isEmpty)
         }
     }
 
-    @Test("ChatGPT summary presets include GPT-5.6 tiers")
+    @Test("ChatGPT fallback presets include current defaults")
     func chatGPTModels() {
         #expect(!SummaryModelPreset.chatGPTModels.isEmpty)
-        #expect(SummaryModelPreset.chatGPTModels.contains { $0.id == "gpt-5.6-sol" })
+        #expect(AppConfig.defaultChatGPTSummaryModel == "gpt-6.1-sol")
+        #expect(AppConfig.defaultOpenAIModel == "gpt-6.1-sol")
+        #expect(AppConfig.defaultChatGPTDictationCleanupModel == "gpt-6.1-sol")
+        #expect(SummaryModelPreset.chatGPTModels.contains { $0.id == AppConfig.defaultChatGPTSummaryModel })
+        #expect(SummaryModelPreset.chatGPTTranscriptCleanupModels.contains { $0.id == AppConfig.defaultChatGPTDictationCleanupModel })
         #expect(SummaryModelPreset.chatGPTModels.contains { $0.id == "gpt-5.6-terra" })
-        #expect(SummaryModelPreset.chatGPTModels.contains { $0.id == "gpt-5.6-luna" })
         for preset in SummaryModelPreset.chatGPTModels {
             #expect(!preset.id.isEmpty)
             #expect(!preset.label.isEmpty)
@@ -245,6 +248,63 @@ struct SummaryModelPresetTests {
     func migratesGPT55() {
         #expect(SummaryModelPreset.migratedFromGPT55("gpt-5.5") == "gpt-5.6-sol")
         #expect(SummaryModelPreset.migratedFromGPT55("gpt-5.4-mini") == "gpt-5.4-mini")
+    }
+
+    @Test("reasoning effort is medium for GPT-5.6 and GPT-6 families only")
+    func reasoningEffort() {
+        #expect(SummaryModelPreset.reasoningEffort(for: "gpt-6.1-sol") == "medium")
+        #expect(SummaryModelPreset.reasoningEffort(for: " gpt-6-luna ") == "medium")
+        #expect(SummaryModelPreset.reasoningEffort(for: "gpt-5.6-terra") == "medium")
+        #expect(SummaryModelPreset.reasoningEffort(for: "gpt-5.4-mini") == nil)
+        #expect(SummaryModelPreset.reasoningEffort(for: "gpt-5") == nil)
+    }
+
+    @Test("ChatGPT catalog keeps listed non-service models by priority")
+    func chatGPTCatalogParsing() throws {
+        let payload = """
+        {
+          "models": [
+            { "slug": "gpt-6-luna", "display_name": "GPT-6-Luna", "visibility": "list", "priority": 4, "supported_in_api": true, "default_reasoning_level": "medium", "supported_reasoning_levels": [{ "effort": "low", "description": "Fast" }] },
+            { "slug": "codex-auto-review", "display_name": "Codex Auto Review", "visibility": "list", "priority": 0 },
+            { "slug": "gpt-reserve", "display_name": "GPT-Reserve", "visibility": "hide", "priority": 2 },
+            { "slug": "gpt-6.1-sol", "display_name": "GPT-6.1-Sol", "visibility": "list", "priority": 1, "default_reasoning_level": "low" },
+            { "slug": "gpt-5.6-terra", "visibility": "list" }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let presets = try ChatGPTModelCatalog.presets(from: payload)
+
+        #expect(presets.map(\.id) == ["gpt-6.1-sol", "gpt-6-luna", "gpt-5.6-terra"])
+        #expect(presets.map(\.label) == ["GPT-6.1-Sol", "GPT-6-Luna", "gpt-5.6-terra"])
+    }
+
+    @Test("OpenAI catalog keeps text GPT models, newest first")
+    func openAICatalogParsing() throws {
+        let payload = """
+        {
+          "object": "list",
+          "data": [
+            { "id": "gpt-5.4-mini", "object": "model", "created": 100, "owned_by": "system" },
+            { "id": "gpt-6.1-sol", "object": "model", "created": 300, "owned_by": "system" },
+            { "id": "gpt-6-luna", "object": "model", "created": 200, "owned_by": "system" },
+            { "id": "gpt-4o-audio-preview", "created": 400 },
+            { "id": "gpt-realtime", "created": 400 },
+            { "id": "gpt-4o-transcribe", "created": 400 },
+            { "id": "gpt-4o-mini-tts", "created": 400 },
+            { "id": "gpt-4o-search-preview", "created": 400 },
+            { "id": "gpt-image-1", "created": 400 },
+            { "id": "gpt-3.5-turbo-instruct", "created": 400 },
+            { "id": "gpt-4o-2024-08-06", "created": 400 },
+            { "id": "text-embedding-3-large", "created": 400 },
+            { "id": "whisper-1", "created": 400 }
+          ]
+        }
+        """.data(using: .utf8)!
+
+        let presets = try OpenAIModelCatalog.presets(from: payload)
+
+        #expect(presets.map(\.id) == ["gpt-6.1-sol", "gpt-6-luna", "gpt-5.4-mini"])
     }
 
     @Test("model menu includes custom configured model")

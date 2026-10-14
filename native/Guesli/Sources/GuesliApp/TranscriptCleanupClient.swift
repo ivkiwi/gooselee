@@ -159,7 +159,7 @@ enum TranscriptCleanupFailureSurface {
 enum ExternalTranscriptCleanupClient {
     private static let openAIURL = URL(string: "https://api.openai.com/v1/chat/completions")!
     private static let openRouterURL = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
-    private static let defaultOpenAIModel = "gpt-5.4-mini"
+    private static let defaultOpenAIModel = AppConfig.defaultOpenAIModel
     private static let defaultOpenRouterModel = "stepfun/step-3.5-flash:free"
     private static let defaultCustomModel = "local-model"
     private static let chatGPTTimeout: TimeInterval = 10

@@ -115,6 +115,8 @@ struct SettingsView: View {
     @State private var openRouterFreeModels: [SummaryModelPreset] = []
     @State private var isLoadingOpenRouterFreeModels = false
     @State private var openRouterFreeModelsError: String?
+    @State private var chatGPTCatalogModels: [SummaryModelPreset] = []
+    @State private var openAICatalogModels: [SummaryModelPreset] = []
 
     // Uniform width for all right-side controls
     private let controlWidth: CGFloat = 220
@@ -234,6 +236,7 @@ struct SettingsView: View {
             if appState.selectedMeetingSummaryBackend == .openRouter {
                 loadOpenRouterFreeModelsIfNeeded()
             }
+            refreshGPTModelCatalogs()
         }
         .onDisappear {
             audioInputDeviceRefreshTask?.cancel()
@@ -260,6 +263,8 @@ struct SettingsView: View {
         .onChange(of: appState.selectedMeetingSummaryBackend) { _, backend in
             if backend == .openRouter {
                 loadOpenRouterFreeModelsIfNeeded()
+            } else if backend == .openAI {
+                refreshGPTModelCatalogs()
             }
         }
         .alert(
@@ -537,7 +542,7 @@ struct SettingsView: View {
                     settingsRow("Cleanup model") {
                         settingsModelMenu(
                             currentModel: appState.config.chatGPTDictationCleanupModel,
-                            presets: SummaryModelPreset.chatGPTTranscriptCleanupModels,
+                            presets: chatGPTCleanupPresets,
                             defaultModel: AppConfig.defaultChatGPTDictationCleanupModel
                         ) { val in controller.setChatGPTDictationCleanupModel(val) }
                     }
@@ -718,7 +723,7 @@ struct SettingsView: View {
                     settingsRow("Cleanup model", controlWidth: meetingControlWidth) {
                         settingsModelMenu(
                             currentModel: appState.config.chatGPTMeetingCleanupModel,
-                            presets: SummaryModelPreset.chatGPTTranscriptCleanupModels,
+                            presets: chatGPTCleanupPresets,
                             defaultModel: AppConfig.defaultChatGPTMeetingCleanupModel
                         ) { val in controller.updateConfig { $0.chatGPTMeetingCleanupModel = val } }
                     }
@@ -745,7 +750,8 @@ struct SettingsView: View {
                     settingsRow("Model", controlWidth: meetingControlWidth) {
                         settingsModelMenu(
                             currentModel: appState.config.chatGPTModel,
-                            presets: SummaryModelPreset.chatGPTModels
+                            presets: chatGPTCatalogModels.isEmpty ? SummaryModelPreset.chatGPTModels : chatGPTCatalogModels,
+                            defaultModel: AppConfig.defaultChatGPTSummaryModel
                         ) { val in controller.updateConfig { $0.chatGPTModel = val } }
                     }
                 } else if appState.selectedMeetingSummaryBackend == .openAI {
@@ -761,7 +767,8 @@ struct SettingsView: View {
                     settingsRow("Model", controlWidth: meetingControlWidth) {
                         settingsModelMenu(
                             currentModel: appState.config.openAIModel,
-                            presets: SummaryModelPreset.openAIModels
+                            presets: openAICatalogModels.isEmpty ? SummaryModelPreset.openAIModels : openAICatalogModels,
+                            defaultModel: AppConfig.defaultOpenAIModel
                         ) { val in controller.updateConfig { $0.openAIModel = val } }
                     }
                     keyStatusRow(key: appState.config.openAIAPIKey)
@@ -2483,7 +2490,7 @@ struct SettingsView: View {
     ) -> some View {
         let defaultId = defaultModel ?? presets.first?.id ?? ""
         let menuPresets = relabeledPresets(
-            SummaryModelPreset.menuPresets(presets, currentModel: currentModel),
+            SummaryModelPreset.menuPresets(presets, currentModel: currentModel.isEmpty ? defaultId : currentModel),
             defaultModel: defaultModel
         )
         let effectiveModel = currentModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -2558,6 +2565,20 @@ struct SettingsView: View {
                 .font(.system(size: 12, weight: .medium))
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+    }
+
+    private var chatGPTCleanupPresets: [SummaryModelPreset] {
+        chatGPTCatalogModels.isEmpty ? SummaryModelPreset.chatGPTTranscriptCleanupModels : chatGPTCatalogModels
+    }
+
+    private func refreshGPTModelCatalogs() {
+        chatGPTCatalogModels = GPTModelCatalogClient.cachedChatGPTPresets
+        openAICatalogModels = GPTModelCatalogClient.cachedOpenAIPresets
+        let apiKey = appState.config.openAIAPIKey
+        Task { @MainActor in
+            chatGPTCatalogModels = await GPTModelCatalogClient.refreshChatGPTPresets()
+            openAICatalogModels = await GPTModelCatalogClient.refreshOpenAIPresets(apiKey: apiKey)
         }
     }
 

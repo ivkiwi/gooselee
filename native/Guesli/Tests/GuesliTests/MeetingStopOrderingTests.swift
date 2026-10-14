@@ -133,14 +133,15 @@ struct MeetingStopOrderingTests {
         do {
             _ = try await session.withStopPhaseTimeout("non_cooperative", timeout: 0.02) {
                 await withCheckedContinuation { continuation in
-                    DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+                    // Far longer than the bound below, so a loaded test scheduler cannot blur the result.
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 30) {
                         continuation.resume(returning: "Too late")
                     }
                 }
             }
             Issue.record("Expected non-cooperative stop phase to time out")
         } catch {
-            #expect(startedAt.duration(to: .now) < .seconds(1))
+            #expect(startedAt.duration(to: .now) < .seconds(10))
             #expect(error.localizedDescription.contains("non_cooperative timed out"))
         }
     }

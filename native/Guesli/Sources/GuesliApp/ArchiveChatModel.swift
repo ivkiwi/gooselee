@@ -23,6 +23,7 @@ final class ArchiveChatModel {
         let question: String
         let answer: String
         let sources: [ArchiveChatSource]
+        var searchTerms: [String] = []
     }
 
     private(set) var turns: [Turn] = []
@@ -94,7 +95,7 @@ final class ArchiveChatModel {
                     return source.availability(in: try freshMeeting(source.meetingID)) == .current
                 }
             }
-            let topic = history.last?.question ?? ""
+            let topic = history.last?.searchTerms.joined(separator: " ") ?? ""
             let historyCharacters = history.reduce(0) { $0 + min($1.question.count, 600) + min($1.answer.count, 1_000) + 100 }
             let sourceBudget = min(24_000, max(0, Self.sourceBudget(config: config) - Self.instructions.count - input.count - historyCharacters - 800))
             let terms = Array(ArchiveChatRetrieval.terms(in: input + " " + topic).prefix(12))
@@ -134,7 +135,7 @@ final class ArchiveChatModel {
                     self.answer = text
                     self.invalidCitations = ArchiveChatRetrieval.invalidCitations(in: text, sources: sentSources)
                     if self.invalidCitations.isEmpty {
-                        self.turns.append(Turn(question: input, answer: text, sources: sentSources))
+                        self.turns.append(Turn(question: input, answer: text, sources: sentSources, searchTerms: terms))
                         self.turns = Array(self.turns.suffix(4))
                     }
                     self.isRunning = false

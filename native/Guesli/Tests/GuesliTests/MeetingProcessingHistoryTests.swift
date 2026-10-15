@@ -156,6 +156,27 @@ struct MeetingProcessingHistoryTests {
         try summary(store, id: imported.meetingID, attempt: imported.attemptID)
         #expect(try store.meetingProcessingAttempts(meetingID: imported.meetingID).first?.operation == .initial)
     }
+
+    @Test func repeatedTrustedTranscriptSavePreservesUnchangedSpeakerMap() throws {
+        let (store, root, id) = try fixture(); defer { try? FileManager.default.removeItem(at: root) }
+        let raw = "[10:00:00] Alex: First words.\n[10:00:01] Alex: Second words."
+        let map = MeetingSpeakerAttribution(generationID: "import", speakers: [
+            .init(id: "import:first", displayName: "Alex", source: .user),
+            .init(id: "import:second", displayName: "Alex", source: .unknown)
+        ], lineSpeakerIDs: ["import:first", "import:second"])
+        let json = try #require(map.json)
+        let attempt = try store.beginMeetingProcessing(meetingID: id, operation: .initial, configuration: .init())
+        try store.saveMeetingProcessingTranscript(meetingID: id, attemptID: attempt, transcript: raw,
+            originalTranscript: nil, speakerAttributionJSON: json)
+        let cleaned = raw.replacingOccurrences(of: "First words.", with: "Corrected words.")
+        #expect(map.rebased(from: raw, to: cleaned) == map)
+        try store.saveMeetingProcessingTranscript(meetingID: id, attemptID: attempt, transcript: cleaned,
+            originalTranscript: raw, speakerAttributionJSON: json)
+        #expect(try store.meeting(id: id)?.speakerAttributionJSON == json)
+        // Generic text edits still invalidate a map whose line layout may have changed.
+        try store.updateMeetingTranscript(id: id, rawTranscript: cleaned + "\nUnmapped text")
+        #expect(try store.meeting(id: id)?.speakerAttributionJSON == nil)
+    }
     @MainActor
     @Test func stopCancelsTrackedWorkAndRejectsLatePersistence() async throws {
         let (store, root, id) = try fixture(); defer { try? FileManager.default.removeItem(at: root) }

@@ -6873,12 +6873,17 @@ public final class GuesliController: NSObject {
               let prior = pendingResumePriorTranscript[meetingID],
               let priorMeeting = meeting(id: meetingID) else { return result }
         let originalStart = ISO8601DateFormatter().date(from: priorMeeting.startTime)
+        let attribution = MeetingResumePolicy.combinedSpeakerAttribution(
+            prior: prior,
+            priorAttribution: MeetingSpeakerAttribution.decode(pendingResumePriorMeetings[meetingID]?.speakerAttributionJSON ?? priorMeeting.speakerAttributionJSON),
+            new: result.rawTranscript, newAttribution: result.speakerAttribution)
         guard MeetingResumePolicy.hasNewTranscriptContent(prior: prior, new: result.rawTranscript) else {
             return result.overriding(
                 startTime: originalStart,
                 durationSeconds: priorMeeting.durationSeconds + result.durationSeconds,
                 rawTranscript: prior,
                 rawOriginalTranscript: priorMeeting.rawOriginalTranscript,
+                speakerAttribution: attribution,
                 formattedNotes: priorMeeting.formattedNotes
             )
         }
@@ -6897,6 +6902,7 @@ public final class GuesliController: NSObject {
             durationSeconds: priorMeeting.durationSeconds + result.durationSeconds,
             rawTranscript: combined,
             rawOriginalTranscript: combinedOriginal,
+            speakerAttribution: attribution,
             formattedNotes: combinedNotes
         )
     }

@@ -3676,6 +3676,9 @@ extension DictationStore {
                     Self.countWords(in: transcript) + Self.countWords(in: try manualNotesForMeeting(id: meetingID, db: db)),
                     Date().timeIntervalSince1970, meetingID, attemptID])
             guard sqlite3_changes(db) == 1 else { throw MeetingProcessingError.staleInput }
+            // The text-edit trigger cannot distinguish an explicitly supplied unchanged map.
+            try processingExecute("UPDATE meetings SET speaker_attribution_json = ? WHERE id = ?", db: db,
+                values: [speakerAttributionJSON, meetingID])
             try processingExecute("UPDATE meeting_processing_attempts SET input_revision = (SELECT content_revision FROM meetings WHERE id = ?), stage = 'summary' WHERE id = ?", db: db, values: [meetingID, attemptID])
             try deleteLiveTranscriptCheckpoints(meetingID: meetingID, db: db)
             try deleteResumeSnapshot(meetingID: meetingID, db: db)

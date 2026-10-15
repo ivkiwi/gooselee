@@ -123,9 +123,16 @@ struct ArchiveChatTests {
         #expect(terms.contains("релиз"))
         #expect(latestPrompt.contains("previous_dialogue"))
         #expect(latestPrompt.contains("Анна отвечает за релиз"))
+        for followUp in ["When?", "Who owns it?", "When?"] {
+            terms = []
+            model.ask(followUp, scope: .all, config: AppConfig(), candidates: { words, _ in terms = words; return [record] }, freshMeeting: fresh, respond: respond)
+            await finish(model)
+            #expect(terms.contains("релиз"))
+            #expect(model.errorMessage == nil)
+        }
         exists = false
         model.ask("релиз", scope: .all, config: AppConfig(), candidates: { _, _ in [] }, freshMeeting: fresh, respond: respond)
-        #expect(requests == 2)
+        #expect(requests == 5)
         #expect(model.sources.isEmpty)
     }
 

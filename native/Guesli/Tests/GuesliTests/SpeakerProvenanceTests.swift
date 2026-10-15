@@ -69,6 +69,30 @@ struct SpeakerProvenanceTests {
         #expect(!json.contains("emailAddress"))
     }
 
+    @Test("Resume preserves prior identities, separates colliding clusters, and keeps the empty continuation")
+    func resumedAttributionStaysIndependent() throws {
+        let previous = sameNameTranscript()
+        // Deliberately reuse a prior cluster ID, as legacy recordings can do.
+        let nextText = "[12:00:00] Alex: New segment."
+        let next = MeetingSpeakerAttribution(generationID: "next", speakers: [previous.attribution.speakers[0]],
+            lineSpeakerIDs: [previous.attribution.speakers[0].id])
+        let combined = MeetingResumePolicy.combinedResumeTranscript(prior: previous.transcript, new: nextText)
+        let map = MeetingResumePolicy.combinedSpeakerAttribution(prior: previous.transcript,
+            priorAttribution: previous.attribution, new: nextText, newAttribution: next)
+        #expect(map.validated(for: combined) != nil)
+        #expect(map.speakers.count == 3)
+        #expect(map.speaker(atLine: 0)?.id == previous.attribution.speaker(atLine: 0)?.id)
+        #expect(map.speaker(atLine: 1)?.id == previous.attribution.speaker(atLine: 1)?.id)
+        let corrected = try #require(MeetingSpeakerRename.rename(speakerID: previous.attribution.speakers[0].id,
+            to: "Anna", in: combined, attribution: map))
+        #expect(corrected.transcript.contains("] Anna: First person's words."))
+        #expect(corrected.transcript.contains("] Alex: Second person's words."))
+        #expect(corrected.transcript.contains("] Alex: New segment."))
+        let empty = MeetingResumePolicy.combinedSpeakerAttribution(prior: previous.transcript,
+            priorAttribution: previous.attribution, new: "  ", newAttribution: nil)
+        #expect(empty == previous.attribution)
+    }
+
     @Test("New ASR generation never accepts a former speaker identity")
     func generationDoesNotTransferIdentity() throws {
         let before = sameNameTranscript()

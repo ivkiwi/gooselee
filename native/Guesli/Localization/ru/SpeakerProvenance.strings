@@ -1,0 +1,17 @@
+"Manually Named" = "Вручную";
+"Google Meet" = "Google Meet";
+"Source Unknown" = "Источник неизвестен";
+"This name was corrected manually for this transcript." = "Имя исправлено вручную для этой расшифровки.";
+"Suggested from Google Meet events. This does not verify the speaker's identity." = "Имя предложено по событиям Google Meet. Личность говорящего не подтверждена.";
+"No name source was saved for this speaker." = "Источник имени этого говорящего не сохранён.";
+"Changes this speaker throughout this transcript. No colons, up to %lld characters." = "Меняет имя этого говорящего во всей расшифровке. Без двоеточий, до %lld символов.";
+"Name sources were not saved for this transcript. Identical legacy labels cannot be corrected separately." = "Источники имён не сохранены. Одинаковые подписи в старой расшифровке нельзя исправить по отдельности.";
+"Meeting content changed after this summary was created" = "Содержимое встречи изменилось после создания итога";
+"The saved summary may still contain earlier names or notes." = "В сохранённом итоге могут остаться прежние имена или заметки.";
+"Update Summary" = "Обновить итог";
+"Keep As Is" = "Оставить как есть";
+"Ask About This Meeting" = "Спросить об этой встрече";
+"Re-transcribe Meeting?" = "Распознать встречу заново?";
+"Re-transcription creates new speaker groups. Names may need to be assigned again. Your saved transcript stays available until a new result succeeds." = "Повторное распознавание создаст новые группы говорящих. Имена может потребоваться назначить заново. Сохранённая расшифровка останется доступна до успешного получения нового результата.";
+"Speaker %lld" = "Говорящий %lld";
+"Close Source" = "Закрыть источник";

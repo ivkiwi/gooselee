@@ -177,6 +177,36 @@ struct MeetingsNavigationTests {
         #expect(controller.appState.meetingsNavigationState == .browser)
     }
 
+    @Test("archive sources open fresh stored text and clear on ordinary navigation")
+    func archiveSourceUsesFreshDocument() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("archive-source-navigation-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = DictationStore(databaseURL: root.appendingPathComponent("fixture.db"))
+        try store.migrateIfNeeded()
+        let now = Date()
+        let id = try store.insertMeeting(title: "Source", calendarEventID: nil, startTime: now,
+            endTime: now.addingTimeInterval(60), rawTranscript: "Original release decision.",
+            formattedNotes: "", micAudioPath: nil, systemAudioPath: nil)
+        let original = try #require(try store.meeting(id: id))
+        let source = try #require(ArchiveChatRetrieval.retrieve(meetings: [original], terms: ["release"],
+            excluded: [], characterBudget: 2_000).sources.first)
+        let controller = makeController(configStore: ConfigStore(supportURL: root.appendingPathComponent("support")), dictationStore: store)
+        controller.appState.meetingRows = [original]
+        try store.updateMeetingTranscriptAndSummary(id: id, rawTranscript: "Edited release decision.",
+            rawOriginalTranscript: nil, formattedNotes: "", summaryError: nil,
+            selectedTemplateID: "", selectedTemplateName: "", selectedTemplateKind: .auto, selectedTemplatePrompt: "")
+
+        controller.showArchiveChatSource(source)
+
+        #expect(controller.appState.meetingsNavigationState == .document(id))
+        #expect(controller.appState.selectedMeeting?.rawTranscript == "Edited release decision.")
+        #expect(source.availability(in: controller.appState.selectedMeeting) == .stale)
+        #expect(controller.appState.archiveChatSource == source)
+        controller.showMeetingsHome()
+        #expect(controller.appState.archiveChatSource == nil)
+    }
+
     @Test("deleteMeeting clears selected detail state and removes saved recording")
     func deleteMeetingClearsSelection() throws {
         let store = try makeStore()

@@ -20,6 +20,28 @@ enum MeetingResumePolicy {
         combinedResumeTranscript(prior: prior, new: new) != prior
     }
 
+    static func combinedSpeakerAttribution(
+        prior: String, priorAttribution: MeetingSpeakerAttribution?,
+        new: String, newAttribution: MeetingSpeakerAttribution?
+    ) -> MeetingSpeakerAttribution {
+        let previous = priorAttribution?.validated(for: prior) ?? .legacy(transcript: prior)
+        let next = newAttribution?.validated(for: new) ?? .legacy(transcript: new)
+        if new.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return previous }
+        if prior.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return next }
+        let generation = UUID().uuidString
+        let previousIDs = Set(previous.speakers.map(\.id))
+        // Cluster IDs from separate recordings must never merge just because their names match.
+        let nextIDs = Dictionary(uniqueKeysWithValues: next.speakers.map {
+            ($0.id, previousIDs.contains($0.id) ? generation + ":" + $0.id : $0.id)
+        })
+        let speakers = previous.speakers + next.speakers.map {
+            MeetingSpeakerAttribution.Speaker(id: nextIDs[$0.id]!, displayName: $0.displayName, source: $0.source)
+        }
+        let separatorLines = Array<String?>(repeating: nil, count: resumeSeparator.components(separatedBy: "\n").count - 2)
+        return MeetingSpeakerAttribution(generationID: generation, speakers: speakers,
+            lineSpeakerIDs: previous.lineSpeakerIDs + separatorLines + next.lineSpeakerIDs.map { $0.flatMap { nextIDs[$0] } })
+    }
+
     /// The start origin a resumed meeting should be re-armed with.
     ///
     /// Resume reopens the *same* meeting row, so it should keep behaving like the

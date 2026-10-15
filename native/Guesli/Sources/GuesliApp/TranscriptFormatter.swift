@@ -22,47 +22,65 @@ enum TranscriptFormatter {
         speakerNameMap: [String: String] = [:],
         meetingStart: Date
     ) -> String {
-        // The formatter is intentionally source-agnostic: upstream capture decides
-        // which mic/system segments are valid, then this layer only labels/merges.
-        let displayMicSegments = micSegments
-        let taggedMic = displayMicSegments.map { TaggedSegment(segment: $0, speaker: "You") }
+        mergeAttributed(
+            micSegments: micSegments, systemSegments: systemSegments,
+            diarizationSegments: diarizationSegments, speakerNameMap: speakerNameMap,
+            meetingStart: meetingStart
+        ).transcript
+    }
 
+    static func mergeAttributed(
+        micSegments: [SpeechSegment],
+        systemSegments: [SpeechSegment],
+        diarizationSegments: [TimedSpeakerSegment]?,
+        speakerNameMap: [String: String] = [:],
+        meetingStart: Date
+    ) -> (transcript: String, attribution: MeetingSpeakerAttribution) {
+        let generation = UUID().uuidString
+        let micID = generation + ":mic"
+        let othersID = generation + ":unattributed"
+        var speakers = [MeetingSpeakerAttribution.Speaker(id: micID, displayName: "You", source: .unknown)]
+        var labelMap: [String: String] = [:]
+        for segment in (diarizationSegments ?? []).sorted(by: { $0.startTimeSeconds < $1.startTimeSeconds }) {
+            guard labelMap[segment.speakerId] == nil else { continue }
+            let id = generation + ":cluster:" + segment.speakerId
+            let proposedName = speakerNameMap[segment.speakerId].flatMap(MeetingSpeakerRename.validatedName)
+            let label = proposedName ?? "Speaker \(labelMap.count + 1)"
+            labelMap[segment.speakerId] = id
+            speakers.append(.init(id: id, displayName: label, source: proposedName == nil ? .unknown : .googleMeet))
+        }
+        speakers.append(.init(id: othersID, displayName: "Others", source: .unknown))
+        let taggedMic = micSegments.map { TaggedSegment(segment: $0, speaker: micID) }
         let taggedSystem: [TaggedSegment]
         if let diarizationSegments, !diarizationSegments.isEmpty {
-            // Build speaker label map: raw ID → "Speaker 1", "Speaker 2", etc. in first-appearance order
-            var speakerLabelMap: [String: String] = [:]
-            var nextSpeakerNumber = 1
-            for seg in diarizationSegments.sorted(by: { $0.startTimeSeconds < $1.startTimeSeconds }) {
-                if speakerLabelMap[seg.speakerId] == nil {
-                    speakerLabelMap[seg.speakerId] = speakerNameMap[seg.speakerId] ?? "Speaker \(nextSpeakerNumber)"
-                    nextSpeakerNumber += 1
-                }
-            }
-
-            let lexicalUnits = normalizeLexicalUnits(systemSegments)
-            taggedSystem = lexicalUnits.map { segment in
-                let speaker = findSpeaker(for: segment, in: diarizationSegments, labelMap: speakerLabelMap)
-                return TaggedSegment(segment: segment, speaker: speaker)
+            taggedSystem = normalizeLexicalUnits(systemSegments).map { segment in
+                let id = findSpeaker(for: segment, in: diarizationSegments, labelMap: labelMap)
+                return TaggedSegment(segment: segment, speaker: id == "Others" ? othersID : id)
             }
         } else {
-            taggedSystem = systemSegments.map { TaggedSegment(segment: $0, speaker: "Others") }
+            taggedSystem = systemSegments.map { TaggedSegment(segment: $0, speaker: othersID) }
         }
-
-        let tagged = (taggedMic + taggedSystem).sorted { $0.segment.start < $1.segment.start }
-
-        // Consolidate consecutive segments from the same speaker into single lines
-        let consolidated = consolidate(tagged)
-
+        // Consolidate by identity before projecting display names: equal names are not equal people.
+        let consolidated = consolidate((taggedMic + taggedSystem).sorted { $0.segment.start < $1.segment.start })
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = .current
         formatter.dateFormat = "HH:mm:ss"
-
-        return consolidated.map { taggedSegment in
-            let timestamp = meetingStart.addingTimeInterval(taggedSegment.segment.start)
-            let text = taggedSegment.segment.text.trimmingCharacters(in: .whitespaces)
-            return "[\(formatter.string(from: timestamp))] \(taggedSegment.speaker): \(text)"
+        let labels = Dictionary(uniqueKeysWithValues: speakers.map { ($0.id, $0.displayName) })
+        let transcript = consolidated.map { tagged in
+            let timestamp = meetingStart.addingTimeInterval(tagged.segment.start)
+            let text = tagged.segment.text.trimmingCharacters(in: .whitespaces)
+            return "[\(formatter.string(from: timestamp))] \(labels[tagged.speaker] ?? "Others"): \(text)"
         }.joined(separator: "\n")
+        let usedIDs = Set(consolidated.map(\.speaker))
+        let attribution = MeetingSpeakerAttribution(
+            generationID: generation,
+            speakers: speakers.filter { usedIDs.contains($0.id) },
+            lineSpeakerIDs: consolidated.isEmpty ? [nil] : consolidated.flatMap { tagged in
+                [Optional(tagged.speaker)] + Array(repeating: nil, count: tagged.segment.text.components(separatedBy: "\n").count - 1)
+            }
+        )
+        return (transcript, attribution)
     }
 
     /// Merge consecutive segments from the same speaker into single entries,

@@ -64,6 +64,12 @@ case "${shard}" in
       MeetingDetectorTests
       MeetingRecordingWriterTests
       MeetingSummaryClientTests
+      ArchiveChatTests
+      AudioImportProvenanceTests
+      MeetingProcessingHistoryTests
+      MeetingProcessingSnapshotTests
+      SpeakerProvenanceTests
+      MeetingTranscriptCleanupTests
       MeetingsNavigationTests
       MeetingBrowserLogicTests
       MeetingNotesInlineMarkdownTests

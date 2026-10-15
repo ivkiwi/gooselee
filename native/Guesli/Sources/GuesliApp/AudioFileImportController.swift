@@ -181,164 +181,196 @@ enum AudioFileImportController {
         let config = context.config
         let backend = context.backend
         let transcriptionCoordinator = context.transcriptionCoordinator
-
-        progress("Loading transcription model...")
-        try await transcriptionCoordinator.preloadRequired(
-            backend: backend,
-            enablePostProcessor: false,
-            includeMeetingHelpers: true
-        )
-
-        try Task.checkCancellation()
-
-        // Run VAD to skip silent files and avoid ASR hallucinations on silence.
-        if let vadManager = await transcriptionCoordinator.getVadManager() {
-            do {
-                let vadResults = try await vadManager.process(wavURL)
-                let hasSpeech = vadResults.contains { $0.probability > 0.5 }
-                if !hasSpeech {
-                    throw ImportError.readError("No speech detected in the selected audio file.")
-                }
-            } catch let error as ImportError {
-                throw error
-            } catch {
-                fputs("[import] VAD check failed, transcribing anyway: \(error)\n", stderr)
-            }
-        }
-
-        try Task.checkCancellation()
-
-        progress("Transcribing audio...")
-        let transcription = try await transcriptionCoordinator.transcribeMeeting(
-            at: wavURL,
-            samples: audioSamples,
-            backend: backend,
-        )
-        let rawTranscript = transcription.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !rawTranscript.isEmpty else {
-            throw ImportError.readError("No speech was transcribed from the selected audio file.")
-        }
-
-        try Task.checkCancellation()
-
-        // Transcript clock labels and the saved meeting start share one origin, so timestamps can seek the recording.
         let startTime = Date().addingTimeInterval(-duration)
+        let generatedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Meeting" : title
+        let templateSnapshot = context.templateSnapshot
+        // Retention consumes its input; keep the prepared WAV available to ASR.
+        let retentionWAV = try temporaryWAVURL()
+        try FileManager.default.copyItem(at: wavURL, to: retentionWAV)
+        let savedRecordingPath: String
+        do {
+            defer { try? FileManager.default.removeItem(at: retentionWAV) }
+            savedRecordingPath = try await MeetingRecordingStorage.persistTemporaryRecordingAsync(
+                from: retentionWAV, meetingTitle: generatedTitle, startedAt: startTime,
+                config: config, supportDirectory: context.supportDirectory
+            ).path
+        }
+        let imported: (meetingID: Int64, attemptID: String)
+        do {
+            imported = try await controller.beginImportedAudioProcessing(
+                title: generatedTitle, startTime: startTime, duration: duration,
+                savedRecordingPath: savedRecordingPath, config: config, backend: backend, template: templateSnapshot
+            )
+        } catch {
+            // No meeting owns this app-created copy; the selected source file is unchanged.
+            try? FileManager.default.removeItem(atPath: savedRecordingPath)
+            throw error
+        }
 
-        // Run speaker diarization if available
-        var diarizedTranscript = rawTranscript
-        if let diarizerManager = await transcriptionCoordinator.getDiarizerManager(),
-           diarizerManager.isAvailable {
-            progress("Identifying speakers...")
-            do {
-                guard let samples = audioSamples else {
-                    throw ImportError.readError("Converted audio samples are unavailable.")
+        do {
+
+            progress("Loading transcription model...")
+            try await transcriptionCoordinator.preloadRequired(
+                backend: backend,
+                enablePostProcessor: false,
+                includeMeetingHelpers: true
+            )
+
+            try Task.checkCancellation()
+
+            // Run VAD to skip silent files and avoid ASR hallucinations on silence.
+            if let vadManager = await transcriptionCoordinator.getVadManager() {
+                do {
+                    let vadResults = try await vadManager.process(wavURL)
+                    let hasSpeech = vadResults.contains { $0.probability > 0.5 }
+                    if !hasSpeech {
+                        throw ImportError.readError("No speech detected in the selected audio file.")
+                    }
+                } catch let error as ImportError {
+                    throw error
+                } catch {
+                    DiagnosticsLog.write("[import] VAD check failed; transcribing retained audio")
                 }
-                try Task.checkCancellation()
-                let diarizationResult = try diarizerManager.performCompleteDiarization(
-                    samples,
-                    sampleRate: 16000
-                )
-                if !diarizationResult.segments.isEmpty {
-                    diarizedTranscript = formatTranscriptWithSpeakers(
-                        transcription: transcription,
-                        diarizationSegments: diarizationResult.segments,
-                        meetingStart: startTime
+            }
+
+            try Task.checkCancellation()
+
+            progress("Transcribing audio...")
+            let transcription = try await transcriptionCoordinator.transcribeMeeting(
+                at: wavURL,
+                samples: audioSamples,
+                backend: backend,
+            )
+            let rawTranscript = transcription.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !rawTranscript.isEmpty else {
+                throw ImportError.readError("No speech was transcribed from the selected audio file.")
+            }
+
+            try Task.checkCancellation()
+
+            // Run speaker diarization if available
+            var diarizedTranscript = rawTranscript
+            var speakerAttribution: MeetingSpeakerAttribution?
+            var diarizationPerformed = false
+            if let diarizerManager = await transcriptionCoordinator.getDiarizerManager(),
+               diarizerManager.isAvailable {
+                progress("Identifying speakers...")
+                do {
+                    guard let samples = audioSamples else {
+                        throw ImportError.readError("Converted audio samples are unavailable.")
+                    }
+                    try Task.checkCancellation()
+                    let diarizationResult = try diarizerManager.performCompleteDiarization(
+                        samples,
+                        sampleRate: 16000
                     )
+                    diarizationPerformed = true
+                    if !diarizationResult.segments.isEmpty {
+                        let formatted = formatTranscriptWithSpeakerAttribution(
+                            transcription: transcription,
+                            diarizationSegments: diarizationResult.segments,
+                            meetingStart: startTime
+                        )
+                        diarizedTranscript = formatted.transcript
+                        speakerAttribution = formatted.attribution
+                    }
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    DiagnosticsLog.write("[import] diarization failed; keeping raw transcript")
                 }
+            }
+            audioSamples = nil
+
+            try Task.checkCancellation()
+            try await controller.saveImportedAudioTranscript(
+                meetingID: imported.meetingID, attemptID: imported.attemptID,
+                transcript: diarizedTranscript, originalTranscript: nil,
+                speakerAttributionJSON: speakerAttribution?.json
+            )
+
+            progress("Cleaning transcript...")
+            let isChatGPTAuthenticated = await MainActor.run {
+                ChatGPTAuthManager.shared.isAuthenticated
+            }
+            let cleanupResult = await cleanImportedTranscriptIfNeeded(
+                diarizedTranscript,
+                config: config,
+                isChatGPTAuthenticated: isChatGPTAuthenticated
+            )
+            let cleanedAttribution = speakerAttribution?.rebased(from: diarizedTranscript, to: cleanupResult.transcript)
+            let acceptsCleanup = speakerAttribution == nil || cleanedAttribution != nil
+            let finalTranscript = acceptsCleanup ? cleanupResult.transcript : diarizedTranscript
+            let originalTranscript = acceptsCleanup ? cleanupResult.originalTranscript : nil
+            if acceptsCleanup { speakerAttribution = cleanedAttribution }
+            try await controller.updateImportedAudioProcessingFacts(
+                attemptID: imported.attemptID,
+                cleanupModel: cleanupResult.cleanupAttempted ? config.resolvedChatGPTMeetingCleanupModel : nil,
+                diarizationPerformed: diarizationPerformed
+            )
+
+            try Task.checkCancellation()
+            try await controller.saveImportedAudioTranscript(
+                meetingID: imported.meetingID, attemptID: imported.attemptID,
+                transcript: finalTranscript, originalTranscript: originalTranscript,
+                speakerAttributionJSON: speakerAttribution?.json
+            )
+
+            let wordCount = DictationStore.countWords(in: finalTranscript)
+
+            try Task.checkCancellation()
+
+            progress("Generating summary...")
+            let formattedNotes: String
+            let summaryError: String?
+            do {
+                formattedNotes = try await MeetingSummaryClient.summarize(
+                    transcript: finalTranscript,
+                    meetingTitle: generatedTitle,
+                    config: config,
+                    template: templateSnapshot,
+                    existingNotes: nil,
+                    manualNotesToRetain: ""
+                )
+                summaryError = nil
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
-                fputs("[import] diarization failed, using raw transcript: \(error)\n", stderr)
+                DiagnosticsLog.write("[import] summary generation failed")
+                formattedNotes = MeetingSummaryClient.summaryFailureNotes(
+                    transcript: finalTranscript,
+                    meetingTitle: generatedTitle,
+                    error: error,
+                    manualNotes: ""
+                )
+                summaryError = error.localizedDescription
             }
-        }
-        audioSamples = nil
 
-        try Task.checkCancellation()
+            try Task.checkCancellation()
 
-        progress("Cleaning transcript...")
-        let isChatGPTAuthenticated = await MainActor.run {
-            ChatGPTAuthManager.shared.isAuthenticated
-        }
-        let cleanupResult = await cleanImportedTranscriptIfNeeded(
-            diarizedTranscript,
-            config: config,
-            isChatGPTAuthenticated: isChatGPTAuthenticated
-        )
-        let finalTranscript = cleanupResult.transcript
-
-        try Task.checkCancellation()
-
-        let wordCount = DictationStore.countWords(in: finalTranscript)
-        let generatedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? "Meeting"
-            : title
-
-        try Task.checkCancellation()
-
-        progress("Generating summary...")
-        let templateSnapshot = context.templateSnapshot
-        let formattedNotes: String
-        let summaryError: String?
-        do {
-            formattedNotes = try await MeetingSummaryClient.summarize(
-                transcript: finalTranscript,
-                meetingTitle: generatedTitle,
-                config: config,
-                template: templateSnapshot,
-                existingNotes: nil,
-                manualNotesToRetain: ""
+            progress("Saving...")
+            try await controller.completeImportedAudioProcessing(
+                meetingID: imported.meetingID, attemptID: imported.attemptID,
+                notes: formattedNotes, summaryError: summaryError, template: templateSnapshot
             )
-            summaryError = nil
+
+            return ImportResult(
+                meetingID: imported.meetingID,
+                title: generatedTitle,
+                rawTranscript: finalTranscript,
+                formattedNotes: formattedNotes,
+                summaryError: summaryError,
+                durationSeconds: duration,
+                wordCount: wordCount
+            )
         } catch {
-            fputs("[import] summary generation failed: \(error)\n", stderr)
-            formattedNotes = MeetingSummaryClient.summaryFailureNotes(
-                transcript: finalTranscript,
-                meetingTitle: generatedTitle,
-                error: error,
-                manualNotes: ""
+            await controller.failImportedAudioProcessing(
+                meetingID: imported.meetingID, attemptID: imported.attemptID,
+                cancelled: error is CancellationError || Task.isCancelled
             )
-            summaryError = error.localizedDescription
+            if Task.isCancelled { throw CancellationError() }
+            throw error
         }
-
-        try Task.checkCancellation()
-
-        progress("Saving...")
-        let endTime = startTime.addingTimeInterval(duration)
-        // Persist the converted WAV as compressed retained audio so retranscription works.
-        let savedRecordingPath = try await MeetingRecordingStorage.persistTemporaryRecordingAsync(
-            from: wavURL,
-            meetingTitle: generatedTitle,
-            startedAt: startTime,
-            config: config,
-            supportDirectory: context.supportDirectory
-        ).path
-        let meetingID = try await controller.persistImportedAudioMeeting(
-            title: generatedTitle,
-            calendarEventID: nil,
-            startTime: startTime,
-            endTime: endTime,
-            rawTranscript: finalTranscript,
-            rawOriginalTranscript: cleanupResult.originalTranscript,
-            formattedNotes: formattedNotes,
-            summaryError: summaryError,
-            micAudioPath: nil,
-            systemAudioPath: nil,
-            savedRecordingPath: savedRecordingPath,
-            selectedTemplateID: templateSnapshot.id,
-            selectedTemplateName: templateSnapshot.name,
-            selectedTemplateKind: templateSnapshot.kind,
-            selectedTemplatePrompt: templateSnapshot.prompt
-        )
-
-        return ImportResult(
-            meetingID: meetingID,
-            title: generatedTitle,
-            rawTranscript: finalTranscript,
-            formattedNotes: formattedNotes,
-            summaryError: summaryError,
-            durationSeconds: duration,
-            wordCount: wordCount
-        )
     }
 
     // MARK: - Helpers
@@ -449,28 +481,38 @@ enum AudioFileImportController {
         diarizationSegments: [TimedSpeakerSegment],
         meetingStart: Date
     ) -> String {
+        formatTranscriptWithSpeakerAttribution(
+            transcription: transcription, diarizationSegments: diarizationSegments, meetingStart: meetingStart
+        ).transcript
+    }
+
+    static func formatTranscriptWithSpeakerAttribution(
+        transcription: SpeechTranscriptionResult,
+        diarizationSegments: [TimedSpeakerSegment],
+        meetingStart: Date
+    ) -> (transcript: String, attribution: MeetingSpeakerAttribution?) {
         let rawText = transcription.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !rawText.isEmpty, !diarizationSegments.isEmpty else { return rawText }
+        guard !rawText.isEmpty, !diarizationSegments.isEmpty else { return (rawText, nil) }
 
         let speakerCount = Set(diarizationSegments.map(\.speakerId)).count
-        guard speakerCount > 1 else { return rawText }
+        guard speakerCount > 1 else { return (rawText, nil) }
 
         if rawText.range(of: #"(?m)^\[[0-9]{2}:[0-9]{2}(?::[0-9]{2})?\]\s+(You|Others|Speaker\s+\d+):"#, options: .regularExpression) != nil {
-            return rawText
+            return (rawText, MeetingSpeakerAttribution.legacy(transcript: rawText))
         }
 
         let transcribedSegments = transcription.segments.filter {
             !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
-        guard !transcribedSegments.isEmpty else { return rawText }
+        guard !transcribedSegments.isEmpty else { return (rawText, nil) }
 
-        let formatted = TranscriptFormatter.merge(
+        let formatted = TranscriptFormatter.mergeAttributed(
             micSegments: [],
             systemSegments: transcribedSegments,
             diarizationSegments: diarizationSegments,
             meetingStart: meetingStart
         )
-        return formatted.isEmpty ? rawText : formatted
+        return formatted.transcript.isEmpty ? (rawText, nil) : (formatted.transcript, formatted.attribution)
     }
 
     /// Backward-compatible helper for tests and any callers that only have raw text.

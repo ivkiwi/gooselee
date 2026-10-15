@@ -231,6 +231,11 @@ struct MeetingSummaryInputPlan: Equatable, Sendable {
     var requiresChunking: Bool { transcriptChunks.count > 1 }
 }
 
+struct MeetingLLMPrompt {
+    let instructions: String
+    let userPrompt: String
+}
+
 enum MeetingSummaryClient {
     private static let logger = Logger(subsystem: "com.guesli.native", category: "MeetingSummary")
     private static let openAIURL = URL(string: "https://api.openai.com/v1/responses")!
@@ -239,9 +244,9 @@ enum MeetingSummaryClient {
     private static let defaultOllamaBaseURL = URL(string: "http://localhost:11434")!
     private static let defaultLMStudioBaseURL = URL(string: "http://localhost:1234")!
     private static let defaultOpenAIModel = AppConfig.defaultOpenAIModel
-    private static let defaultOpenRouterModel = "stepfun/step-3.5-flash:free"
+    static let defaultOpenRouterModel = "stepfun/step-3.5-flash:free"
     private static let defaultChatGPTModel = AppConfig.defaultChatGPTSummaryModel
-    private static let defaultOllamaModel = "qwen3.5"
+    static let defaultOllamaModel = "qwen3.5"
     private static let defaultSummaryMaxOutputTokens = 2500
     private static let remoteSummaryAttemptTimeout: TimeInterval = 90
     private static let localSummaryAttemptTimeout: TimeInterval = 180
@@ -591,7 +596,8 @@ enum MeetingSummaryClient {
         template: MeetingTemplateSnapshot,
         existingNotes: String?,
         manualNotesToRetain: String?,
-        visualContext: String?
+        visualContext: String?,
+        requestPrompt: MeetingLLMPrompt? = nil
     ) async throws -> String {
         let backend = (config.meetingSummaryBackend.isEmpty ? MeetingSummaryBackendOption.chatGPT.backend : config.meetingSummaryBackend).lowercased()
         let generatedNotes: String
@@ -603,7 +609,8 @@ enum MeetingSummaryClient {
                 manualNotes: manualNotesToRetain,
                 config: config,
                 template: template,
-                visualContext: visualContext
+                visualContext: visualContext,
+                requestPrompt: requestPrompt
             )
             return notesByRetainingManualNotes(generatedNotes: generatedNotes, manualNotes: manualNotesToRetain)
         }
@@ -615,7 +622,8 @@ enum MeetingSummaryClient {
                 manualNotes: manualNotesToRetain,
                 config: config,
                 template: template,
-                visualContext: visualContext
+                visualContext: visualContext,
+                requestPrompt: requestPrompt
             )
             return notesByRetainingManualNotes(generatedNotes: generatedNotes, manualNotes: manualNotesToRetain)
         }
@@ -627,7 +635,8 @@ enum MeetingSummaryClient {
                 manualNotes: manualNotesToRetain,
                 config: config,
                 template: template,
-                visualContext: visualContext
+                visualContext: visualContext,
+                requestPrompt: requestPrompt
             )
             return notesByRetainingManualNotes(generatedNotes: generatedNotes, manualNotes: manualNotesToRetain)
         }
@@ -639,7 +648,8 @@ enum MeetingSummaryClient {
                 manualNotes: manualNotesToRetain,
                 config: config,
                 template: template,
-                visualContext: visualContext
+                visualContext: visualContext,
+                requestPrompt: requestPrompt
             )
             return notesByRetainingManualNotes(generatedNotes: generatedNotes, manualNotes: manualNotesToRetain)
         }
@@ -651,7 +661,8 @@ enum MeetingSummaryClient {
                 manualNotes: manualNotesToRetain,
                 config: config,
                 template: template,
-                visualContext: visualContext
+                visualContext: visualContext,
+                requestPrompt: requestPrompt
             )
             return notesByRetainingManualNotes(generatedNotes: generatedNotes, manualNotes: manualNotesToRetain)
         }
@@ -662,7 +673,8 @@ enum MeetingSummaryClient {
             manualNotes: manualNotesToRetain,
             config: config,
             template: template,
-            visualContext: visualContext
+            visualContext: visualContext,
+                requestPrompt: requestPrompt
         )
         return notesByRetainingManualNotes(generatedNotes: generatedNotes, manualNotes: manualNotesToRetain)
     }
@@ -869,15 +881,17 @@ enum MeetingSummaryClient {
         manualNotes: String?,
         config: AppConfig,
         template: MeetingTemplateSnapshot,
-        visualContext: String? = nil
+        visualContext: String? = nil,
+        requestPrompt: MeetingLLMPrompt? = nil
     ) async throws -> String {
         let apiKey = ProcessInfo.processInfo.environment["OPENAI_API_KEY"] ?? config.openAIAPIKey
         guard !apiKey.isEmpty else {
+            if requestPrompt != nil { throw MeetingSummaryError.backendFailed(backend: "AI", statusCode: nil, message: "Configure the selected summary backend in Settings.") }
             return rawTranscriptFallback(transcript: transcript, meetingTitle: meetingTitle)
         }
 
-        let instructions = summaryInstructions(for: template, existingNotes: existingNotes, manualNotes: manualNotes)
-        let userPrompt = summaryUserPrompt(
+        let instructions = requestPrompt?.instructions ?? summaryInstructions(for: template, existingNotes: existingNotes, manualNotes: manualNotes)
+        let userPrompt = requestPrompt?.userPrompt ?? summaryUserPrompt(
             transcript: transcript,
             meetingTitle: meetingTitle,
             existingNotes: existingNotes,
@@ -999,17 +1013,19 @@ enum MeetingSummaryClient {
         manualNotes: String?,
         config: AppConfig,
         template: MeetingTemplateSnapshot,
-        visualContext: String? = nil
+        visualContext: String? = nil,
+        requestPrompt: MeetingLLMPrompt? = nil
     ) async throws -> String {
         let apiKey = ProcessInfo.processInfo.environment["OPENROUTER_API_KEY"] ?? config.openRouterAPIKey
         guard !apiKey.isEmpty else {
+            if requestPrompt != nil { throw MeetingSummaryError.backendFailed(backend: "AI", statusCode: nil, message: "Configure the selected summary backend in Settings.") }
             return rawTranscriptFallback(transcript: transcript, meetingTitle: meetingTitle)
         }
 
         let configuredModel = config.openRouterModel.trimmingCharacters(in: .whitespacesAndNewlines)
         let model = configuredModel.isEmpty ? defaultOpenRouterModel : configuredModel
-        let instructions = summaryInstructions(for: template, existingNotes: existingNotes, manualNotes: manualNotes)
-        let userPrompt = summaryUserPrompt(
+        let instructions = requestPrompt?.instructions ?? summaryInstructions(for: template, existingNotes: existingNotes, manualNotes: manualNotes)
+        let userPrompt = requestPrompt?.userPrompt ?? summaryUserPrompt(
             transcript: transcript,
             meetingTitle: meetingTitle,
             existingNotes: existingNotes,
@@ -1059,13 +1075,14 @@ enum MeetingSummaryClient {
         manualNotes: String?,
         config: AppConfig,
         template: MeetingTemplateSnapshot,
-        visualContext: String? = nil
+        visualContext: String? = nil,
+        requestPrompt: MeetingLLMPrompt? = nil
     ) async throws -> String {
         do {
-            let instructions = summaryInstructions(for: template, existingNotes: existingNotes, manualNotes: manualNotes)
+            let instructions = requestPrompt?.instructions ?? summaryInstructions(for: template, existingNotes: existingNotes, manualNotes: manualNotes)
             let text = try await callWHAM(
                 systemPrompt: instructions,
-                userPrompt: summaryUserPrompt(
+                userPrompt: requestPrompt?.userPrompt ?? summaryUserPrompt(
                     transcript: transcript,
                     meetingTitle: meetingTitle,
                     existingNotes: existingNotes,
@@ -1092,7 +1109,8 @@ enum MeetingSummaryClient {
         manualNotes: String?,
         config: AppConfig,
         template: MeetingTemplateSnapshot,
-        visualContext: String? = nil
+        visualContext: String? = nil,
+        requestPrompt: MeetingLLMPrompt? = nil
     ) async throws -> String {
         let baseURLString = config.ollamaURL.trimmingCharacters(in: .whitespacesAndNewlines)
         let baseURL: URL
@@ -1108,8 +1126,8 @@ enum MeetingSummaryClient {
 
         let configuredModel = config.ollamaModel.trimmingCharacters(in: .whitespacesAndNewlines)
         let model = configuredModel.isEmpty ? defaultOllamaModel : configuredModel
-        let instructions = summaryInstructions(for: template, existingNotes: existingNotes, manualNotes: manualNotes)
-        let userPrompt = summaryUserPrompt(
+        let instructions = requestPrompt?.instructions ?? summaryInstructions(for: template, existingNotes: existingNotes, manualNotes: manualNotes)
+        let userPrompt = requestPrompt?.userPrompt ?? summaryUserPrompt(
             transcript: transcript,
             meetingTitle: meetingTitle,
             existingNotes: existingNotes,
@@ -1162,7 +1180,8 @@ enum MeetingSummaryClient {
         manualNotes: String?,
         config: AppConfig,
         template: MeetingTemplateSnapshot,
-        visualContext: String? = nil
+        visualContext: String? = nil,
+        requestPrompt: MeetingLLMPrompt? = nil
     ) async throws -> String {
         guard let requestURL = resolveLMStudioURL(config: config) else {
             throw MeetingSummaryError.backendFailed(backend: "LM Studio", statusCode: nil, message: "Invalid LM Studio URL: \(config.lmStudioURL)")
@@ -1187,7 +1206,8 @@ enum MeetingSummaryClient {
             config: config,
             template: template,
             visualContext: visualContext,
-            timeout: lmStudioSummaryTimeout
+            timeout: lmStudioSummaryTimeout,
+                requestPrompt: requestPrompt
         )
     }
 
@@ -1198,7 +1218,8 @@ enum MeetingSummaryClient {
         manualNotes: String?,
         config: AppConfig,
         template: MeetingTemplateSnapshot,
-        visualContext: String? = nil
+        visualContext: String? = nil,
+        requestPrompt: MeetingLLMPrompt? = nil
     ) async throws -> String {
         let format = CustomLLMFormat(rawValue: config.customLLMFormat) ?? .openAI
         guard let requestURL = resolveCustomLLMURL(config: config, format: format) else {
@@ -1235,7 +1256,8 @@ enum MeetingSummaryClient {
                 config: config,
                 template: template,
                 visualContext: visualContext,
-                timeout: customLLMSummaryTimeout
+                timeout: customLLMSummaryTimeout,
+                requestPrompt: requestPrompt
             )
         case .anthropic:
             return try await summarizeWithAnthropicMessages(
@@ -1250,7 +1272,8 @@ enum MeetingSummaryClient {
                 config: config,
                 template: template,
                 visualContext: visualContext,
-                timeout: customLLMSummaryTimeout
+                timeout: customLLMSummaryTimeout,
+                requestPrompt: requestPrompt
             )
         }
     }
@@ -1304,10 +1327,11 @@ enum MeetingSummaryClient {
         config: AppConfig,
         template: MeetingTemplateSnapshot,
         visualContext: String?,
-        timeout: TimeInterval
+        timeout: TimeInterval,
+        requestPrompt: MeetingLLMPrompt? = nil
     ) async throws -> String {
-        let instructions = summaryInstructions(for: template, existingNotes: existingNotes, manualNotes: manualNotes)
-        let userPrompt = summaryUserPrompt(
+        let instructions = requestPrompt?.instructions ?? summaryInstructions(for: template, existingNotes: existingNotes, manualNotes: manualNotes)
+        let userPrompt = requestPrompt?.userPrompt ?? summaryUserPrompt(
             transcript: transcript,
             meetingTitle: meetingTitle,
             existingNotes: existingNotes,
@@ -1367,10 +1391,11 @@ enum MeetingSummaryClient {
         config: AppConfig,
         template: MeetingTemplateSnapshot,
         visualContext: String?,
-        timeout: TimeInterval
+        timeout: TimeInterval,
+        requestPrompt: MeetingLLMPrompt? = nil
     ) async throws -> String {
-        let instructions = summaryInstructions(for: template, existingNotes: existingNotes, manualNotes: manualNotes)
-        let userPrompt = summaryUserPrompt(
+        let instructions = requestPrompt?.instructions ?? summaryInstructions(for: template, existingNotes: existingNotes, manualNotes: manualNotes)
+        let userPrompt = requestPrompt?.userPrompt ?? summaryUserPrompt(
             transcript: transcript,
             meetingTitle: meetingTitle,
             existingNotes: existingNotes,

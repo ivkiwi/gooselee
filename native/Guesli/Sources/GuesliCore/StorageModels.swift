@@ -272,6 +272,15 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
     public let summaryError: String?
     public let source: MeetingSource
     public let followUpToID: Int64?
+    public let contentRevision: Int64
+    public let transcriptRevision: Int64
+    public let summaryRevision: Int64
+    public let summaryInputRevision: Int64?
+    public let summaryIsStale: Bool
+    public let summaryStalenessDismissedRevision: Int64?
+    public let speakerAttributionJSON: String?
+    public let transcriptAttemptID: String?
+    public let summaryAttemptID: String?
 
     public init(
         id: Int64,
@@ -295,7 +304,16 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
         selectedTemplatePrompt: String? = nil,
         summaryError: String? = nil,
         source: MeetingSource = .meeting,
-        followUpToID: Int64? = nil
+        followUpToID: Int64? = nil,
+        contentRevision: Int64 = 0,
+        transcriptRevision: Int64 = 0,
+        summaryRevision: Int64 = 0,
+        summaryInputRevision: Int64? = nil,
+        summaryIsStale: Bool = false,
+        summaryStalenessDismissedRevision: Int64? = nil,
+        speakerAttributionJSON: String? = nil,
+        transcriptAttemptID: String? = nil,
+        summaryAttemptID: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -319,6 +337,15 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
         self.summaryError = summaryError
         self.source = source
         self.followUpToID = followUpToID
+        self.contentRevision = contentRevision
+        self.transcriptRevision = transcriptRevision
+        self.summaryRevision = summaryRevision
+        self.summaryInputRevision = summaryInputRevision
+        self.summaryIsStale = summaryIsStale
+        self.summaryStalenessDismissedRevision = summaryStalenessDismissedRevision
+        self.speakerAttributionJSON = speakerAttributionJSON
+        self.transcriptAttemptID = transcriptAttemptID
+        self.summaryAttemptID = summaryAttemptID
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -344,6 +371,15 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
         case summaryError
         case source
         case followUpToID
+        case contentRevision
+        case transcriptRevision
+        case summaryRevision
+        case summaryInputRevision
+        case summaryIsStale
+        case summaryStalenessDismissedRevision
+        case speakerAttributionJSON
+        case transcriptAttemptID
+        case summaryAttemptID
     }
 
     public init(from decoder: Decoder) throws {
@@ -370,7 +406,16 @@ public struct MeetingRecord: Identifiable, Codable, Sendable {
             selectedTemplatePrompt: try c.decodeIfPresent(String.self, forKey: .selectedTemplatePrompt),
             summaryError: try c.decodeIfPresent(String.self, forKey: .summaryError),
             source: (try? c.decode(MeetingSource.self, forKey: .source)) ?? .meeting,
-            followUpToID: try c.decodeIfPresent(Int64.self, forKey: .followUpToID)
+            followUpToID: try c.decodeIfPresent(Int64.self, forKey: .followUpToID),
+            contentRevision: try c.decodeIfPresent(Int64.self, forKey: .contentRevision) ?? 0,
+            transcriptRevision: try c.decodeIfPresent(Int64.self, forKey: .transcriptRevision) ?? 0,
+            summaryRevision: try c.decodeIfPresent(Int64.self, forKey: .summaryRevision) ?? 0,
+            summaryInputRevision: try c.decodeIfPresent(Int64.self, forKey: .summaryInputRevision),
+            summaryIsStale: try c.decodeIfPresent(Bool.self, forKey: .summaryIsStale) ?? false,
+            summaryStalenessDismissedRevision: try c.decodeIfPresent(Int64.self, forKey: .summaryStalenessDismissedRevision),
+            speakerAttributionJSON: try c.decodeIfPresent(String.self, forKey: .speakerAttributionJSON),
+            transcriptAttemptID: try c.decodeIfPresent(String.self, forKey: .transcriptAttemptID),
+            summaryAttemptID: try c.decodeIfPresent(String.self, forKey: .summaryAttemptID)
         )
     }
 

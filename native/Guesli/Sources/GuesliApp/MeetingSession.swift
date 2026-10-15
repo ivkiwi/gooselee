@@ -200,6 +200,9 @@ struct MeetingSessionResult {
     let durationSeconds: Double
     let rawTranscript: String
     let rawOriginalTranscript: String?
+    let speakerAttribution: MeetingSpeakerAttribution?
+    let processingConfiguration: MeetingProcessingConfiguration?
+    let summaryInputMatchesTranscript: Bool
     let formattedNotes: String
     let summaryError: String?
     let retainedRecordingURL: URL?
@@ -220,6 +223,9 @@ struct MeetingSessionResult {
         durationSeconds: Double,
         rawTranscript: String,
         rawOriginalTranscript: String? = nil,
+        speakerAttribution: MeetingSpeakerAttribution? = nil,
+        processingConfiguration: MeetingProcessingConfiguration? = nil,
+        summaryInputMatchesTranscript: Bool = true,
         formattedNotes: String,
         summaryError: String? = nil,
         retainedRecordingURL: URL?,
@@ -239,6 +245,9 @@ struct MeetingSessionResult {
         self.durationSeconds = durationSeconds
         self.rawTranscript = rawTranscript
         self.rawOriginalTranscript = rawOriginalTranscript
+        self.speakerAttribution = speakerAttribution?.validated(for: rawTranscript)
+        self.processingConfiguration = processingConfiguration
+        self.summaryInputMatchesTranscript = summaryInputMatchesTranscript
         self.formattedNotes = formattedNotes
         self.summaryError = summaryError
         self.retainedRecordingURL = retainedRecordingURL
@@ -256,6 +265,8 @@ struct MeetingSessionResult {
         durationSeconds: Double? = nil,
         rawTranscript: String? = nil,
         rawOriginalTranscript: String? = nil,
+        speakerAttribution: MeetingSpeakerAttribution? = nil,
+        summaryInputMatchesTranscript: Bool? = nil,
         formattedNotes: String? = nil
     ) -> MeetingSessionResult {
         MeetingSessionResult(
@@ -267,6 +278,10 @@ struct MeetingSessionResult {
             durationSeconds: durationSeconds ?? self.durationSeconds,
             rawTranscript: rawTranscript ?? self.rawTranscript,
             rawOriginalTranscript: rawOriginalTranscript ?? self.rawOriginalTranscript,
+            speakerAttribution: speakerAttribution ?? self.speakerAttribution,
+            processingConfiguration: processingConfiguration,
+            summaryInputMatchesTranscript: summaryInputMatchesTranscript
+                ?? (self.summaryInputMatchesTranscript && (rawTranscript == nil || rawTranscript == self.rawTranscript)),
             formattedNotes: formattedNotes ?? self.formattedNotes,
             summaryError: summaryError,
             retainedRecordingURL: retainedRecordingURL,
@@ -609,6 +624,26 @@ final class MeetingSession {
         backendLock.withLock { $0 }
     }
 
+    private func processingConfiguration(
+        micUsed: Bool, systemUsed: Bool, diarizationUsed: Bool,
+        cleanupAttempted: Bool, droppedChunks: Int
+    ) -> MeetingProcessingConfiguration {
+        var snapshot = MeetingProcessingConfiguration.snapshot(
+            config: config,
+            audioSources: (micUsed ? ["microphone"] : []) + (systemUsed ? ["system"] : [])
+        )
+        let backend = currentBackend()
+        snapshot.asrBackend = backend.backend
+        snapshot.asrModel = backend.model
+        snapshot.diarizationEnabled = diarizationUsed
+        if cleanupAttempted { snapshot.cleanupModel = config.resolvedChatGPTMeetingCleanupModel }
+        if droppedChunks > 0 {
+            snapshot.completeness = .incomplete
+            snapshot.warnings.append("Some transcript chunks could not finish.")
+        }
+        return snapshot
+    }
+
     private func reportRecordingFailure(_ error: Error) {
         let shouldReport = recordingFailure.withLock { failure in
             guard failure == nil else { return false }
@@ -729,16 +764,19 @@ final class MeetingSession {
     }
 
     private func cleanupMeetingTranscript(_ transcript: String) async -> MeetingTranscriptCleanupResult {
-        await stopPhaseValue(
+        let attempted = OSAllocatedUnfairLock(initialState: false)
+        return await stopPhaseValue(
             "transcript_cleanup",
             timeout: MeetingStopPhaseTimeouts.transcriptCleanup,
-            fallback: MeetingTranscriptCleanupResult(transcript: transcript, originalTranscript: nil)
+            fallback: MeetingTranscriptCleanupResult(transcript: transcript, originalTranscript: nil, cleanupAttempted: attempted.withLock { $0 })
         ) {
-            await MeetingTranscriptCleanupPipeline.cleanIfNeeded(
+            try Task.checkCancellation()
+            return await MeetingTranscriptCleanupPipeline.cleanIfNeeded(
                 transcript: transcript,
                 config: self.config,
                 isChatGPTAuthenticated: ChatGPTAuthManager.shared.isAuthenticated,
-                cleaner: self.transcriptCleaner
+                cleaner: self.transcriptCleaner,
+                onCleanupAttempted: { attempted.withLock { $0 = true } }
             )
         }
     }
@@ -1386,13 +1424,14 @@ final class MeetingSession {
             meetingStart: meetingStart
         )
 
-        let rawTranscript = TranscriptFormatter.merge(
+        let attributedTranscript = TranscriptFormatter.mergeAttributed(
             micSegments: protectedTranscriptInputs.micSegments,
             systemSegments: protectedTranscriptInputs.systemSegments,
             diarizationSegments: protectedTranscriptInputs.diarizationSegments,
             speakerNameMap: speakerNameMap,
             meetingStart: meetingStart
         )
+        let rawTranscript = attributedTranscript.transcript
         if let reason = MeetingRetranscriptionPipeline.suspiciousTranscriptReason(
             transcript: rawTranscript,
             meetingDuration: endTime.timeIntervalSince(meetingStart),
@@ -1402,6 +1441,7 @@ final class MeetingSession {
             DiagnosticsLog.write("[meeting] transcript quality_guard_failed \(reason)")
             throw MeetingPostProcessingError.suspiciouslyShortTranscript(reason)
         }
+        try Task.checkCancellation()
         async let pendingCleanup = cleanupMeetingTranscript(rawTranscript)
 
         let manualNotes = await stopPhaseValue(
@@ -1437,6 +1477,7 @@ final class MeetingSession {
         )
         let summaryContext = Self.summaryContext(participants: allParticipantCandidates)
         fputs("[meeting] summary participant candidates=\(allParticipantCandidates.count) observedParticipants=\(observedParticipants.count) includedInPrompt=\(!summaryContext.isEmpty)\n", stderr)
+        try Task.checkCancellation()
         onProgress?(.summarizingNotes)
         let formattedNotes: String
         let summaryError: String?
@@ -1445,7 +1486,8 @@ final class MeetingSession {
                 "summary_generation",
                 timeout: MeetingStopPhaseTimeouts.summaryGeneration
             ) {
-                try await MeetingSummaryClient.summarize(
+                try Task.checkCancellation()
+                return try await MeetingSummaryClient.summarize(
                     transcript: rawTranscript,
                     meetingTitle: generatedTitle,
                     config: self.config,
@@ -1473,7 +1515,13 @@ final class MeetingSession {
         }
 
         let cleanupResult = await pendingCleanup
-        let finalTranscript = cleanupResult.transcript
+        try Task.checkCancellation()
+        // A text cleaner cannot reassign speech or erase the only speaker-to-line binding.
+        let cleanedAttribution = attributedTranscript.attribution.rebased(from: rawTranscript, to: cleanupResult.transcript)
+        let acceptedCleanup = cleanedAttribution != nil
+            ? cleanupResult : MeetingTranscriptCleanupResult(transcript: rawTranscript, originalTranscript: nil, cleanupAttempted: cleanupResult.cleanupAttempted)
+        let finalTranscript = acceptedCleanup.transcript
+
         diagnostics?.writeFinalReport(
             title: generatedTitle,
             startedAt: meetingStart,
@@ -1499,7 +1547,16 @@ final class MeetingSession {
             endTime: endTime,
             durationSeconds: max(endTime.timeIntervalSince(meetingStart), 0),
             rawTranscript: finalTranscript,
-            rawOriginalTranscript: cleanupResult.originalTranscript,
+            rawOriginalTranscript: acceptedCleanup.originalTranscript,
+            speakerAttribution: cleanedAttribution ?? attributedTranscript.attribution,
+            processingConfiguration: processingConfiguration(
+                micUsed: !protectedTranscriptInputs.micSegments.isEmpty,
+                systemUsed: !protectedTranscriptInputs.systemSegments.isEmpty,
+                diarizationUsed: !(protectedTranscriptInputs.diarizationSegments ?? []).isEmpty,
+                cleanupAttempted: cleanupResult.cleanupAttempted,
+                droppedChunks: drainTimeoutDroppedChunkCount
+            ),
+            summaryInputMatchesTranscript: finalTranscript == rawTranscript,
             formattedNotes: MeetingFollowUpPolicy.locallyCombinedNotes(
                 previous: previousMeetingNotes,
                 current: formattedNotes
@@ -1631,13 +1688,14 @@ final class MeetingSession {
             meetingStart: meetingStart
         )
 
-        let rawTranscript = TranscriptFormatter.merge(
+        let attributedTranscript = TranscriptFormatter.mergeAttributed(
             micSegments: protectedTranscriptInputs.micSegments,
             systemSegments: protectedTranscriptInputs.systemSegments,
             diarizationSegments: protectedTranscriptInputs.diarizationSegments,
             speakerNameMap: speakerNameMap,
             meetingStart: meetingStart
         )
+        let rawTranscript = attributedTranscript.transcript
         if let reason = MeetingRetranscriptionPipeline.suspiciousTranscriptReason(
             transcript: rawTranscript,
             meetingDuration: max(endTime.timeIntervalSince(meetingStart), systemTrack.duration),
@@ -1650,6 +1708,7 @@ final class MeetingSession {
             DiagnosticsLog.write("[meeting] post-mode quality_guard_failed \(reason)")
             throw MeetingPostProcessingError.suspiciouslyShortTranscript(reason)
         }
+        try Task.checkCancellation()
         async let pendingCleanup = cleanupMeetingTranscript(rawTranscript)
 
         let manualNotes = await stopPhaseValue(
@@ -1685,6 +1744,7 @@ final class MeetingSession {
         )
         let summaryContext = Self.summaryContext(participants: allParticipantCandidates)
         fputs("[meeting] summary participant candidates=\(allParticipantCandidates.count) observedParticipants=\(observedParticipants.count) includedInPrompt=\(!summaryContext.isEmpty)\n", stderr)
+        try Task.checkCancellation()
         onProgress?(.summarizingNotes)
         let formattedNotes: String
         let summaryError: String?
@@ -1693,7 +1753,8 @@ final class MeetingSession {
                 "summary_generation",
                 timeout: MeetingStopPhaseTimeouts.summaryGeneration
             ) {
-                try await MeetingSummaryClient.summarize(
+                try Task.checkCancellation()
+                return try await MeetingSummaryClient.summarize(
                     transcript: rawTranscript,
                     meetingTitle: generatedTitle,
                     config: self.config,
@@ -1721,7 +1782,13 @@ final class MeetingSession {
         }
 
         let cleanupResult = await pendingCleanup
-        let finalTranscript = cleanupResult.transcript
+        try Task.checkCancellation()
+        // A text cleaner cannot reassign speech or erase the only speaker-to-line binding.
+        let cleanedAttribution = attributedTranscript.attribution.rebased(from: rawTranscript, to: cleanupResult.transcript)
+        let acceptedCleanup = cleanedAttribution != nil
+            ? cleanupResult : MeetingTranscriptCleanupResult(transcript: rawTranscript, originalTranscript: nil, cleanupAttempted: cleanupResult.cleanupAttempted)
+        let finalTranscript = acceptedCleanup.transcript
+
         diagnostics?.writeFinalReport(
             title: generatedTitle,
             startedAt: meetingStart,
@@ -1747,7 +1814,16 @@ final class MeetingSession {
             endTime: endTime,
             durationSeconds: max(endTime.timeIntervalSince(meetingStart), 0),
             rawTranscript: finalTranscript,
-            rawOriginalTranscript: cleanupResult.originalTranscript,
+            rawOriginalTranscript: acceptedCleanup.originalTranscript,
+            speakerAttribution: cleanedAttribution ?? attributedTranscript.attribution,
+            processingConfiguration: processingConfiguration(
+                micUsed: !protectedTranscriptInputs.micSegments.isEmpty,
+                systemUsed: !protectedTranscriptInputs.systemSegments.isEmpty,
+                diarizationUsed: !(protectedTranscriptInputs.diarizationSegments ?? []).isEmpty,
+                cleanupAttempted: cleanupResult.cleanupAttempted,
+                droppedChunks: 0
+            ),
+            summaryInputMatchesTranscript: finalTranscript == rawTranscript,
             formattedNotes: MeetingFollowUpPolicy.locallyCombinedNotes(
                 previous: previousMeetingNotes,
                 current: formattedNotes

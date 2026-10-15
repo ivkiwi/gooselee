@@ -68,6 +68,7 @@ struct MeetingTranscriptCleanupTests {
 
         #expect(result.transcript == "[00:00:01] Speaker 1: Hello.")
         #expect(result.originalTranscript == "[00:00:01] Speaker 1: um hello hello")
+        #expect(result.cleanupAttempted)
     }
 
     @Test("cleanup error falls back to raw transcript")
@@ -85,6 +86,7 @@ struct MeetingTranscriptCleanupTests {
 
         #expect(result.transcript == "[00:00:01] Speaker 1: raw words")
         #expect(result.originalTranscript == nil)
+        #expect(result.cleanupAttempted)
     }
 
     @Test("unauthenticated cleanup keeps raw transcript")
@@ -102,6 +104,33 @@ struct MeetingTranscriptCleanupTests {
 
         #expect(result.transcript == "[00:00:01] Speaker 1: raw words")
         #expect(result.originalTranscript == nil)
+        #expect(!result.cleanupAttempted)
+    }
+
+    @Test("no-op and empty cleanup responses still record a request", arguments: ["[00:00:01] Speaker 1: raw words", ""])
+    func noOpCleanupRecordsAttempt(output: String) async {
+        var config = AppConfig()
+        config.enableMeetingTranscriptCleanup = true
+        config.meetingTranscriptCleanupProvider = MeetingTranscriptCleanupProviderOption.chatGPT.rawValue
+        let transcript = "[00:00:01] Speaker 1: raw words"
+        let result = await MeetingTranscriptCleanupPipeline.cleanIfNeeded(
+            transcript: transcript, config: config, isChatGPTAuthenticated: true,
+            cleaner: StaticMeetingTranscriptCleaner(output: output)
+        )
+        #expect(result.transcript == transcript)
+        #expect(result.originalTranscript == nil)
+        #expect(result.cleanupAttempted)
+    }
+
+    @Test("disabled cleanup does not record a request")
+    func disabledCleanupRecordsNoAttempt() async {
+        var config = AppConfig()
+        config.enableMeetingTranscriptCleanup = false
+        let result = await MeetingTranscriptCleanupPipeline.cleanIfNeeded(
+            transcript: "[00:00:01] Speaker 1: raw words", config: config, isChatGPTAuthenticated: true,
+            cleaner: ThrowingMeetingTranscriptCleaner()
+        )
+        #expect(!result.cleanupAttempted)
     }
 
     @Test("ChatGPT meeting cleanup uses meeting cleanup model")

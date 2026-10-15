@@ -178,6 +178,7 @@ struct MeetingsView: View {
     let controller: GuesliController
     @State private var selectedFilter: MeetingBrowserFilter = .all
     @State private var selectedSort: MeetingBrowserSort = .newestFirst
+    @State private var isArchiveChatPresented = false
 
     private var scopedMeetings: [MeetingRecord] {
         appState.meetingRows
@@ -228,6 +229,9 @@ struct MeetingsView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(GuesliTheme.backgroundBase)
+        .sheet(isPresented: $isArchiveChatPresented) {
+            MeetingArchiveChatView(appState: appState, controller: controller, scope: .all)
+        }
         .sheet(
             isPresented: Binding(
                 get: { appState.isMeetingTemplatesManagerPresented },
@@ -659,6 +663,15 @@ struct MeetingsView: View {
     @ViewBuilder
     private var browserHeaderActions: some View {
         HStack(spacing: GuesliTheme.spacing8) {
+            Button {
+                isArchiveChatPresented = true
+            } label: {
+                Label("Ask meetings", systemImage: "text.bubble")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .fixedSize()
+
             Button {
                 controller.startQuickNoteMeeting()
             } label: {

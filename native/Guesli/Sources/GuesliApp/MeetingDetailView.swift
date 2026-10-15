@@ -88,6 +88,8 @@ struct MeetingDetailView: View {
     @State private var threadContext: MeetingThreadContext?
     @State private var recordingSeekRequest: MeetingRecordingSeekRequest?
     @State private var previousMeeting: MeetingRecord?
+    @State private var showsArchiveChat = false
+    @State private var pendingRetranscription: MeetingRecord?
 
     init(
         meeting: MeetingRecord?,
@@ -135,12 +137,35 @@ struct MeetingDetailView: View {
                         MeetingProcessingFailedBanner(
                             canRetry: Self.showsRetranscribeAction(for: meeting),
                             isRetrying: isRetranscribing,
-                            onRetry: { startRetranscription(for: meeting) }
+                            onRetry: { pendingRetranscription = meeting }
                         )
                     }
 
+                    if meeting.summaryIsStale,
+                       meeting.summaryStalenessDismissedRevision != meeting.contentRevision {
+                        summaryStalenessBanner(meeting)
+                    }
+
+                    MeetingProcessingHistoryView(meeting: meeting, attempts: controller.meetingProcessingAttempts(id: meeting.id),
+                        onCancel: { controller.cancelMeetingProcessing(id: meeting.id) })
+                        .padding(.horizontal, 40)
+                        .padding(.vertical, GuesliTheme.spacing8)
+
                     MeetingQuickActionsView(appState: appState, meeting: meeting)
                         .padding(GuesliTheme.spacing16)
+                    if let source = appState.archiveChatSource, source.meetingID == meeting.id {
+                        VStack(alignment: .trailing, spacing: 0) {
+                            Button {
+                                appState.archiveChatSource = nil
+                            } label: {
+                                Label("Close Source", systemImage: "xmark")
+                            }
+                            .buttonStyle(.plain)
+                            ArchiveChatSourceView(source: source, meeting: meeting)
+                        }
+                        .frame(maxHeight: 340)
+                        .padding(.horizontal, 40)
+                    }
                     content(for: meeting)
                 }
                 .background(GuesliTheme.backgroundBase)
@@ -176,12 +201,29 @@ struct MeetingDetailView: View {
                 .background(GuesliTheme.backgroundBase)
             }
         }
+        .sheet(isPresented: $showsArchiveChat) {
+            if let meeting {
+                MeetingArchiveChatView(appState: appState, controller: controller, scope: .meeting(meeting.id))
+            }
+        }
         .alert("Couldn't Save Summary", isPresented: summaryErrorBinding) {
             Button("OK", role: .cancel) {
                 summaryErrorMessage = nil
             }
         } message: {
             Text(summaryErrorMessage ?? String(localized: "The updated meeting notes could not be saved."))
+        }
+        .alert("Re-transcribe Meeting?", isPresented: Binding(
+            get: { pendingRetranscription != nil },
+            set: { if !$0 { pendingRetranscription = nil } }
+        )) {
+            Button("Re-transcribe") {
+                if let pendingRetranscription { startRetranscription(for: pendingRetranscription) }
+                pendingRetranscription = nil
+            }
+            Button("Cancel", role: .cancel) { pendingRetranscription = nil }
+        } message: {
+            Text("Re-transcription creates new speaker groups. Names may need to be assigned again. Your saved transcript stays available until a new result succeeds.")
         }
         .alert("Couldn't Re-transcribe Meeting", isPresented: retranscriptionErrorBinding) {
             Button("OK", role: .cancel) {
@@ -233,6 +275,30 @@ struct MeetingDetailView: View {
             .controlSize(.small)
             .disabled(isSummarizing)
         }
+        .padding(.horizontal, 40)
+        .padding(.vertical, GuesliTheme.spacing8)
+        .background(GuesliTheme.transcribing.opacity(0.10))
+    }
+
+    private func summaryStalenessBanner(_ meeting: MeetingRecord) -> some View {
+        HStack(alignment: .top, spacing: GuesliTheme.spacing12) {
+            Image(systemName: "exclamationmark.triangle")
+                .foregroundStyle(GuesliTheme.transcribing)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Meeting content changed after this summary was created")
+                    .font(GuesliTheme.callout())
+                    .foregroundStyle(GuesliTheme.textPrimary)
+                Text("The saved summary may still contain earlier names or notes.")
+                    .font(GuesliTheme.caption())
+                    .foregroundStyle(GuesliTheme.textSecondary)
+            }
+            Spacer(minLength: GuesliTheme.spacing8)
+            Button("Update Summary") { retryFailedSummary(for: meeting) }
+                .disabled(isSummarizing || isRetranscribing)
+            Button("Keep As Is") { controller.dismissMeetingSummaryStaleness(id: meeting.id, expectedContentRevision: meeting.contentRevision) }
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
         .padding(.horizontal, 40)
         .padding(.vertical, GuesliTheme.spacing8)
         .background(GuesliTheme.transcribing.opacity(0.10))
@@ -297,6 +363,16 @@ struct MeetingDetailView: View {
                     }
 
                     folderPill(for: meeting)
+
+                    if meeting.status == .completed || !meeting.rawTranscript.isEmpty {
+                        Button {
+                            showsArchiveChat = true
+                        } label: {
+                            Label("Ask About This Meeting", systemImage: "bubble.left.and.bubble.right")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
 
                     if !participants.isEmpty {
                         Label {
@@ -500,12 +576,13 @@ struct MeetingDetailView: View {
 
                     MeetingTranscriptView(
                         transcript: meeting.rawTranscript,
+                        attribution: MeetingSpeakerAttribution.decode(meeting.speakerAttributionJSON),
                         seekUnavailableReason: TranscriptRecordingSeek.unavailableReason(for: meeting),
                         onSeekTimestamp: { timestamp in
                             recordingSeekRequest = MeetingRecordingSeekRequest(meeting: meeting, timestamp: timestamp)
                         },
-                        onRenameSpeaker: meeting.status == .completed ? { oldLabel, newName in
-                            controller.renameMeetingSpeaker(id: meeting.id, from: oldLabel, to: newName)
+                        onRenameSpeaker: meeting.status == .completed ? { speakerID, newName in
+                            controller.renameMeetingSpeaker(id: meeting.id, speakerID: speakerID, expectedTranscriptRevision: meeting.transcriptRevision, to: newName)
                         } : nil
                     )
                         .opacity(documentMode == .transcript ? 1 : 0)
@@ -683,7 +760,7 @@ struct MeetingDetailView: View {
                 .padding(.horizontal, GuesliTheme.spacing8)
             } else {
                 iconButton("arrow.clockwise", label: "Re-transcribe") {
-                    startRetranscription(for: meeting)
+                    pendingRetranscription = meeting
                 }
                 .disabled(meeting.status == .recording || meeting.status == .processing || isEditingNotes || isEditingTranscript)
             }
@@ -1852,22 +1929,27 @@ struct TranscriptChatMessage: Identifiable, Equatable {
     let timestamp: String?
     let speaker: String?
     let text: String
+    var speakerID: String? = nil
+    var speakerSource: MeetingSpeakerAttribution.Source = .unknown
 
     var isUser: Bool {
         speaker?.localizedCaseInsensitiveCompare("You") == .orderedSame
     }
 
-    static func messages(from transcript: String) -> [TranscriptChatMessage] {
+    static func messages(from transcript: String, attribution: MeetingSpeakerAttribution? = nil) -> [TranscriptChatMessage] {
         let normalized = transcript.replacingOccurrences(of: "\r\n", with: "\n")
         let rawLines = normalized
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map(String.init)
 
         var messages: [TranscriptChatMessage] = []
-        for rawLine in rawLines {
+        for (lineIndex, rawLine) in rawLines.enumerated() {
             let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !line.isEmpty else { continue }
-            let parsed = parseLine(line, id: messages.count)
+            var parsed = parseLine(line, id: messages.count)
+            let speaker = attribution?.speaker(atLine: lineIndex)
+            parsed.speakerID = speaker?.id
+            parsed.speakerSource = speaker?.source ?? .unknown
             messages.append(parsed)
         }
 
@@ -1928,6 +2010,8 @@ struct TranscriptChatMessage: Identifiable, Equatable {
 
 private struct MeetingTranscriptView: View {
     let transcript: String
+    let attribution: MeetingSpeakerAttribution
+    let hasLegacyAttribution: Bool
     let seekUnavailableReason: String?
     let onSeekTimestamp: (String) -> Void
     var onRenameSpeaker: ((String, String) -> Void)? = nil
@@ -1936,20 +2020,31 @@ private struct MeetingTranscriptView: View {
 
     init(
         transcript: String,
+        attribution: MeetingSpeakerAttribution? = nil,
         seekUnavailableReason: String?,
         onSeekTimestamp: @escaping (String) -> Void,
         onRenameSpeaker: ((String, String) -> Void)? = nil
     ) {
         self.transcript = transcript
+        let resolved = attribution?.validated(for: transcript)
+        self.attribution = resolved ?? MeetingSpeakerAttribution.legacy(transcript: transcript)
+        self.hasLegacyAttribution = resolved == nil
         self.seekUnavailableReason = seekUnavailableReason
         self.onSeekTimestamp = onSeekTimestamp
         self.onRenameSpeaker = onRenameSpeaker
-        _messages = State(initialValue: TranscriptChatMessage.messages(from: transcript))
+        _messages = State(initialValue: TranscriptChatMessage.messages(from: transcript, attribution: self.attribution))
     }
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: GuesliTheme.spacing8) {
+                if hasLegacyAttribution && !messages.isEmpty {
+                    Text("Name sources were not saved for this transcript. Identical legacy labels cannot be corrected separately.")
+                        .font(GuesliTheme.caption())
+                        .foregroundStyle(GuesliTheme.textSecondary)
+                        .frame(maxWidth: 860, alignment: .leading)
+                        .padding(.vertical, GuesliTheme.spacing8)
+                }
                 if messages.isEmpty {
                     Text("No transcript available")
                         .font(GuesliTheme.body())
@@ -1973,10 +2068,15 @@ private struct MeetingTranscriptView: View {
             .frame(maxWidth: .infinity, alignment: .center)
         }
         .onChange(of: transcript) { _, newTranscript in
-            messages = TranscriptChatMessage.messages(from: newTranscript)
+            messages = TranscriptChatMessage.messages(from: newTranscript, attribution: attribution)
         }
-        .speakerRenameAlert(speaker: $speakerToRename) { oldLabel, newName in
-            onRenameSpeaker?(oldLabel, newName)
+        .onChange(of: attribution) { _, newAttribution in
+            messages = TranscriptChatMessage.messages(from: transcript, attribution: newAttribution)
+        }
+        .speakerRenameAlert(speaker: $speakerToRename, displayName: { id in
+            attribution.speakers.first { $0.id == id }?.displayName ?? id
+        }) { speakerID, newName in
+            onRenameSpeaker?(speakerID, newName)
         }
     }
 }
@@ -1998,9 +2098,9 @@ struct TranscriptChatBubble: View {
                     HStack(spacing: 4) {
                         if let speaker = message.speaker {
                             // The mic speaker stays "You" so user bubbles keep their alignment.
-                            if message.timestamp != nil, !message.isUser, let onRenameSpeaker {
+                            if message.timestamp != nil, !message.isUser, let speakerID = message.speakerID, let onRenameSpeaker {
                                 Button {
-                                    onRenameSpeaker(speaker)
+                                    onRenameSpeaker(speakerID)
                                 } label: {
                                     Text(verbatim: Self.displayName(for: speaker))
                                         .font(.system(size: 10, weight: .medium))
@@ -2014,6 +2114,12 @@ struct TranscriptChatBubble: View {
                                     .foregroundStyle(GuesliTheme.textTertiary)
                                     .textSelection(.enabled)
                             }
+                        }
+                        if message.speaker != nil, !message.isUser {
+                            Text(message.speakerSource.displayLabel)
+                                .font(.system(size: 10))
+                                .foregroundStyle(GuesliTheme.textSecondary)
+                                .help(message.speakerSource.explanation)
                         }
                         if let timestamp = message.timestamp {
                             TranscriptTimestampButton(timestamp: timestamp, unavailableReason: seekUnavailableReason) {
@@ -2050,7 +2156,11 @@ struct TranscriptChatBubble: View {
         switch speaker {
         case "You": return String(localized: "You")
         case "Others": return String(localized: "Others")
-        default: return speaker
+        default:
+            if speaker.hasPrefix("Speaker "), let number = Int(speaker.dropFirst("Speaker ".count)) {
+                return String(localized: "Speaker \(number)")
+            }
+            return speaker
         }
     }
 }

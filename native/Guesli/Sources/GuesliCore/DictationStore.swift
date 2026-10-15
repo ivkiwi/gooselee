@@ -34,7 +34,7 @@ public final class DictationStore {
     t.id, t.final_status, t.final_message, t.trace_json, t.created_at
     """
     private static let meetingColumns = """
-    id, title, start_time, duration_seconds, raw_transcript, raw_original_transcript, formatted_notes, word_count, folder_id, calendar_event_id, mic_audio_path, system_audio_path, saved_recording_path, meeting_status, manual_notes, selected_template_id, selected_template_name, selected_template_kind, selected_template_prompt, source, follow_up_to_id, summary_error
+    id, title, start_time, duration_seconds, raw_transcript, raw_original_transcript, formatted_notes, word_count, folder_id, calendar_event_id, mic_audio_path, system_audio_path, saved_recording_path, meeting_status, manual_notes, selected_template_id, selected_template_name, selected_template_kind, selected_template_prompt, source, follow_up_to_id, summary_error, content_revision, transcript_revision, summary_revision, summary_input_revision, summary_is_stale, summary_staleness_dismissed_revision, speaker_attribution_json, transcript_attempt_id, summary_attempt_id
     """
 
     public init() {
@@ -253,6 +253,7 @@ public final class DictationStore {
         let _ = sqlite3_exec(db, "CREATE UNIQUE INDEX IF NOT EXISTS idx_meetings_cloud_record_name ON meetings(cloud_record_name)", nil, nil, nil)
         let _ = sqlite3_exec(db, "CREATE INDEX IF NOT EXISTS idx_dictations_sync_dirty ON dictations(updated_at DESC) WHERE sync_dirty = 1", nil, nil, nil)
         let _ = sqlite3_exec(db, "CREATE INDEX IF NOT EXISTS idx_meetings_sync_dirty ON meetings(updated_at DESC) WHERE sync_dirty = 1", nil, nil, nil)
+        try migrateMeetingProcessing(db: db)
         try repairLegacyMacOriginSources(db: db)
         _ = try purgeSoftDeletedTextRecords(olderThan: Self.defaultTombstoneRetentionInterval, db: db)
     }
@@ -1399,7 +1400,7 @@ public final class DictationStore {
     public func updateMeetingNotes(id: Int64, formattedNotes: String) throws {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
-        let sql = "UPDATE meetings SET formatted_notes = ?, updated_at = ?, sync_dirty = 1 WHERE id = ? AND deleted_at IS NULL"
+        let sql = "UPDATE meetings SET formatted_notes = ?, summary_attempt_id = NULL, summary_input_revision = NULL, updated_at = ?, sync_dirty = 1 WHERE id = ? AND deleted_at IS NULL"
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             throw lastError(db)
@@ -1421,7 +1422,7 @@ public final class DictationStore {
         defer { sqlite3_close(db) }
         let manualNotes = try manualNotesForMeeting(id: id, db: db)
         let wordCount = Self.countWords(in: rawTranscript) + Self.countWords(in: manualNotes)
-        let sql = "UPDATE meetings SET raw_transcript = ?, raw_original_transcript = NULL, word_count = ?, updated_at = ?, sync_dirty = 1 WHERE id = ? AND deleted_at IS NULL"
+        let sql = "UPDATE meetings SET raw_transcript = ?, raw_original_transcript = NULL, transcript_attempt_id = NULL, speaker_attribution_json = NULL, word_count = ?, updated_at = ?, sync_dirty = 1 WHERE id = ? AND deleted_at IS NULL"
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             throw lastError(db)
@@ -1653,13 +1654,34 @@ public final class DictationStore {
         selectedTemplateID: String? = nil,
         selectedTemplateName: String? = nil,
         selectedTemplateKind: MeetingTemplateKind? = nil,
-        selectedTemplatePrompt: String? = nil
+        selectedTemplatePrompt: String? = nil,
+        processingAttemptID: String? = nil,
+        speakerAttributionJSON: String? = nil,
+        processingConfiguration: MeetingProcessingConfiguration? = nil,
+        summaryInputMatchesTranscript: Bool = true
     ) throws {
         let db = try openDatabase()
         defer { sqlite3_close(db) }
+        try exec("BEGIN IMMEDIATE", db: db)
+        defer { if sqlite3_get_autocommit(db) == 0 { _ = sqlite3_exec(db, "ROLLBACK", nil, nil, nil) } }
+        if let processingAttemptID {
+            let check = try processingStatement("SELECT 1 FROM meetings m JOIN meeting_processing_attempts a ON a.meeting_id = m.id WHERE m.id = ? AND m.deleted_at IS NULL AND a.id = ? AND a.outcome = 'running' AND a.input_revision = m.content_revision AND a.result_revision = m.summary_revision", db: db, values: [id, processingAttemptID])
+            defer { sqlite3_finalize(check) }
+            guard sqlite3_step(check) == SQLITE_ROW else { throw MeetingProcessingError.staleInput }
+        }
         let startString = formatISODate(startTime)
         let endString = formatISODate(endTime)
         let resolvedDurationSeconds = max(durationSeconds ?? endTime.timeIntervalSince(startTime), 0)
+        let normalizedNotes = formattedNotes.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let summarySucceeded = summaryError == nil && !normalizedNotes.isEmpty
+            && normalizedNotes != "## raw transcript" && !normalizedNotes.hasPrefix("## raw transcript\n")
+        var persistedNotes = formattedNotes
+        if !summarySucceeded {
+            let prior = try processingStatement("SELECT formatted_notes FROM meetings WHERE id = ?", db: db, values: [id])
+            defer { sqlite3_finalize(prior) }
+            if sqlite3_step(prior) == SQLITE_ROW { persistedNotes = stringColumn(prior, index: 0) }
+        }
+        let persistedSummaryError = summarySucceeded ? nil : (summaryError ?? "Summary generation failed. The transcript is saved; retry summary.")
         let manualNotes = try manualNotesForMeeting(id: id, db: db)
         let wordCount = Self.countWords(in: rawTranscript) + Self.countWords(in: manualNotes)
 
@@ -1681,8 +1703,8 @@ public final class DictationStore {
         sqlite3_bind_double(statement, 5, resolvedDurationSeconds)
         sqlite3_bind_text(statement, 6, (rawTranscript as NSString).utf8String, -1, nil)
         bindOptionalText(rawOriginalTranscript, at: 7, statement: statement)
-        sqlite3_bind_text(statement, 8, (formattedNotes as NSString).utf8String, -1, nil)
-        bindOptionalText(summaryError, at: 9, statement: statement)
+        sqlite3_bind_text(statement, 8, (persistedNotes as NSString).utf8String, -1, nil)
+        bindOptionalText(persistedSummaryError, at: 9, statement: statement)
         bindOptionalText(micAudioPath, at: 10, statement: statement)
         bindOptionalText(systemAudioPath, at: 11, statement: statement)
         bindOptionalText(savedRecordingPath, at: 12, statement: statement)
@@ -1702,6 +1724,37 @@ public final class DictationStore {
         }
         try deleteLiveTranscriptCheckpoints(meetingID: id, db: db)
         try deleteResumeSnapshot(meetingID: id, db: db)
+        if let processingAttemptID {
+            try processingExecute("UPDATE meetings SET transcript_attempt_id = ?, speaker_attribution_json = ? WHERE id = ?", db: db, values: [processingAttemptID, speakerAttributionJSON, id])
+            if summarySucceeded {
+                try processingExecute("UPDATE meetings SET summary_attempt_id = ?, summary_input_revision = CASE WHEN ? = 1 THEN content_revision ELSE NULL END, summary_is_stale = ? WHERE id = ?", db: db,
+                    values: [processingAttemptID, summaryInputMatchesTranscript ? 1 : 0, summaryInputMatchesTranscript ? 0 : 1, id])
+            }
+            if var processingConfiguration {
+                let query = try processingStatement("SELECT configuration_json FROM meeting_processing_attempts WHERE id = ?", db: db, values: [processingAttemptID])
+                defer { sqlite3_finalize(query) }
+                if sqlite3_step(query) == SQLITE_ROW,
+                   let previous = try? JSONDecoder().decode(MeetingProcessingConfiguration.self, from: Data(stringColumn(query, index: 0).utf8)),
+                   previous.completeness == .incomplete {
+                    processingConfiguration.completeness = .incomplete
+                    processingConfiguration.warnings = Array(Set(processingConfiguration.warnings + previous.warnings)).sorted()
+                }
+                processingConfiguration.templateID = selectedTemplateID
+                let json = String(decoding: try JSONEncoder().encode(processingConfiguration), as: UTF8.self)
+                try processingExecute("UPDATE meeting_processing_attempts SET configuration_json = ? WHERE id = ?", db: db, values: [json, processingAttemptID])
+            }
+            try processingExecute("UPDATE meeting_processing_attempts SET outcome = ?, ended_at = ?, stage = ?, safe_error = ? WHERE id = ?", db: db,
+                values: [summarySucceeded ? "succeeded" : "failed", Date().timeIntervalSince1970,
+                    summarySucceeded ? "saved" : "summary", summarySucceeded ? nil : "Summary failed. The transcript is saved; retry summary.", processingAttemptID])
+        } else {
+            if let speakerAttributionJSON {
+                try processingExecute("UPDATE meetings SET speaker_attribution_json = ? WHERE id = ?", db: db, values: [speakerAttributionJSON, id])
+            }
+            if summarySucceeded && !summaryInputMatchesTranscript {
+                try processingExecute("UPDATE meetings SET summary_input_revision = NULL, summary_is_stale = 1 WHERE id = ?", db: db, values: [id])
+            }
+        }
+        try exec("COMMIT", db: db)
     }
 
     private func manualNoteWordCountIfNeeded(for status: MeetingStatus, id: Int64, db: OpaquePointer?) throws -> Int? {
@@ -3239,7 +3292,16 @@ public final class DictationStore {
             selectedTemplatePrompt: selectedTemplatePrompt,
             summaryError: summaryError,
             source: source,
-            followUpToID: followUpToID
+            followUpToID: followUpToID,
+            contentRevision: sqlite3_column_int64(statement, 22),
+            transcriptRevision: sqlite3_column_int64(statement, 23),
+            summaryRevision: sqlite3_column_int64(statement, 24),
+            summaryInputRevision: sqlite3_column_type(statement, 25) == SQLITE_NULL ? nil : sqlite3_column_int64(statement, 25),
+            summaryIsStale: sqlite3_column_int(statement, 26) != 0,
+            summaryStalenessDismissedRevision: sqlite3_column_type(statement, 27) == SQLITE_NULL ? nil : sqlite3_column_int64(statement, 27),
+            speakerAttributionJSON: optionalStringColumn(statement, index: 28),
+            transcriptAttemptID: optionalStringColumn(statement, index: 29),
+            summaryAttemptID: optionalStringColumn(statement, index: 30)
         )
     }
 
@@ -3443,5 +3505,288 @@ public final class DictationStore {
             cursor = previous
         }
         return (current, longest)
+    }
+}
+
+extension DictationStore {
+    private func migrateMeetingProcessing(db: OpaquePointer?) throws {
+        for column in [
+            "content_revision INTEGER NOT NULL DEFAULT 0", "transcript_revision INTEGER NOT NULL DEFAULT 0",
+            "summary_revision INTEGER NOT NULL DEFAULT 0", "summary_input_revision INTEGER",
+            "summary_is_stale INTEGER NOT NULL DEFAULT 0", "summary_staleness_dismissed_revision INTEGER",
+            "speaker_attribution_json TEXT", "transcript_attempt_id TEXT", "summary_attempt_id TEXT"
+        ] {
+            if sqlite3_exec(db, "ALTER TABLE meetings ADD COLUMN \(column)", nil, nil, nil) != SQLITE_OK,
+               !String(cString: sqlite3_errmsg(db)).localizedCaseInsensitiveContains("duplicate column") {
+                throw lastError(db)
+            }
+        }
+        try exec("""
+        CREATE TABLE IF NOT EXISTS meeting_processing_attempts (
+            id TEXT PRIMARY KEY, meeting_id INTEGER NOT NULL REFERENCES meetings(id) ON DELETE CASCADE,
+            operation TEXT NOT NULL, started_at REAL NOT NULL, ended_at REAL,
+            outcome TEXT NOT NULL, stage TEXT NOT NULL, configuration_json TEXT NOT NULL,
+            input_revision INTEGER NOT NULL, result_revision INTEGER NOT NULL, safe_error TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_meeting_processing_history
+            ON meeting_processing_attempts(meeting_id, started_at DESC);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_meeting_processing_running
+            ON meeting_processing_attempts(meeting_id) WHERE outcome = 'running';
+        CREATE TRIGGER IF NOT EXISTS meeting_input_revision AFTER UPDATE OF raw_transcript, manual_notes, title ON meetings
+        WHEN NEW.deleted_at IS NULL AND (NEW.raw_transcript IS NOT OLD.raw_transcript OR NEW.manual_notes IS NOT OLD.manual_notes OR NEW.title IS NOT OLD.title)
+        BEGIN
+            UPDATE meetings SET content_revision = OLD.content_revision + 1,
+                transcript_revision = OLD.transcript_revision + (NEW.raw_transcript IS NOT OLD.raw_transcript),
+                summary_is_stale = CASE WHEN length(trim(COALESCE(NEW.formatted_notes, ''))) > 0 THEN 1 ELSE 0 END,
+                summary_staleness_dismissed_revision = NULL,
+                speaker_attribution_json = CASE WHEN NEW.raw_transcript IS NOT OLD.raw_transcript AND NEW.speaker_attribution_json IS OLD.speaker_attribution_json THEN NULL ELSE NEW.speaker_attribution_json END
+                WHERE id = NEW.id;
+        END;
+        CREATE TRIGGER IF NOT EXISTS meeting_summary_revision AFTER UPDATE OF formatted_notes ON meetings
+        WHEN NEW.formatted_notes IS NOT OLD.formatted_notes
+        BEGIN
+            UPDATE meetings SET summary_revision = OLD.summary_revision + 1 WHERE id = NEW.id;
+        END;
+        CREATE TRIGGER IF NOT EXISTS meeting_processing_delete AFTER UPDATE OF deleted_at ON meetings
+        WHEN NEW.deleted_at IS NOT NULL
+        BEGIN
+            DELETE FROM meeting_processing_attempts WHERE meeting_id = NEW.id;
+            UPDATE meetings SET speaker_attribution_json = NULL, transcript_attempt_id = NULL,
+                summary_attempt_id = NULL, summary_input_revision = NULL,
+                summary_staleness_dismissed_revision = NULL, summary_is_stale = 0 WHERE id = NEW.id;
+        END;
+        """, db: db)
+    }
+
+    private func processingStatement(_ sql: String, db: OpaquePointer?, values: [Any?] = []) throws -> OpaquePointer? {
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else { throw lastError(db) }
+        for (offset, value) in values.enumerated() {
+            let index = Int32(offset + 1)
+            switch value {
+            case let text as String:
+                _ = text.withCString { sqlite3_bind_text(statement, index, $0, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self)) }
+            case let number as Int64: sqlite3_bind_int64(statement, index, number)
+            case let number as Int: sqlite3_bind_int64(statement, index, Int64(number))
+            case let number as Double: sqlite3_bind_double(statement, index, number)
+            default: sqlite3_bind_null(statement, index)
+            }
+        }
+        return statement
+    }
+
+    private func processingExecute(_ sql: String, db: OpaquePointer?, values: [Any?] = []) throws {
+        let statement = try processingStatement(sql, db: db, values: values)
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_step(statement) == SQLITE_DONE else { throw lastError(db) }
+    }
+
+    private func processingTransaction<T>(_ body: (OpaquePointer?) throws -> T) throws -> T {
+        let db = try openDatabase()
+        defer { sqlite3_close(db) }
+        try exec("BEGIN IMMEDIATE", db: db)
+        do {
+            let value = try body(db)
+            try exec("COMMIT", db: db)
+            return value
+        } catch {
+            _ = sqlite3_exec(db, "ROLLBACK", nil, nil, nil)
+            throw error
+        }
+    }
+
+    public func meetingProcessingAttempts(meetingID: Int64) throws -> [MeetingProcessingAttempt] {
+        let db = try openDatabase()
+        defer { sqlite3_close(db) }
+        let statement = try processingStatement("""
+            SELECT a.id, a.operation, a.started_at, a.ended_at, a.outcome, a.stage,
+                   a.configuration_json, a.input_revision, a.safe_error
+            FROM meeting_processing_attempts a JOIN meetings m ON m.id = a.meeting_id
+            WHERE a.meeting_id = ? AND m.deleted_at IS NULL ORDER BY a.started_at DESC, a.rowid DESC
+            """, db: db, values: [meetingID])
+        defer { sqlite3_finalize(statement) }
+        var attempts: [MeetingProcessingAttempt] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            let configuration = try JSONDecoder().decode(MeetingProcessingConfiguration.self,
+                from: Data(stringColumn(statement, index: 6).utf8))
+            attempts.append(MeetingProcessingAttempt(id: stringColumn(statement, index: 0), meetingID: meetingID,
+                operation: MeetingProcessingOperation(rawValue: stringColumn(statement, index: 1)) ?? .initial,
+                startedAt: sqlite3_column_double(statement, 2),
+                endedAt: sqlite3_column_type(statement, 3) == SQLITE_NULL ? nil : sqlite3_column_double(statement, 3),
+                outcome: MeetingProcessingOutcome(rawValue: stringColumn(statement, index: 4)) ?? .interrupted,
+                stage: stringColumn(statement, index: 5), configuration: configuration,
+                inputRevision: sqlite3_column_int64(statement, 7), safeError: optionalStringColumn(statement, index: 8)))
+        }
+        return attempts
+    }
+
+    @discardableResult
+    public func beginMeetingProcessing(meetingID: Int64, operation: MeetingProcessingOperation,
+                                       configuration: MeetingProcessingConfiguration, expectedContentRevision: Int64? = nil, expectedSummaryRevision: Int64? = nil) throws -> String {
+        try processingTransaction { db in
+            let query = try processingStatement("SELECT content_revision, summary_revision FROM meetings WHERE id = ? AND deleted_at IS NULL", db: db, values: [meetingID])
+            defer { sqlite3_finalize(query) }
+            guard sqlite3_step(query) == SQLITE_ROW else { throw DictationStoreError.meetingNotFound(id: meetingID) }
+            if let expectedContentRevision, expectedContentRevision != sqlite3_column_int64(query, 0) { throw MeetingProcessingError.staleInput }
+            if let expectedSummaryRevision, expectedSummaryRevision != sqlite3_column_int64(query, 1) { throw MeetingProcessingError.staleInput }
+            let running = try processingStatement("SELECT 1 FROM meeting_processing_attempts WHERE meeting_id = ? AND outcome = 'running'", db: db, values: [meetingID])
+            defer { sqlite3_finalize(running) }
+            guard sqlite3_step(running) != SQLITE_ROW else { throw MeetingProcessingError.alreadyRunning }
+            let id = UUID().uuidString
+            let json = String(decoding: try JSONEncoder().encode(configuration), as: UTF8.self)
+            try processingExecute("""
+                INSERT INTO meeting_processing_attempts(id, meeting_id, operation, started_at, outcome, stage, configuration_json, input_revision, result_revision)
+                VALUES (?, ?, ?, ?, 'running', ?, ?, ?, ?)
+                """, db: db, values: [id, meetingID, operation.rawValue, Date().timeIntervalSince1970,
+                    operation == .summary ? "summary" : "asr", json, sqlite3_column_int64(query, 0), sqlite3_column_int64(query, 1)])
+            return id
+        }
+    }
+
+    public func updateMeetingProcessingStage(attemptID: String, stage: String) throws {
+        let db = try openDatabase(); defer { sqlite3_close(db) }
+        try processingExecute("UPDATE meeting_processing_attempts SET stage = ? WHERE id = ? AND outcome = 'running'", db: db, values: [stage, attemptID])
+    }
+
+    /// Safe error is an application-authored category, never an arbitrary provider response.
+    public func finishMeetingProcessing(attemptID: String, outcome: MeetingProcessingOutcome, safeError: String? = nil) throws {
+        let db = try openDatabase(); defer { sqlite3_close(db) }
+        try processingExecute("UPDATE meeting_processing_attempts SET outcome = ?, ended_at = ?, safe_error = ? WHERE id = ? AND outcome = 'running'", db: db,
+            values: [outcome.rawValue, Date().timeIntervalSince1970, safeError, attemptID])
+    }
+
+    public func interruptUnfinishedMeetingProcessing() throws {
+        let db = try openDatabase(); defer { sqlite3_close(db) }
+        try processingExecute("UPDATE meeting_processing_attempts SET outcome = 'interrupted', ended_at = ?, safe_error = 'Processing was interrupted. Retry when ready.' WHERE outcome = 'running'", db: db, values: [Date().timeIntervalSince1970])
+    }
+
+    /// The attempt is a compare-and-swap token; text edits and deleted meetings reject late results.
+    public func saveMeetingProcessingTranscript(meetingID: Int64, attemptID: String, transcript: String,
+                                                originalTranscript: String?, speakerAttributionJSON: String? = nil) throws {
+        guard !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw MeetingProcessingError.emptyResult }
+        try processingTransaction { db in
+            try processingExecute("""
+                UPDATE meetings SET raw_transcript = ?, raw_original_transcript = ?, speaker_attribution_json = ?,
+                    transcript_attempt_id = ?, meeting_status = 'completed',
+                    word_count = ?, updated_at = ?, sync_dirty = 1
+                WHERE id = ? AND deleted_at IS NULL AND EXISTS (
+                    SELECT 1 FROM meeting_processing_attempts a WHERE a.id = ? AND a.meeting_id = meetings.id
+                    AND a.outcome = 'running' AND a.input_revision = meetings.content_revision)
+                """, db: db, values: [transcript, originalTranscript, speakerAttributionJSON, attemptID,
+                    Self.countWords(in: transcript) + Self.countWords(in: try manualNotesForMeeting(id: meetingID, db: db)),
+                    Date().timeIntervalSince1970, meetingID, attemptID])
+            guard sqlite3_changes(db) == 1 else { throw MeetingProcessingError.staleInput }
+            try processingExecute("UPDATE meeting_processing_attempts SET input_revision = (SELECT content_revision FROM meetings WHERE id = ?), stage = 'summary' WHERE id = ?", db: db, values: [meetingID, attemptID])
+            try deleteLiveTranscriptCheckpoints(meetingID: meetingID, db: db)
+            try deleteResumeSnapshot(meetingID: meetingID, db: db)
+        }
+    }
+
+    public func saveMeetingProcessingSummary(meetingID: Int64, attemptID: String, notes: String,
+        selectedTemplateID: String, selectedTemplateName: String, selectedTemplateKind: MeetingTemplateKind,
+        selectedTemplatePrompt: String) throws {
+        let normalizedNotes = notes.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedNotes.isEmpty, normalizedNotes != "## raw transcript", !normalizedNotes.hasPrefix("## raw transcript\n") else { throw MeetingProcessingError.emptyResult }
+        try processingTransaction { db in
+            try processingExecute("""
+                UPDATE meetings SET formatted_notes = ?, summary_attempt_id = ?, summary_input_revision = content_revision,
+                    summary_is_stale = 0, summary_staleness_dismissed_revision = NULL, summary_error = NULL,
+                    selected_template_id = ?, selected_template_name = ?, selected_template_kind = ?, selected_template_prompt = ?,
+                    updated_at = ?, sync_dirty = 1
+                WHERE id = ? AND deleted_at IS NULL AND EXISTS (
+                    SELECT 1 FROM meeting_processing_attempts a WHERE a.id = ? AND a.meeting_id = meetings.id
+                    AND a.outcome = 'running' AND a.input_revision = meetings.content_revision
+                    AND a.result_revision = meetings.summary_revision)
+                """, db: db, values: [notes, attemptID, selectedTemplateID, selectedTemplateName, selectedTemplateKind.rawValue,
+                    selectedTemplatePrompt, Date().timeIntervalSince1970, meetingID, attemptID])
+            guard sqlite3_changes(db) == 1 else { throw MeetingProcessingError.staleInput }
+            try processingExecute("UPDATE meeting_processing_attempts SET outcome = 'succeeded', ended_at = ?, stage = 'saved' WHERE id = ?", db: db,
+                values: [Date().timeIntervalSince1970, attemptID])
+        }
+    }
+
+    public func updateMeetingSpeakerAttribution(id: Int64, expectedTranscriptRevision: Int64,
+                                               rawTranscript: String, speakerAttributionJSON: String) throws {
+        guard MeetingSpeakerAttribution.decode(speakerAttributionJSON)?.validated(for: rawTranscript) != nil else { throw MeetingProcessingError.staleInput }
+        try processingTransaction { db in
+            try processingExecute("""
+                UPDATE meetings SET raw_transcript = ?, speaker_attribution_json = ?, word_count = ?, updated_at = ?, sync_dirty = 1
+                WHERE id = ? AND deleted_at IS NULL AND transcript_revision = ?
+                """, db: db, values: [rawTranscript, speakerAttributionJSON, Self.countWords(in: rawTranscript) + Self.countWords(in: try manualNotesForMeeting(id: id, db: db)), Date().timeIntervalSince1970, id, expectedTranscriptRevision])
+            guard sqlite3_changes(db) == 1 else { throw MeetingProcessingError.staleInput }
+        }
+    }
+
+    public func dismissMeetingSummaryStaleness(id: Int64, expectedContentRevision: Int64) throws {
+        let db = try openDatabase(); defer { sqlite3_close(db) }
+        try processingExecute("UPDATE meetings SET summary_staleness_dismissed_revision = content_revision WHERE id = ? AND deleted_at IS NULL AND content_revision = ?", db: db, values: [id, expectedContentRevision])
+        guard sqlite3_changes(db) == 1 else { throw MeetingProcessingError.staleInput }
+    }
+
+    public func searchArchiveMeetings(terms: [String], folderID: Int64? = nil,
+                                     fromDate: Date? = nil, toDate: Date? = nil, limit: Int = 21) throws -> [MeetingRecord] {
+        let db = try openDatabase(); defer { sqlite3_close(db) }
+        guard sqlite3_create_function_v2(db, "guesli_casefold", 1, SQLITE_UTF8 | SQLITE_DETERMINISTIC, nil, { context, count, arguments in
+            guard count == 1, let value = arguments?[0], let bytes = sqlite3_value_text(value) else { sqlite3_result_null(context); return }
+            let folded = String(cString: bytes).folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+            folded.withCString { sqlite3_result_text(context, $0, -1, unsafeBitCast(-1, to: sqlite3_destructor_type.self)) }
+        }, nil, nil, nil) == SQLITE_OK else { throw lastError(db) }
+        var values: [Any?] = []
+        var sql = ""
+        if let folderID {
+            sql = "WITH RECURSIVE folder_tree(id) AS (SELECT id FROM meeting_folders WHERE id = ? UNION SELECT f.id FROM meeting_folders f JOIN folder_tree t ON f.parent_id = t.id) "
+            values.append(folderID)
+        }
+        sql += "SELECT \(Self.meetingColumns) FROM meetings WHERE deleted_at IS NULL"
+        if folderID != nil { sql += " AND folder_id IN (SELECT id FROM folder_tree)" }
+        if let fromDate { sql += " AND julianday(start_time) >= julianday(?)"; values.append(formatISODate(fromDate)) }
+        if let toDate { sql += " AND julianday(start_time) < julianday(?)"; values.append(formatISODate(toDate)) }
+        let terms = Array(terms.prefix(12)).filter { !$0.isEmpty }
+        if !terms.isEmpty {
+            sql += " AND (" + terms.map { _ in
+                "(instr(guesli_casefold(title), ?) > 0 OR instr(guesli_casefold(raw_transcript), ?) > 0 OR instr(guesli_casefold(formatted_notes), ?) > 0 OR instr(guesli_casefold(manual_notes), ?) > 0 OR EXISTS (SELECT 1 FROM meeting_participants p WHERE p.meeting_id = meetings.id AND p.is_suppressed = 0 AND (instr(guesli_casefold(p.display_name), ?) > 0 OR instr(guesli_casefold(p.email_address), ?) > 0)))"
+            }.joined(separator: " OR ") + ")"
+            for term in terms { for _ in 0..<6 { values.append(term.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))) } }
+        }
+        sql += " ORDER BY start_time DESC, id DESC LIMIT ?"; values.append(max(0, min(limit, 200)))
+        let statement = try processingStatement(sql, db: db, values: values); defer { sqlite3_finalize(statement) }
+        var records: [MeetingRecord] = []
+        var step = sqlite3_step(statement)
+        while step == SQLITE_ROW { records.append(makeMeetingRecord(statement)); step = sqlite3_step(statement) }
+        guard step == SQLITE_DONE else { throw lastError(db) }
+        return records
+    }
+}
+
+extension DictationStore {
+    public func updateMeetingProcessingFacts(attemptID: String, cleanupModel: String?, diarizationPerformed: Bool) throws {
+        try processingTransaction { db in
+            let query = try processingStatement("SELECT configuration_json FROM meeting_processing_attempts WHERE id = ? AND outcome = 'running'", db: db, values: [attemptID])
+            defer { sqlite3_finalize(query) }
+            guard sqlite3_step(query) == SQLITE_ROW else { throw MeetingProcessingError.staleInput }
+            var config = try JSONDecoder().decode(MeetingProcessingConfiguration.self, from: Data(stringColumn(query, index: 0).utf8))
+            config.cleanupModel = cleanupModel; config.diarizationEnabled = diarizationPerformed
+            let json = String(decoding: try JSONEncoder().encode(config), as: UTF8.self)
+            try processingExecute("UPDATE meeting_processing_attempts SET configuration_json = ? WHERE id = ?", db: db, values: [json, attemptID])
+        }
+    }
+
+    public func beginImportedMeetingProcessing(title: String, startTime: Date, duration: Double,
+        savedRecordingPath: String, configuration: MeetingProcessingConfiguration) throws -> (meetingID: Int64, attemptID: String) {
+        try processingTransaction { db in
+            try processingExecute("""
+                INSERT INTO meetings(title, start_time, duration_seconds, raw_transcript, formatted_notes,
+                    saved_recording_path, meeting_status, source, updated_at)
+                VALUES (?, ?, ?, '', '', ?, 'processing', 'audio_import', ?)
+                """, db: db, values: [title, formatISODate(startTime), max(0, duration), savedRecordingPath, Date().timeIntervalSince1970])
+            let meetingID = sqlite3_last_insert_rowid(db)
+            let attemptID = UUID().uuidString
+            let json = String(decoding: try JSONEncoder().encode(configuration), as: UTF8.self)
+            try processingExecute("""
+                INSERT INTO meeting_processing_attempts(id, meeting_id, operation, started_at, outcome, stage, configuration_json, input_revision, result_revision)
+                VALUES (?, ?, 'initial', ?, 'running', 'asr', ?, 0, 0)
+                """, db: db, values: [attemptID, meetingID, Date().timeIntervalSince1970, json])
+            return (meetingID, attemptID)
+        }
     }
 }

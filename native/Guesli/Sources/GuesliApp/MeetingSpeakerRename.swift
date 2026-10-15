@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import GuesliCore
 
 /// Renames one speaker in a saved `[HH:mm:ss] <label>: text` meeting transcript.
 enum MeetingSpeakerRename {
@@ -18,6 +19,37 @@ enum MeetingSpeakerRename {
             return nil
         }
         return trimmed
+    }
+
+    struct Correction {
+        let transcript: String
+        let attribution: MeetingSpeakerAttribution
+    }
+
+    /// Resolves one stable identity, even when two people have the same display name.
+    static func rename(
+        speakerID: String,
+        to newName: String,
+        in transcript: String,
+        attribution: MeetingSpeakerAttribution
+    ) -> Correction? {
+        guard let name = validatedName(newName),
+              var attribution = attribution.validated(for: transcript),
+              let index = attribution.speakers.firstIndex(where: { $0.id == speakerID }),
+              attribution.speakers[index].displayName != "You" else { return nil }
+        let previous = attribution.speakers[index]
+        guard previous.displayName != name || previous.source != .user else { return nil }
+        var changed = false
+        let lines = transcript.components(separatedBy: "\n").enumerated().map { offset, line in
+            guard attribution.lineSpeakerIDs[offset] == speakerID,
+                  let header = MeetingSpeakerAttribution.lineHeader(line) else { return line }
+            changed = true
+            return header.prefix + name + header.suffix
+        }
+        guard changed else { return nil }
+        attribution.speakers[index].displayName = name
+        attribution.speakers[index].source = .user
+        return Correction(transcript: lines.joined(separator: "\n"), attribution: attribution)
     }
 
     /// Replaces the exact label in timestamped lines only; message text is never touched.
@@ -40,13 +72,18 @@ enum MeetingSpeakerRename {
 
 extension View {
     /// Prompts for a new name while `speaker` is set; calls `onRename(old, new)` on confirm.
-    func speakerRenameAlert(speaker: Binding<String?>, onRename: @escaping (String, String) -> Void) -> some View {
-        modifier(SpeakerRenameAlertModifier(speaker: speaker, onRename: onRename))
+    func speakerRenameAlert(
+        speaker: Binding<String?>,
+        displayName: ((String) -> String)? = nil,
+        onRename: @escaping (String, String) -> Void
+    ) -> some View {
+        modifier(SpeakerRenameAlertModifier(speaker: speaker, displayName: displayName, onRename: onRename))
     }
 }
 
 private struct SpeakerRenameAlertModifier: ViewModifier {
     @Binding var speaker: String?
+    let displayName: ((String) -> String)?
     let onRename: (String, String) -> Void
     @State private var draft = ""
 
@@ -71,10 +108,10 @@ private struct SpeakerRenameAlertModifier: ViewModifier {
                     speaker = nil
                 }
             } message: {
-                Text("Replaces “\(speaker ?? "")” in every line of this transcript. No colons, up to \(MeetingSpeakerRename.maxNameLength) characters.")
+                Text("Changes this speaker throughout this transcript. No colons, up to \(MeetingSpeakerRename.maxNameLength) characters.")
             }
             .onChange(of: speaker) { _, newValue in
-                draft = newValue ?? ""
+                draft = newValue.map { displayName?($0) ?? $0 } ?? ""
             }
     }
 }

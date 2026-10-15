@@ -473,6 +473,10 @@ public final class GuesliController: NSObject {
 
     private var searchTask: Task<Void, Never>?
     private var meetingSummaryTasks: [Int64: Task<Void, Never>] = [:]
+    private var meetingProcessingAttemptIDs: [Int64: String] = [:]
+    private var importingMeetingID: Int64?
+    private var retranscriptionSpeakerAttribution: [Int64: MeetingSpeakerAttribution] = [:]
+    private var retranscriptionDiarizedMeetings: Set<Int64> = []
     private var meetingSummaryRequestGate = MeetingSummaryRequestGate()
     private var onboardingModelPreparationTask: Task<Void, Never>?
 
@@ -652,6 +656,7 @@ public final class GuesliController: NSObject {
         GuesliController.current = self
         do {
             try dictationStore.migrateIfNeeded()
+            try dictationStore.interruptUnfinishedMeetingProcessing()
         } catch {
             fputs("[guesli-native] startup error: \(error)\n", stderr)
         }
@@ -3526,6 +3531,7 @@ public final class GuesliController: NSObject {
     }
 
     func showMeetingsHome(folderID: Int64? = nil) {
+        appState.archiveChatSource = nil
         appState.selectedTab = .meetings
         appState.selectedFolderID = folderID
         appState.meetingsNavigationState = .browser
@@ -3533,10 +3539,21 @@ public final class GuesliController: NSObject {
     }
 
     func showMeetingDocument(id: Int64) {
+        appState.archiveChatSource = nil
         appState.selectedTab = .meetings
         appState.selectedMeetingID = id
         appState.selectedMeetingRecord = meeting(id: id)
         appState.meetingsNavigationState = .document(id)
+    }
+
+    func showArchiveChatSource(_ source: ArchiveChatSource) {
+        guard let current = try? dictationStore.meeting(id: source.meetingID) else { return }
+        showMeetingDocument(id: current.id)
+        if let index = appState.meetingRows.firstIndex(where: { $0.id == current.id }) {
+            appState.meetingRows[index] = current
+        }
+        appState.selectedMeetingRecord = current
+        appState.archiveChatSource = source
     }
 
     private func showActiveMeetingDocumentIfNeeded() {
@@ -3715,197 +3732,188 @@ public final class GuesliController: NSObject {
         using templateSnapshot: MeetingTemplateSnapshot,
         completion: @escaping (Result<Void, Error>) -> Void
     ) {
-        meetingSummaryTasks[meeting.id]?.cancel()
+        let snapshot: MeetingRecord
+        let attemptID: String
+        let processingConfig = config
+        do {
+            guard let current = try dictationStore.meeting(id: meeting.id) else {
+                throw DictationStoreError.meetingNotFound(id: meeting.id)
+            }
+            snapshot = current
+            var metadata = MeetingProcessingConfiguration.snapshot(config: processingConfig)
+            metadata.asrBackend = nil; metadata.asrModel = nil
+            metadata.templateID = templateSnapshot.id
+            attemptID = try dictationStore.beginMeetingProcessing(meetingID: meeting.id, operation: .summary,
+                configuration: metadata, expectedContentRevision: snapshot.contentRevision, expectedSummaryRevision: snapshot.summaryRevision)
+        } catch { completion(.failure(error)); return }
         let requestID = meetingSummaryRequestGate.begin(meetingID: meeting.id)
+        meetingProcessingAttemptIDs[meeting.id] = attemptID
         meetingSummaryTasks[meeting.id] = Task { [weak self] in
             guard let self else { return }
-            let plan = MeetingResummarizationPolicy.plan(for: meeting)
             do {
                 let notes = try await MeetingSummaryClient.summarize(
-                    transcript: meeting.rawTranscript,
-                    meetingTitle: plan.promptTitle,
-                    config: self.config,
-                    template: templateSnapshot,
-                    existingNotes: self.notesContextForResummary(meeting),
-                    manualNotesToRetain: meeting.manualNotes
-                )
-                guard !Task.isCancelled,
-                      self.meetingSummaryRequestGate.isCurrent(requestID, meetingID: meeting.id) else {
-                    completion(.failure(CancellationError()))
-                    return
-                }
-                try self.dictationStore.updateMeetingSummary(
-                    id: meeting.id,
-                    title: plan.persistedTitle,
-                    formattedNotes: notes,
-                    selectedTemplateID: templateSnapshot.id,
-                    selectedTemplateName: templateSnapshot.name,
-                    selectedTemplateKind: templateSnapshot.kind,
-                    selectedTemplatePrompt: templateSnapshot.prompt
-                )
-                self.meetingSummaryRequestGate.finish(requestID, meetingID: meeting.id)
-                self.meetingSummaryTasks.removeValue(forKey: meeting.id)
-                await MainActor.run {
-                    self.syncAppState()
-                    self.historyWindowController?.reload()
-                    completion(.success(()))
-                }
+                    transcript: snapshot.rawTranscript,
+                    meetingTitle: MeetingResummarizationPolicy.plan(for: snapshot).promptTitle,
+                    config: processingConfig, template: templateSnapshot,
+                    existingNotes: self.notesContextForResummary(snapshot), manualNotesToRetain: snapshot.manualNotes)
+                try Task.checkCancellation()
+                guard self.meetingSummaryRequestGate.isCurrent(requestID, meetingID: meeting.id) else { throw CancellationError() }
+                try self.dictationStore.saveMeetingProcessingSummary(meetingID: meeting.id, attemptID: attemptID,
+                    notes: notes, selectedTemplateID: templateSnapshot.id, selectedTemplateName: templateSnapshot.name,
+                    selectedTemplateKind: templateSnapshot.kind, selectedTemplatePrompt: templateSnapshot.prompt)
+                self.finishProcessingUI(meetingID: meeting.id, requestID: requestID)
+                completion(.success(()))
             } catch {
-                guard self.meetingSummaryRequestGate.isCurrent(requestID, meetingID: meeting.id) else {
-                    completion(.failure(CancellationError()))
-                    return
-                }
-                self.meetingSummaryRequestGate.finish(requestID, meetingID: meeting.id)
-                self.meetingSummaryTasks.removeValue(forKey: meeting.id)
-                DiagnosticsLog.write("[guesli-native] failed to generate or persist meeting summary: \(error.localizedDescription)")
-                if error is MeetingSummaryError {
-                    do {
-                        try self.dictationStore.updateMeetingSummaryError(
-                            id: meeting.id,
-                            message: error.localizedDescription
-                        )
-                        self.syncAppState()
-                        self.historyWindowController?.reload()
-                    } catch {
-                        DiagnosticsLog.write("[guesli-native] failed to persist meeting summary error: \(error.localizedDescription)")
-                    }
-                }
-                await MainActor.run {
-                    if error is MeetingSummaryError {
-                        completion(.failure(error))
-                    } else {
-                        completion(.failure(MeetingSummaryPersistenceError.failedToSaveSummary(underlying: error)))
-                    }
-                }
+                let cancelled = Task.isCancelled || error is CancellationError
+                    || !self.meetingSummaryRequestGate.isCurrent(requestID, meetingID: meeting.id)
+                let reportedError: Error = cancelled ? CancellationError() : error
+                try? self.dictationStore.finishMeetingProcessing(attemptID: attemptID,
+                    outcome: cancelled ? .cancelled : .failed,
+                    safeError: self.safeProcessingError(reportedError, stage: "summary"))
+                self.finishProcessingUI(meetingID: meeting.id, requestID: requestID)
+                completion(.failure(reportedError))
             }
         }
     }
 
+    func trackMeetingProcessingTask(meetingID: Int64, attemptID: String, task: Task<Void, Never>?) {
+        meetingProcessingAttemptIDs[meetingID] = attemptID
+        meetingSummaryTasks[meetingID] = task
+    }
+
+    private func finishTrackedMeetingProcessing(meetingID: Int64, attemptID: String) {
+        guard meetingProcessingAttemptIDs[meetingID] == attemptID else { return }
+        meetingProcessingAttemptIDs[meetingID] = nil
+        meetingSummaryTasks[meetingID] = nil
+        if importingMeetingID == meetingID { importingMeetingID = nil }
+    }
+
+    func cancelMeetingProcessing(id: Int64) {
+        meetingSummaryTasks[id]?.cancel()
+        meetingSummaryTasks[id] = nil
+        if importingMeetingID == id { importingMeetingID = nil }
+        let runningAttemptID = meetingProcessingAttemptIDs.removeValue(forKey: id)
+            ?? (try? dictationStore.meetingProcessingAttempts(meetingID: id))?.first(where: { $0.outcome == .running })?.id
+        if let attemptID = runningAttemptID {
+            try? dictationStore.finishMeetingProcessing(attemptID: attemptID, outcome: .cancelled)
+        }
+        // Invalidate late provider completions immediately, without waiting for cancellation support.
+        _ = meetingSummaryRequestGate.begin(meetingID: id)
+        syncAppState()
+    }
+
+    private func safeProcessingError(_ error: Error, stage: String) -> String {
+        if error is CancellationError { return "Processing was cancelled. Your saved result is unchanged." }
+        if error is MeetingProcessingError { return error.localizedDescription }
+        if error is MeetingSummaryError { return "Summary generation failed. Check the selected model and account, then retry summary." }
+        if stage == "asr" { return "Transcription failed. Your saved text and recording are unchanged." }
+        return "The result could not be saved. Your previous saved result is unchanged."
+    }
+
+    private func finishProcessingUI(meetingID: Int64, requestID: UUID) {
+        guard meetingSummaryRequestGate.isCurrent(requestID, meetingID: meetingID) else { return }
+        meetingSummaryRequestGate.finish(requestID, meetingID: meetingID)
+        meetingSummaryTasks[meetingID] = nil
+        meetingProcessingAttemptIDs[meetingID] = nil
+        retranscriptionSpeakerAttribution[meetingID] = nil
+        retranscriptionDiarizedMeetings.remove(meetingID)
+        syncAppState()
+        historyWindowController?.reload()
+    }
+
     func retranscribe(meeting: MeetingRecord, completion: @escaping (Result<Void, Error>) -> Void) {
-        Task { @MainActor [weak self] in
-            guard let self else {
-                completion(.failure(MeetingRetranscriptionError.controllerUnavailable))
-                return
+        let snapshot: MeetingRecord
+        let backend: BackendOption
+        let attemptID: String
+        let processingConfig: AppConfig
+        let sourceTrackInfo: PostMeetingSourceTrackInfo?
+        let recordingURL: URL?
+        do {
+            guard let current = try dictationStore.meeting(id: meeting.id) else {
+                throw DictationStoreError.meetingNotFound(id: meeting.id)
             }
-            var didSetProcessing = false
+            snapshot = current
+            sourceTrackInfo = postMeetingSourceTrackInfo(for: current)
+            recordingURL = current.savedRecordingPath.flatMap {
+                FileManager.default.fileExists(atPath: $0) ? URL(fileURLWithPath: $0) : nil
+            }
+            guard sourceTrackInfo != nil || recordingURL != nil else { throw MeetingRetranscriptionError.recordingUnavailable }
+            guard let selected = normalizeMeetingTranscriptionSelectionForAvailability() else {
+                throw MeetingRetranscriptionError.noDownloadedTranscriptionModel
+            }
+            backend = selected
+            processingConfig = config
+            var metadata = MeetingProcessingConfiguration.snapshot(config: processingConfig,
+                audioSources: sourceTrackInfo.map { info in
+                    [(info.micURL != nil ? "microphone" : nil), (info.systemURL != nil ? "system" : nil)].compactMap { $0 }
+                } ?? [current.source == .audioImport ? "imported" : "mixed"])
+            metadata.asrBackend = backend.backend; metadata.asrModel = backend.model
+            metadata.templateID = MeetingTemplates.snapshot(for: snapshot, customTemplates: processingConfig.customMeetingTemplates).id
+            if let previous = try dictationStore.meetingProcessingAttempts(meetingID: meeting.id).first(where: { $0.id == current.transcriptAttemptID }),
+               previous.configuration.completeness == .incomplete {
+                metadata.completeness = .incomplete; metadata.warnings = previous.configuration.warnings
+            }
+            attemptID = try dictationStore.beginMeetingProcessing(meetingID: meeting.id, operation: .retranscription,
+                configuration: metadata, expectedContentRevision: snapshot.contentRevision, expectedSummaryRevision: snapshot.summaryRevision)
+        } catch { completion(.failure(error)); return }
+        let requestID = meetingSummaryRequestGate.begin(meetingID: meeting.id)
+        meetingProcessingAttemptIDs[meeting.id] = attemptID
+        syncAppState()
+        meetingSummaryTasks[meeting.id] = Task { [weak self] in
+            guard let self else { return }
+            var stage = "asr"
             do {
-                let sourceTrackInfo = self.postMeetingSourceTrackInfo(for: meeting)
-                let recordingURL: URL?
-                if let savedRecordingPath = meeting.savedRecordingPath,
-                   !savedRecordingPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    let candidate = URL(fileURLWithPath: savedRecordingPath)
-                    recordingURL = FileManager.default.fileExists(atPath: candidate.path) ? candidate : nil
-                } else {
-                    recordingURL = nil
-                }
-                guard sourceTrackInfo != nil || recordingURL != nil else {
-                    throw MeetingRetranscriptionError.recordingUnavailable
-                }
-                guard let backend = self.normalizeMeetingTranscriptionSelectionForAvailability() else {
-                    throw MeetingRetranscriptionError.noDownloadedTranscriptionModel
-                }
-
-                try self.updateMeetingStatusAndScheduleSyncThrowing(id: meeting.id, status: .processing)
-                didSetProcessing = true
-                self.syncAppState()
-                self.historyWindowController?.reload()
-
-                try await self.transcriptionCoordinator.preloadRequired(
-                    backend: backend,
-                    enablePostProcessor: false,
-                    includeMeetingHelpers: true
-                )
+                try await self.transcriptionCoordinator.preloadRequired(backend: backend, enablePostProcessor: false, includeMeetingHelpers: true)
                 let rawTranscript: String
                 if let sourceTrackInfo {
-                    rawTranscript = try await self.retranscribePostModeSourceTracks(
-                        sourceTrackInfo,
-                        meeting: meeting,
-                        backend: backend
-                    )
+                    rawTranscript = try await self.retranscribePostModeSourceTracks(sourceTrackInfo, meeting: snapshot, backend: backend)
                 } else if let recordingURL {
-                    let preparedAudio = try await AudioFileImportController.prepareAudioForImport(sourceURL: recordingURL)
-                    defer { try? FileManager.default.removeItem(at: preparedAudio.wavURL) }
-                    rawTranscript = try await self.retranscribePreparedMeetingAudio(
-                        preparedAudio,
-                        meeting: meeting,
-                        backend: backend
-                    )
-                } else {
-                    throw MeetingRetranscriptionError.recordingUnavailable
-                }
-                guard !rawTranscript.isEmpty else {
-                    throw MeetingRetranscriptionError.emptyTranscript
-                }
-                async let pendingCleanup = MeetingTranscriptCleanupPipeline.cleanIfNeeded(
-                    transcript: rawTranscript,
-                    config: self.config,
-                    isChatGPTAuthenticated: self.chatGPTAuth.isAuthenticated,
-                    cleaner: self.meetingTranscriptCleaner
-                )
-
-                let templateSnapshot = MeetingTemplates.snapshot(
-                    for: meeting,
-                    customTemplates: self.config.customMeetingTemplates
-                )
-                let formattedNotes: String
-                let summaryError: String?
-                do {
-                    formattedNotes = try await MeetingSummaryClient.summarize(
-                        transcript: rawTranscript,
-                        meetingTitle: meeting.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Meeting" : meeting.title,
-                        config: self.config,
-                        template: templateSnapshot,
-                        existingNotes: self.notesContextForResummary(meeting),
-                        manualNotesToRetain: meeting.manualNotes
-                    )
-                    summaryError = nil
-                } catch {
-                    DiagnosticsLog.write("[guesli-native] re-transcription summary generation failed: \(error.localizedDescription)")
-                    let existingNotes = meeting.formattedNotes.trimmingCharacters(in: .whitespacesAndNewlines)
-                    formattedNotes = existingNotes.isEmpty
-                        ? MeetingSummaryClient.summaryFailureNotes(
-                            transcript: rawTranscript,
-                            meetingTitle: meeting.title,
-                            error: error,
-                            manualNotes: meeting.manualNotes
-                        )
-                        : meeting.formattedNotes
-                    summaryError = error.localizedDescription
-                }
-
-                let cleanupResult = await pendingCleanup
-
-                do {
-                    try self.dictationStore.updateMeetingTranscriptAndSummary(
-                        id: meeting.id,
-                        rawTranscript: cleanupResult.transcript,
-                        rawOriginalTranscript: cleanupResult.originalTranscript,
-                        formattedNotes: formattedNotes,
-                        summaryError: summaryError,
-                        selectedTemplateID: templateSnapshot.id,
-                        selectedTemplateName: templateSnapshot.name,
-                        selectedTemplateKind: templateSnapshot.kind,
-                        selectedTemplatePrompt: templateSnapshot.prompt
-                    )
-                } catch {
-                    throw MeetingRetranscriptionError.failedToSave(underlying: error)
-                }
-
+                    let audio = try await AudioFileImportController.prepareAudioForImport(sourceURL: recordingURL)
+                    defer { try? FileManager.default.removeItem(at: audio.wavURL) }
+                    rawTranscript = try await self.retranscribePreparedMeetingAudio(audio, meeting: snapshot, backend: backend)
+                } else { throw MeetingRetranscriptionError.recordingUnavailable }
+                try Task.checkCancellation()
+                guard self.meetingSummaryRequestGate.isCurrent(requestID, meetingID: meeting.id) else { throw CancellationError() }
+                guard !rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw MeetingProcessingError.emptyResult }
+                let attribution = self.retranscriptionSpeakerAttribution[meeting.id]?.validated(for: rawTranscript)
+                let cleanup = await MeetingTranscriptCleanupPipeline.cleanIfNeeded(transcript: rawTranscript,
+                    config: processingConfig, isChatGPTAuthenticated: self.chatGPTAuth.isAuthenticated, cleaner: self.meetingTranscriptCleaner)
+                // A cleanup that changes speaker structure cannot safely retain attribution.
+                let cleanedAttribution = attribution?.rebased(from: rawTranscript, to: cleanup.transcript)
+                let acceptsCleanup = attribution == nil || cleanedAttribution != nil
+                let transcript = acceptsCleanup ? cleanup.transcript : rawTranscript
+                let original = acceptsCleanup ? cleanup.originalTranscript : nil
+                try Task.checkCancellation()
+                guard self.meetingSummaryRequestGate.isCurrent(requestID, meetingID: meeting.id) else { throw CancellationError() }
+                try self.dictationStore.updateMeetingProcessingFacts(attemptID: attemptID,
+                    cleanupModel: cleanup.cleanupAttempted ? processingConfig.resolvedChatGPTMeetingCleanupModel : nil,
+                    diarizationPerformed: self.retranscriptionDiarizedMeetings.contains(meeting.id))
+                try self.dictationStore.saveMeetingProcessingTranscript(meetingID: meeting.id, attemptID: attemptID,
+                    transcript: transcript, originalTranscript: original, speakerAttributionJSON: (acceptsCleanup ? cleanedAttribution : attribution)?.json)
                 self.syncAppState()
                 self.historyWindowController?.reload()
+                stage = "summary"
+                let template = MeetingTemplates.snapshot(for: snapshot, customTemplates: processingConfig.customMeetingTemplates)
+                let notes = try await MeetingSummaryClient.summarize(transcript: transcript,
+                    meetingTitle: MeetingResummarizationPolicy.plan(for: snapshot).promptTitle,
+                    config: processingConfig, template: template, existingNotes: self.notesContextForResummary(snapshot),
+                    manualNotesToRetain: snapshot.manualNotes)
+                try Task.checkCancellation()
+                guard self.meetingSummaryRequestGate.isCurrent(requestID, meetingID: meeting.id) else { throw CancellationError() }
+                try self.dictationStore.saveMeetingProcessingSummary(meetingID: meeting.id, attemptID: attemptID,
+                    notes: notes, selectedTemplateID: template.id, selectedTemplateName: template.name,
+                    selectedTemplateKind: template.kind, selectedTemplatePrompt: template.prompt)
+                self.finishProcessingUI(meetingID: meeting.id, requestID: requestID)
                 completion(.success(()))
             } catch {
-                DiagnosticsLog.write("[guesli-native] failed to re-transcribe meeting \(meeting.id): \(error.localizedDescription)")
-                if let status = Self.retranscriptionFailureStatus(
-                    originalStatus: meeting.status,
-                    didSetProcessing: didSetProcessing,
-                    error: error
-                ) {
-                    self.updateMeetingStatusAndScheduleSync(id: meeting.id, status: status)
-                }
-                self.syncAppState()
-                self.historyWindowController?.reload()
-                completion(.failure(error))
+                let cancelled = Task.isCancelled || error is CancellationError
+                    || !self.meetingSummaryRequestGate.isCurrent(requestID, meetingID: meeting.id)
+                let reportedError: Error = cancelled ? CancellationError() : error
+                try? self.dictationStore.finishMeetingProcessing(attemptID: attemptID,
+                    outcome: cancelled ? .cancelled : .failed,
+                    safeError: self.safeProcessingError(reportedError, stage: stage))
+                self.finishProcessingUI(meetingID: meeting.id, requestID: requestID)
+                completion(.failure(reportedError))
             }
         }
     }
@@ -4033,13 +4041,17 @@ public final class GuesliController: NSObject {
             observations: observations,
             meetingStart: meetingStart
         )
-        let formatted = TranscriptFormatter.merge(
+        let attributed = TranscriptFormatter.mergeAttributed(
             micSegments: micSegments,
             systemSegments: systemSegments,
             diarizationSegments: diarizationSegments,
             speakerNameMap: speakerNameMap,
             meetingStart: meetingStart
         )
+        let formatted = attributed.transcript
+        if let valid = attributed.attribution.validated(for: formatted) {
+            retranscriptionSpeakerAttribution[meeting.id] = valid
+        }
         let trimmed = formatted.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
             if let reason = MeetingRetranscriptionPipeline.suspiciousTranscriptReason(
@@ -4287,13 +4299,15 @@ public final class GuesliController: NSObject {
             observations: observations,
             meetingStart: meetingStart
         )
-        let formatted = TranscriptFormatter.merge(
+        let attributed = TranscriptFormatter.mergeAttributed(
             micSegments: [],
             systemSegments: normalizedTranscription.segments,
             diarizationSegments: diarizationSegments,
             speakerNameMap: speakerNameMap,
             meetingStart: meetingStart
         )
+        let formatted = attributed.transcript
+        retranscriptionSpeakerAttribution[meetingID] = attributed.attribution.validated(for: formatted)
         let trimmed = formatted.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty
             ? normalizedTranscription.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -4324,7 +4338,9 @@ public final class GuesliController: NSObject {
         meetingID: Int64
     ) async -> [TimedSpeakerSegment]? {
         do {
-            return try await transcriptionCoordinator.diarizeSystemAudio(samples: samples)?.segments
+            let segments = try await transcriptionCoordinator.diarizeSystemAudio(samples: samples)?.segments
+            if segments != nil { retranscriptionDiarizedMeetings.insert(meetingID) }
+            return segments
         } catch {
             DiagnosticsLog.write("[guesli-native] retranscribe diarization failed meeting_id=\(meetingID) error=\(error.localizedDescription)")
             return nil
@@ -4429,31 +4445,103 @@ public final class GuesliController: NSObject {
         syncAppState()
     }
 
-    /// Renames a speaker in the saved transcript; keeps rawOriginalTranscript and notes as they are.
+    /// Legacy callers can only select an unambiguous displayed label.
     func renameMeetingSpeaker(id: Int64, from oldLabel: String, to newName: String) {
+        guard let meeting = try? dictationStore.meeting(id: id) else { return }
+        let attribution = MeetingSpeakerAttribution.decode(meeting.speakerAttributionJSON)?.validated(for: meeting.rawTranscript)
+            ?? .legacy(transcript: meeting.rawTranscript)
+        let speakers = attribution.speakers.filter { $0.displayName == oldLabel }
+        guard speakers.count == 1, let speaker = speakers.first else { return }
+        renameMeetingSpeaker(id: id, speakerID: speaker.id, expectedTranscriptRevision: meeting.transcriptRevision, to: newName)
+    }
+
+    func renameMeetingSpeaker(id: Int64, speakerID: String, expectedTranscriptRevision: Int64, to newName: String) {
         do {
-            guard let meeting = try dictationStore.meeting(id: id),
-                  meeting.status == .completed,
-                  let transcript = MeetingSpeakerRename.rename(oldLabel, to: newName, in: meeting.rawTranscript) else {
-                return
-            }
-            // Empty template fields read back the same as NULL (see MeetingTemplates.snapshot(for:)).
-            try dictationStore.updateMeetingTranscriptAndSummary(
-                id: id,
-                rawTranscript: transcript,
-                rawOriginalTranscript: meeting.rawOriginalTranscript,
-                formattedNotes: meeting.formattedNotes,
-                summaryError: meeting.summaryError,
-                selectedTemplateID: meeting.selectedTemplateID ?? "",
-                selectedTemplateName: meeting.selectedTemplateName ?? "",
-                selectedTemplateKind: meeting.selectedTemplateKind ?? .auto,
-                selectedTemplatePrompt: meeting.selectedTemplatePrompt ?? ""
-            )
+            guard let meeting = try dictationStore.meeting(id: id), meeting.status == .completed,
+                  meeting.transcriptRevision == expectedTranscriptRevision else { throw MeetingProcessingError.staleInput }
+            let attribution = MeetingSpeakerAttribution.decode(meeting.speakerAttributionJSON)?.validated(for: meeting.rawTranscript)
+                ?? .legacy(transcript: meeting.rawTranscript)
+            guard let correction = MeetingSpeakerRename.rename(speakerID: speakerID, to: newName,
+                in: meeting.rawTranscript, attribution: attribution), let json = correction.attribution.json else { return }
+            try dictationStore.updateMeetingSpeakerAttribution(id: id, expectedTranscriptRevision: expectedTranscriptRevision,
+                rawTranscript: correction.transcript, speakerAttributionJSON: json)
         } catch {
-            fputs("[guesli-native] failed to rename speaker in meeting \(id): \(error)\n", stderr)
+            presentErrorAlert(title: String(localized: "Speaker name"), message: error.localizedDescription)
         }
         syncAppState()
     }
+
+    func dismissMeetingSummaryStaleness(id: Int64, expectedContentRevision: Int64) {
+        try? dictationStore.dismissMeetingSummaryStaleness(id: id, expectedContentRevision: expectedContentRevision)
+        syncAppState()
+    }
+
+    func meetingProcessingAttempts(id: Int64) -> [MeetingProcessingAttempt] {
+        (try? dictationStore.meetingProcessingAttempts(meetingID: id)) ?? []
+    }
+
+    func beginImportedAudioProcessing(title: String, startTime: Date, duration: TimeInterval,
+        savedRecordingPath: String, config: AppConfig, backend: BackendOption,
+        template: MeetingTemplateSnapshot) throws -> (meetingID: Int64, attemptID: String) {
+        var metadata = MeetingProcessingConfiguration.snapshot(config: config, audioSources: ["imported"])
+        metadata.asrBackend = backend.backend; metadata.asrModel = backend.model
+        metadata.templateID = template.id
+        let result = try dictationStore.beginImportedMeetingProcessing(title: title, startTime: startTime,
+            duration: duration, savedRecordingPath: savedRecordingPath, configuration: metadata)
+        importingMeetingID = result.meetingID
+        trackMeetingProcessingTask(meetingID: result.meetingID, attemptID: result.attemptID, task: importTask)
+        syncAppState()
+        return result
+    }
+
+    func saveImportedAudioTranscript(meetingID: Int64, attemptID: String, transcript: String,
+        originalTranscript: String?, speakerAttributionJSON: String?) throws {
+        try Task.checkCancellation()
+        try dictationStore.saveMeetingProcessingTranscript(meetingID: meetingID, attemptID: attemptID,
+            transcript: transcript, originalTranscript: originalTranscript, speakerAttributionJSON: speakerAttributionJSON)
+        syncAppState()
+    }
+
+    func updateImportedAudioProcessingFacts(attemptID: String, cleanupModel: String?, diarizationPerformed: Bool) throws {
+        try Task.checkCancellation()
+        try dictationStore.updateMeetingProcessingFacts(attemptID: attemptID, cleanupModel: cleanupModel,
+            diarizationPerformed: diarizationPerformed)
+    }
+
+    func completeImportedAudioProcessing(meetingID: Int64, attemptID: String, notes: String,
+        summaryError: String?, template: MeetingTemplateSnapshot) throws {
+        try Task.checkCancellation()
+        if summaryError == nil {
+            try dictationStore.saveMeetingProcessingSummary(meetingID: meetingID, attemptID: attemptID, notes: notes,
+                selectedTemplateID: template.id, selectedTemplateName: template.name,
+                selectedTemplateKind: template.kind, selectedTemplatePrompt: template.prompt)
+        } else {
+            try dictationStore.finishMeetingProcessing(attemptID: attemptID, outcome: .failed,
+                safeError: "Summary generation failed. The transcript is saved; retry summary.")
+        }
+        finishTrackedMeetingProcessing(meetingID: meetingID, attemptID: attemptID)
+        syncAppState()
+    }
+
+    func failImportedAudioProcessing(meetingID: Int64, attemptID: String, cancelled: Bool) {
+        try? dictationStore.finishMeetingProcessing(attemptID: attemptID,
+            outcome: cancelled ? .cancelled : .failed,
+            safeError: cancelled ? "Processing was cancelled." : "Transcription failed. The recording is retained for retry.")
+        if let meeting = try? dictationStore.meeting(id: meetingID), meeting.rawTranscript.isEmpty,
+           meetingProcessingAttemptIDs[meetingID] == nil || meetingProcessingAttemptIDs[meetingID] == attemptID {
+            try? dictationStore.updateMeetingStatus(id: meetingID, status: .failed)
+        }
+        finishTrackedMeetingProcessing(meetingID: meetingID, attemptID: attemptID)
+        syncAppState()
+    }
+
+    func archiveChatCandidates(terms: [String], scope: ArchiveChatScope) throws -> [MeetingRecord] {
+        if let id = scope.meetingID { return try dictationStore.meeting(id: id).map { [$0] } ?? [] }
+        return try dictationStore.searchArchiveMeetings(terms: terms, folderID: scope.folderID,
+            fromDate: scope.fromDate, toDate: scope.toDate, limit: 21)
+    }
+
+    func archiveChatMeeting(id: Int64) throws -> MeetingRecord? { try dictationStore.meeting(id: id) }
 
     func updateMeetingManualNotes(id: Int64, notes: String) {
         liveManualNotesPersistWorkItems[id]?.cancel()
@@ -5441,6 +5529,7 @@ public final class GuesliController: NSObject {
             )
 
             await MainActor.run {
+                guard self.importSessionID == sessionID else { return }
                 self.importTask = nil
                 self.importSessionID = nil
                 self.isStartingMeetingRecording = false
@@ -5456,6 +5545,7 @@ public final class GuesliController: NSObject {
             }
         } catch is CancellationError {
             await MainActor.run {
+                guard self.importSessionID == sessionID else { return }
                 self.importTask = nil
                 self.importSessionID = nil
                 self.isStartingMeetingRecording = false
@@ -5469,6 +5559,7 @@ public final class GuesliController: NSObject {
             }
         } catch {
             await MainActor.run {
+                guard self.importSessionID == sessionID else { return }
                 self.importTask = nil
                 self.importSessionID = nil
                 self.isStartingMeetingRecording = false
@@ -5478,10 +5569,12 @@ public final class GuesliController: NSObject {
                 self.statusBarController?.setStatus("Idle")
                 self.statusBarController?.refresh()
                 self.syncAppState()
-                self.presentErrorAlert(
-                    title: String(localized: "Import Failed"),
-                    message: error.localizedDescription
-                )
+                if !Task.isCancelled {
+                    self.presentErrorAlert(
+                        title: String(localized: "Import Failed"),
+                        message: error.localizedDescription
+                    )
+                }
                 self.finishTerminationAfterMeetingSafetyWorkIfNeeded()
             }
         }
@@ -5551,6 +5644,7 @@ public final class GuesliController: NSObject {
             syncDictationRecorderWarmup(intent: .idlePrewarm(.meetingStateChanged))
         } else {
             // Audio import cancellation
+            if let importingMeetingID { cancelMeetingProcessing(id: importingMeetingID) }
             importTask?.cancel()
             importTask = nil
             importSessionID = nil
@@ -6290,7 +6384,7 @@ public final class GuesliController: NSObject {
         syncAppState()
     }
 
-    func resolveLiveMeetingAfterStopFailure(id: Int64) {
+    func resolveLiveMeetingAfterStopFailure(id: Int64, recoverTranscript: Bool = true) {
         if let meeting = try? dictationStore.meeting(id: id),
            let tracks = MeetingDualTrackRecordingWriter.recoveryCandidates(forMeetingID: id).first {
             do {
@@ -6314,14 +6408,17 @@ public final class GuesliController: NSObject {
                 recordUnpersistedRecordingForRecovery(path: retainedURL.path, existingMeetingID: id, error: error)
             }
         }
-        do {
-            _ = try dictationStore.recoverLiveMeetingFromTranscriptCheckpoints(id: id)
-        } catch {
-            fputs("[meeting-stop] checkpoint recovery failed meeting_id=\(id): \(error)\n", stderr)
+        if recoverTranscript {
+            do {
+                _ = try dictationStore.recoverLiveMeetingFromTranscriptCheckpoints(id: id)
+            } catch {
+                fputs("[meeting-stop] checkpoint recovery failed meeting_id=\(id): \(error)\n", stderr)
+            }
         }
         flushCachedMeetingTitle(id: id)
         flushCachedMeetingManualNotes(id: id, sync: false)
-        updateMeetingStatusAndScheduleSync(id: id, status: .failed)
+        let savedTranscript = (try? dictationStore.meeting(id: id))?.rawTranscript ?? ""
+        updateMeetingStatusAndScheduleSync(id: id, status: !recoverTranscript && !savedTranscript.isEmpty ? .completed : .failed)
         clearCachedMeetingManualNotes(id: id)
         clearCachedMeetingTitle(id: id)
         pendingResumePriorTranscript[id] = nil
@@ -6473,6 +6570,14 @@ public final class GuesliController: NSObject {
             updateMeetingStatusAndScheduleSync(id: liveMeetingID, status: .processing)
             syncAppState()
         }
+        var initialMetadata = MeetingProcessingConfiguration.snapshot(config: config, audioSources: ["microphone", "system"])
+        if let warning = activeMeetingAudioWarning, warning.meetingID == liveMeetingID {
+            initialMetadata.completeness = .incomplete
+            initialMetadata.warnings = ["An audio capture problem was reported."]
+        }
+        let processingAttemptID = liveMeetingID.flatMap { id in
+            try? dictationStore.beginMeetingProcessing(meetingID: id, operation: .initial, configuration: initialMetadata)
+        }
         indicator.setMeetingRecording(false, config: config)
         indicator.setTranscribingTitle(String(localized: "Transcribing"), config: config)
         setState(.transcribing)
@@ -6481,6 +6586,9 @@ public final class GuesliController: NSObject {
             Task { @MainActor [weak self] in
                 if let self, let liveMeetingID {
                     self.appState.meetingProcessingStages[liveMeetingID] = stage
+                    if let processingAttemptID {
+                        try? self.dictationStore.updateMeetingProcessingStage(attemptID: processingAttemptID, stage: String(describing: stage))
+                    }
                 }
                 guard let self,
                       !self.isMeetingRecording(),
@@ -6502,15 +6610,18 @@ public final class GuesliController: NSObject {
         meetingMonitor.refreshState()
         syncDictationRecorderWarmup(intent: .idlePrewarm(.meetingStateChanged))
 
-        Task.detached(priority: .userInitiated) { [weak self] in
+        let processingTask = Task.detached(priority: .userInitiated) { [weak self] in
             guard let self else { return }
             var meetingTitle = "Meeting"
             var completedMeetingID: Int64?
             var meetingResult: MeetingSessionResult?
             var failedLiveMeetingID: Int64?
             var preservesTemporaryRecording = false
+            var processingCancelled = false
             do {
                 let stopped = try await sessionToStop.stop()
+                meetingResult = stopped
+                try Task.checkCancellation()
                 let result = await self.mergedResumeResult(for: stopped, meetingID: liveMeetingID)
                 if result.liveCollectorDrainTimeoutDroppedChunkCount > 0 {
                     await MainActor.run {
@@ -6534,17 +6645,22 @@ public final class GuesliController: NSObject {
                 await MainActor.run {
                     self.setMeetingProcessingStatus(String(localized: "Finalizing"))
                 }
+                try Task.checkCancellation()
                 let recordingSaveDecision = await self.recordingSaveDecision(for: result)
                 let preparedRecordingSave = await self.prepareMeetingRecordingSave(
                     for: result,
                     saveDecision: recordingSaveDecision
                 )
                 preservesTemporaryRecording = preparedRecordingSave.preservesTemporaryRecording
+                try Task.checkCancellation()
                 let persistenceResult = try await MainActor.run {
-                    try self.persistCompletedMeetingResultAndDispatchHook(
+                    try Task.checkCancellation()
+                    if liveMeetingID != nil && processingAttemptID == nil { throw MeetingProcessingError.alreadyRunning }
+                    return try self.persistCompletedMeetingResultAndDispatchHook(
                         result,
                         existingMeetingID: liveMeetingID,
-                        preparedRecordingSave: preparedRecordingSave
+                        preparedRecordingSave: preparedRecordingSave,
+                        processingAttemptID: processingAttemptID
                     )
                 }
                 completedMeetingID = persistenceResult.meetingID
@@ -6560,25 +6676,31 @@ public final class GuesliController: NSObject {
                     }
                 }
             } catch {
-                fputs("[guesli-native] meeting transcription failed: \(error)\n", stderr)
+                processingCancelled = Task.isCancelled || error is CancellationError
                 preservesTemporaryRecording = true
-                await MainActor.run {
-                    _ = self.recordDiagnosticIncident(
-                        kind: .meetingProcessingFailed,
-                        stage: "meeting_stop_processing",
-                        backend: self.selectedMeetingTranscriptionBackend,
-                        error: error
-                    )
-                }
-                let message: String
-                if let lifecycleError = error as? MeetingLifecycleError {
-                    message = lifecycleError.localizedDescription
-                } else {
-                    message = error.localizedDescription
-                }
                 failedLiveMeetingID = liveMeetingID
+                let cancelled = processingCancelled
+                let retainedResult = meetingResult
                 await MainActor.run {
-                    self.presentErrorAlert(title: String(localized: "Meeting Recording"), message: message)
+                    if let processingAttemptID {
+                        try? self.dictationStore.finishMeetingProcessing(attemptID: processingAttemptID,
+                            outcome: cancelled ? .cancelled : .failed,
+                            safeError: cancelled ? "Processing was cancelled." : "Meeting processing failed. The recording is retained for recovery.")
+                    }
+                    if cancelled {
+                        // Capture has stopped; retain every available source without publishing a cancelled result.
+                        if let liveMeetingID, let retainedResult,
+                           let saved = try? self.dictationStore.meeting(id: liveMeetingID) {
+                            try? self.dictationStore.updateMeetingAudioPaths(id: liveMeetingID,
+                                micAudioPath: saved.micAudioPath ?? retainedResult.sourceMicRecordingURL?.path,
+                                systemAudioPath: saved.systemAudioPath ?? retainedResult.sourceSystemRecordingURL?.path ?? retainedResult.systemRecordingURL?.path,
+                                savedRecordingPath: saved.savedRecordingPath ?? retainedResult.retainedRecordingSavedURL?.path ?? retainedResult.retainedRecordingURL?.path)
+                        }
+                    } else {
+                        _ = self.recordDiagnosticIncident(kind: .meetingProcessingFailed,
+                            stage: "meeting_stop_processing", backend: self.selectedMeetingTranscriptionBackend, error: error)
+                        self.presentErrorAlert(title: String(localized: "Meeting Recording"), message: error.localizedDescription)
+                    }
                 }
             }
             let finalFailedLiveMeetingID = failedLiveMeetingID
@@ -6586,16 +6708,22 @@ public final class GuesliController: NSObject {
             let finalCompletedMeetingID = completedMeetingID
             let finalMeetingTitle = meetingTitle
             let finalPreservesTemporaryRecording = preservesTemporaryRecording
+            let finalProcessingCancelled = processingCancelled
             await MainActor.run {
                 self.backgroundMeetingProcessingCount -= 1
-                if let finalFailedLiveMeetingID {
-                    self.resolveLiveMeetingAfterStopFailure(id: finalFailedLiveMeetingID)
-                } else if let liveMeetingID {
+                let hasNewerAttempt = liveMeetingID.flatMap { self.meetingProcessingAttemptIDs[$0] }
+                    .map { $0 != processingAttemptID } ?? false
+                if let finalFailedLiveMeetingID, !hasNewerAttempt {
+                    self.resolveLiveMeetingAfterStopFailure(id: finalFailedLiveMeetingID, recoverTranscript: !finalProcessingCancelled)
+                } else if let liveMeetingID, !hasNewerAttempt {
                     self.pendingResumePriorTranscript[liveMeetingID] = nil
                     self.pendingResumePriorMeetings[liveMeetingID] = nil
                 }
-                if let liveMeetingID {
+                if let liveMeetingID, !hasNewerAttempt {
                     self.appState.meetingProcessingStages[liveMeetingID] = nil
+                    if let processingAttemptID {
+                        self.finishTrackedMeetingProcessing(meetingID: liveMeetingID, attemptID: processingAttemptID)
+                    }
                 }
                 // A dictation started during background processing owns the state and its processing deadline.
                 if !self.isMeetingRecording() && !self.isStartingMeetingRecording && self.backgroundMeetingProcessingCount == 0
@@ -6613,7 +6741,7 @@ public final class GuesliController: NSObject {
                     self.appState.liveMeetingPartialOthers = ""
                 }
                 self.liveTranscriptOverlapByMeetingSpeaker.removeAll()
-                if let finalMeetingResult {
+                if let finalMeetingResult, !finalProcessingCancelled {
                     self.cleanupTemporaryMeetingAudioFiles(
                         for: finalMeetingResult,
                         preservesRetainedRecording: finalPreservesTemporaryRecording
@@ -6627,6 +6755,9 @@ public final class GuesliController: NSObject {
                 self.updateMeetingNotificationVisibility()
                 self.finishTerminationAfterMeetingSafetyWorkIfNeeded()
             }
+        }
+        if let liveMeetingID, let processingAttemptID {
+            trackMeetingProcessingTask(meetingID: liveMeetingID, attemptID: processingAttemptID, task: processingTask)
         }
     }
 
@@ -6645,7 +6776,8 @@ public final class GuesliController: NSObject {
     func persistCompletedMeetingResult(
         _ result: MeetingSessionResult,
         existingMeetingID: Int64? = nil,
-        preparedRecordingSave: PreparedMeetingRecordingSave
+        preparedRecordingSave: PreparedMeetingRecordingSave,
+        processingAttemptID: String? = nil
     ) throws -> CompletedMeetingPersistenceResult {
         let meetingID: Int64
         let existingMeeting = existingMeetingID.flatMap { meeting(id: $0) }
@@ -6689,7 +6821,11 @@ public final class GuesliController: NSObject {
                     selectedTemplateID: result.templateSnapshot.id,
                     selectedTemplateName: result.templateSnapshot.name,
                     selectedTemplateKind: result.templateSnapshot.kind,
-                    selectedTemplatePrompt: result.templateSnapshot.prompt
+                    selectedTemplatePrompt: result.templateSnapshot.prompt,
+                    processingAttemptID: processingAttemptID,
+                    speakerAttributionJSON: result.speakerAttribution?.validated(for: result.rawTranscript)?.json,
+                    processingConfiguration: result.processingConfiguration,
+                    summaryInputMatchesTranscript: result.summaryInputMatchesTranscript
                 )
                 meetingID = existingMeetingID
                 clearCachedMeetingManualNotes(id: existingMeetingID)
@@ -6837,12 +6973,14 @@ public final class GuesliController: NSObject {
     func persistCompletedMeetingResultAndDispatchHook(
         _ result: MeetingSessionResult,
         existingMeetingID: Int64? = nil,
-        preparedRecordingSave: PreparedMeetingRecordingSave
+        preparedRecordingSave: PreparedMeetingRecordingSave,
+        processingAttemptID: String? = nil
     ) throws -> CompletedMeetingPersistenceResult {
         let persistenceResult = try persistCompletedMeetingResult(
             result,
             existingMeetingID: existingMeetingID,
-            preparedRecordingSave: preparedRecordingSave
+            preparedRecordingSave: preparedRecordingSave,
+            processingAttemptID: processingAttemptID
         )
         meetingHookDispatcher.dispatchCompletedMeetingHook(
             meetingID: persistenceResult.meetingID,

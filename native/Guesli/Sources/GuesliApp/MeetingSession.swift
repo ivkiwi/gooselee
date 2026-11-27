@@ -387,7 +387,7 @@ struct LiveMeetingChunkingConfiguration: Equatable, Sendable {
     let deduplicatesText: Bool
 
     static func configuration(for backend: BackendOption) -> LiveMeetingChunkingConfiguration {
-        if backend.backend == BackendOption.gigaAMV3Russian.backend {
+        if backend.isONNXGigaAM {
             return LiveMeetingChunkingConfiguration(
                 minChunkDuration: 3.0,
                 maxChunkDuration: 20.0,
@@ -1946,7 +1946,7 @@ final class MeetingSession {
         }
 
         let transcription: SpeechTranscriptionResult
-        if backend.backend == ONNXGigaAMModelStore.backendIdentifier {
+        if backend.isONNXGigaAM {
             transcription = try await MeetingRetranscriptionPipeline.transcribeSegmentedAudio(
                 samples: wavData.samples,
                 vadSegments: vadSegments,
@@ -1955,7 +1955,8 @@ final class MeetingSession {
                 logger: { DiagnosticsLog.write($0) }
             ) { [transcriptionCoordinator] segmentAudio in
                 try await transcriptionCoordinator.transcribeMeetingBatchWithONNXGigaAM(
-                    samplesBatch: segmentAudio.map(\.samples)
+                    samplesBatch: segmentAudio.map(\.samples),
+                    backend: backend
                 )
             }
         } else {

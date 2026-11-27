@@ -36,7 +36,7 @@ func onboardingInitialDownloadProgressStatusChoice(
     }
 
     let initialStatus = onboardingInitialDownloadStatus(for: backend)
-    if backend.backend == BackendOption.gigaAMV3Russian.backend {
+    if backend.isONNXGigaAM {
         return OnboardingInitialDownloadProgressStatusChoice(
             progress: 0.02,
             status: initialStatus
@@ -60,7 +60,7 @@ func onboardingNextModelDownloadProgress(
     guard !isZeroReset else { return nil }
 
     let nextProgress = max(clampedProgress, 0.02)
-    return backend.backend == BackendOption.gigaAMV3Russian.backend
+    return backend.isONNXGigaAM
         ? nextProgress
         : max(currentProgress, nextProgress)
 }

@@ -12,7 +12,7 @@ struct OnboardingModelDownloadPolicyTests {
 
         #expect(!alternatives.contains(.gigaAMV3Russian))
         #expect(!alternatives.contains(.parakeetMultilingual))
-        #expect(alternatives == [.nemotron35Multilingual])
+        #expect(alternatives == [.gigaAMV4, .nemotron35Multilingual])
     }
 
     @Test("GigaAM stale download progress resets when model is missing")

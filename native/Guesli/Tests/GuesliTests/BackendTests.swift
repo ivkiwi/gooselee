@@ -3,10 +3,11 @@ import Testing
 
 @Suite("Supported ASR backends", .guesliHermeticSupport)
 struct SupportedASRBackendTests {
-    @Test("catalog contains exactly the three primary ASR models")
+    @Test("catalog contains exactly the four primary ASR models")
     func focusedCatalog() {
         #expect(BackendOption.all == [
             .gigaAMV3Russian,
+            .gigaAMV4,
             .parakeetMultilingual,
             .nemotron35Multilingual,
         ])

@@ -6,8 +6,8 @@ GooseLee's meeting-first, Russian-first scope.
 
 ## Product boundaries
 
-- Keep the primary ASR catalog limited to GigaAM v3, Parakeet v3, and Nemotron
-  3.5 Multilingual.
+- Keep the primary ASR catalog limited to GigaAM v3, GigaAM v4, Parakeet v3,
+  and Nemotron 3.5 Multilingual.
 - Parakeet Realtime EOU is an optional English-only live meeting preview. It is
   never downloaded automatically and never replaces the final transcript.
 - Keep Qwen transcript cleanup.

@@ -93,7 +93,7 @@ struct MeetingStopOrderingTests {
     }
 
     @Test("stop reports collector losses for every meeting backend", arguments: [
-        BackendOption.gigaAMV3Russian, .parakeetMultilingual, .nemotron35Multilingual
+        BackendOption.gigaAMV3Russian, .gigaAMV4, .parakeetMultilingual, .nemotron35Multilingual
     ])
     func stopReportsCollectorLossesForEveryBackend(_ backend: BackendOption) async throws {
         let session = makeSession(backend: backend)

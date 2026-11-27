@@ -3948,13 +3948,14 @@ public final class GuesliController: NSObject {
         guard !speechSegments.isEmpty else { return "" }
 
         let transcription: SpeechTranscriptionResult
-        if backend.backend == ONNXGigaAMModelStore.backendIdentifier {
+        if backend.isONNXGigaAM {
             transcription = try await MeetingRetranscriptionPipeline.transcribeSegmentedAudio(
                 samples: preparedAudio.samples,
                 vadSegments: speechSegments
             ) { [transcriptionCoordinator] segmentAudio in
                 try await transcriptionCoordinator.transcribeMeetingBatchWithONNXGigaAM(
-                    samplesBatch: segmentAudio.map(\.samples)
+                    samplesBatch: segmentAudio.map(\.samples),
+                    backend: backend
                 )
             }
         } else {
@@ -4166,7 +4167,7 @@ public final class GuesliController: NSObject {
         }
 
         let transcription: SpeechTranscriptionResult
-        if backend.backend == ONNXGigaAMModelStore.backendIdentifier {
+        if backend.isONNXGigaAM {
             transcription = try await MeetingRetranscriptionPipeline.transcribeSegmentedAudio(
                 samples: wavData.samples,
                 vadSegments: speechSegments,
@@ -4175,7 +4176,8 @@ public final class GuesliController: NSObject {
                 logger: { DiagnosticsLog.write($0) }
             ) { [transcriptionCoordinator] segmentAudio in
                 try await transcriptionCoordinator.transcribeMeetingBatchWithONNXGigaAM(
-                    samplesBatch: segmentAudio.map(\.samples)
+                    samplesBatch: segmentAudio.map(\.samples),
+                    backend: backend
                 )
             }
         } else {

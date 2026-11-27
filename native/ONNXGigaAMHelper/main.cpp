@@ -3,13 +3,13 @@
 #include <cstdint>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
-#include "coreml_provider_factory.h"
 #include "onnxruntime_cxx_api.h"
 
 namespace {
@@ -133,7 +133,7 @@ std::vector<std::string> load_vocab(const std::string& path, int* blank_id) {
     entries[id] = std::move(token);
     maximum_id = std::max(maximum_id, id);
   }
-  if (maximum_id < 0 || *blank_id < 0) throw std::runtime_error("invalid CTC vocabulary");
+  if (maximum_id < 0 || *blank_id < 0) throw std::runtime_error("invalid vocabulary");
   std::vector<std::string> vocab(static_cast<size_t>(maximum_id + 1));
   for (auto& [id, token] : entries) vocab[static_cast<size_t>(id)] = std::move(token);
   return vocab;
@@ -170,14 +170,18 @@ std::string normalize_text(std::string value) {
 
 class Recognizer {
  public:
+  // Without a decoder the model is GigaAM v3 E2E CTC; with one it is the GigaAM v4 RNNT encoder.
   Recognizer(const std::string& model_path,
+             const std::string& decoder_path,
              const std::string& preprocessor_path,
              const std::string& vocab_path)
       : env_(make_env()),
         preprocessor_(env_, preprocessor_path.c_str(), preprocessor_options()),
-        model_(env_, model_path.c_str(), model_options()),
+        model_(env_, model_path.c_str(), model_options(decoder_path.empty())),
         memory_(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)),
-        vocab_(load_vocab(vocab_path, &blank_id_)) {}
+        vocab_(load_vocab(vocab_path, &blank_id_)) {
+    if (!decoder_path.empty()) decoder_.emplace(env_, decoder_path.c_str(), preprocessor_options());
+  }
 
   std::string recognize(const std::string& wav_path) {
     WavData wav = read_wav(wav_path);
@@ -198,6 +202,7 @@ class Recognizer {
         Ort::RunOptions{nullptr}, preprocessor_input_names, preprocessor_inputs.data(), preprocessor_inputs.size(),
         preprocessor_output_names, 2);
     if (features.size() != 2) throw std::runtime_error("preprocessor returned unexpected outputs");
+    if (decoder_) return normalize_text(decode_rnnt(features));
 
     const char* model_input_names[] = {"features", "feature_lengths"};
     const char* model_output_names[] = {"log_probs"};
@@ -245,27 +250,66 @@ class Recognizer {
     return options;
   }
 
-  static Ort::SessionOptions model_options() {
+  // GigaAM v4 runs faster on CPU: CoreML splits its encoder into 185 partitions.
+  static Ort::SessionOptions model_options(bool use_coreml) {
     Ort::SessionOptions options;
     options.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-    const uint32_t flags = COREML_FLAG_ONLY_ALLOW_STATIC_INPUT_SHAPES | COREML_FLAG_USE_CPU_AND_GPU;
-    Ort::ThrowOnError(OrtSessionOptionsAppendExecutionProvider_CoreML(options, flags));
+    if (use_coreml) {
+      options.AppendExecutionProvider(
+          "CoreML", {{"MLComputeUnits", "CPUAndGPU"}, {"RequireStaticInputShapes", "1"}});
+    }
     return options;
+  }
+
+  // The v4 encoder emits both heads' joint projections; the exported `advance` graph runs greedy RNNT.
+  std::string decode_rnnt(std::vector<Ort::Value>& features) {
+    const char* model_input_names[] = {"audio_signal", "length"};
+    const char* model_output_names[] = {"encoded_len", "head_outputs"};
+    auto encoded = model_.Run(Ort::RunOptions{nullptr}, model_input_names, features.data(), features.size(),
+                              model_output_names, 2);
+    if (encoded.size() != 2) throw std::runtime_error("model returned unexpected outputs");
+
+    const char* decoder_input_names[] = {"projected", "lengths"};
+    const char* decoder_output_names[] = {"tokens"};
+    std::array<Ort::Value, 2> decoder_inputs{std::move(encoded[1]), std::move(encoded[0])};
+    auto decoded = decoder_->Run(Ort::RunOptions{nullptr}, decoder_input_names, decoder_inputs.data(),
+                                 decoder_inputs.size(), decoder_output_names, 1);
+    if (decoded.size() != 1) throw std::runtime_error("decoder returned unexpected outputs");
+
+    // tokens: [steps, heads, batch]; head 0 is the formatted e2e transcript, -1 marks no emission.
+    const auto shape = decoded[0].GetTensorTypeAndShapeInfo().GetShape();
+    if (shape.size() != 3 || shape[1] < 1 || shape[2] != 1) throw std::runtime_error("unexpected tokens shape");
+    const int64_t* tokens = decoded[0].GetTensorData<int64_t>();
+    std::string text;
+    for (int64_t step = 0; step < shape[0]; ++step) {
+      const int64_t token = tokens[step * shape[1]];
+      if (token < 0 || token == blank_id_) continue;
+      if (token >= static_cast<int64_t>(vocab_.size())) throw std::runtime_error("token exceeds vocabulary");
+      if (vocab_[static_cast<size_t>(token)] != "<unk>") text += vocab_[static_cast<size_t>(token)];
+    }
+    return text;
   }
 
   Ort::Env env_;
   Ort::Session preprocessor_;
   Ort::Session model_;
+  std::optional<Ort::Session> decoder_;
   Ort::MemoryInfo memory_;
   int blank_id_ = -1;
   std::vector<std::string> vocab_;
 };
 
-std::string argument(int argc, char** argv, const std::string& name) {
+std::string optional_argument(int argc, char** argv, const std::string& name) {
   for (int index = 1; index + 1 < argc; ++index) {
     if (argv[index] == name) return argv[index + 1];
   }
-  throw std::runtime_error("missing argument " + name);
+  return "";
+}
+
+std::string argument(int argc, char** argv, const std::string& name) {
+  std::string value = optional_argument(argc, argv, name);
+  if (value.empty()) throw std::runtime_error("missing argument " + name);
+  return value;
 }
 
 }  // namespace
@@ -273,6 +317,7 @@ std::string argument(int argc, char** argv, const std::string& name) {
 int main(int argc, char** argv) {
   try {
     Recognizer recognizer(argument(argc, argv, "--model"),
+                          optional_argument(argc, argv, "--decoder"),
                           argument(argc, argv, "--preprocessor"),
                           argument(argc, argv, "--vocab"));
     std::cout << "{\"ready\":true}" << std::endl;

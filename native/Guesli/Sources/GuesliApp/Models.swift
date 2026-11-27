@@ -37,9 +37,19 @@ struct BackendOption: Equatable {
         recommended: true
     )
 
+    static let gigaAMV4 = BackendOption(
+        backend: ONNXGigaAMV4ModelStore.backendIdentifier,
+        model: ONNXGigaAMV4ModelStore.modelID,
+        label: "GigaAM v4 RNNT",
+        sizeLabel: ONNXGigaAMV4ModelStore.downloadedModelSizeLabel,
+        description: String(localized: "Newer Russian and English offline ASR via ONNX INT8 RNNT. Runs locally on Apple Silicon; no Python server or cloud."),
+        recommended: false
+    )
+
     /// The supported product catalog. Retired selections are migrated by ConfigStore.
     static let primaryCatalog: [BackendOption] = [
         .gigaAMV3Russian,
+        .gigaAMV4,
         .parakeetMultilingual,
         .nemotron35Multilingual,
     ]
@@ -83,6 +93,11 @@ struct BackendOption: Equatable {
         backend == "nemotron35"
     }
 
+    /// GigaAM v3 and v4 share the ONNX helper, live chunking and segmented batch transcription.
+    var isONNXGigaAM: Bool {
+        backend == ONNXGigaAMModelStore.backendIdentifier || backend == ONNXGigaAMV4ModelStore.backendIdentifier
+    }
+
     var supportsMeetingTranscription: Bool {
         !isStreamingDictationBackend
     }
@@ -115,6 +130,8 @@ struct BackendOption: Equatable {
             return fm.fileExists(atPath: path.path)
         case "gigaam_v3":
             return ONNXGigaAMModelStore.isAvailableLocally()
+        case "gigaam_v4":
+            return ONNXGigaAMV4ModelStore.isAvailableLocally()
         default:
             return false
         }

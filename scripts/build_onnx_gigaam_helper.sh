@@ -6,9 +6,10 @@ SOURCE="$ROOT/native/ONNXGigaAMHelper/main.cpp"
 OUTPUT_DIR="${1:?usage: build_onnx_gigaam_helper.sh OUTPUT_DIR}"
 
 ORT_VERSION="1.29.0"
-ORT_ARCHIVE="onnxruntime-osx-arm64-$ORT_VERSION.tgz"
-ORT_URL="https://github.com/microsoft/onnxruntime/releases/download/v$ORT_VERSION/$ORT_ARCHIVE"
-ORT_SHA256="d0706fc34f315d8c88639d0a8c81f2e09e815f282cabed3493c06a054352cf92"
+# microsoft/onnxruntime GitHub releases were removed in 2026-11; NuGet ships the official signed macOS dylib.
+ORT_ARCHIVE="microsoft.ml.onnxruntime.$ORT_VERSION.nupkg"
+ORT_URL="https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/$ORT_VERSION/$ORT_ARCHIVE"
+ORT_SHA256="4557021fec4da3924e2e12ff44b1cc50b176de0d2c5c7daa89ab11c208b3a454"
 ORT_CACHE="${GUESLI_ONNX_RUNTIME_CACHE_DIR:-$HOME/Library/Caches/guesli-onnxruntime}"
 ORT_ROOT="${GUESLI_ONNX_RUNTIME_ROOT:-$ORT_CACHE/onnxruntime-osx-arm64-$ORT_VERSION}"
 ARCHIVE_PATH="$ORT_CACHE/$ORT_ARCHIVE"
@@ -24,8 +25,13 @@ if [[ ! -f "$ORT_ROOT/include/onnxruntime_cxx_api.h" || ! -f "$ORT_ROOT/lib/libo
     mv "$ARCHIVE_PATH.tmp" "$ARCHIVE_PATH"
   fi
   printf '%s  %s\n' "$ORT_SHA256" "$ARCHIVE_PATH" | shasum -a 256 -c -
-  rm -rf "$ORT_ROOT"
-  tar -xzf "$ARCHIVE_PATH" -C "$ORT_CACHE"
+  rm -rf "$ORT_ROOT" "$ORT_ROOT.tmp"
+  unzip -q "$ARCHIVE_PATH" 'build/native/include/*' 'runtimes/osx-arm64/native/libonnxruntime.dylib' -d "$ORT_ROOT.tmp"
+  mkdir -p "$ORT_ROOT/lib"
+  mv "$ORT_ROOT.tmp/build/native/include" "$ORT_ROOT/include"
+  mv "$ORT_ROOT.tmp/runtimes/osx-arm64/native/libonnxruntime.dylib" "$ORT_ROOT/lib/libonnxruntime.$ORT_VERSION.dylib"
+  ln -s "libonnxruntime.$ORT_VERSION.dylib" "$ORT_ROOT/lib/libonnxruntime.dylib"
+  rm -rf "$ORT_ROOT.tmp"
 fi
 
 mkdir -p "$OUTPUT_DIR"

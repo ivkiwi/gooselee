@@ -179,7 +179,7 @@ enum ONNXGigaAMModelStore {
         }
     }
 
-    private static func fileMeetsMinimum(_ url: URL, bytes: Int64, fileManager: FileManager) -> Bool {
+    static func fileMeetsMinimum(_ url: URL, bytes: Int64, fileManager: FileManager) -> Bool {
         guard let attributes = try? fileManager.attributesOfItem(atPath: url.path),
               let size = attributes[.size] as? NSNumber else { return false }
         return size.int64Value >= bytes
@@ -210,8 +210,160 @@ enum ONNXGigaAMModelStore {
         }
     }
 
-    private static func modelError(_ code: Int, _ description: String) -> NSError {
+    static func modelError(_ code: Int, _ description: String) -> NSError {
         NSError(domain: "ONNXGigaAMModelStore", code: code, userInfo: [NSLocalizedDescriptionKey: description])
+    }
+}
+
+/// GigaAM v4 RNNT: INT8 encoder plus the greedy RNNT `advance` graph, exported by scripts/export_gigaam_v4_onnx.py.
+enum ONNXGigaAMV4ModelStore {
+    typealias DownloadArtifact = ONNXGigaAMModelStore.DownloadArtifact
+
+    static let backendIdentifier = "gigaam_v4"
+    static let modelID = "ai-sage/GigaAM-v4:rnnt-e2e-int8"
+    static let cacheRelativePath = "Models/gigaam-v4-rnnt-onnx-int8"
+    static let downloadedModelSizeLabel = "~255 MB"
+
+    private static func releaseArtifact(_ name: String, sha256: String, bytes: Int64) -> DownloadArtifact {
+        DownloadArtifact(
+            url: URL(string: "https://github.com/ivkiwi/muesli/releases/download/gigaam-v4-rnnt-onnx-1/\(name)")!,
+            expectedSHA256: sha256,
+            minimumBytes: bytes
+        )
+    }
+
+    static let encoderArtifact = releaseArtifact(
+        "v4_rnnt_encoder.int8.onnx",
+        sha256: "71dc51bab169e4e51e242037bb4740d9171112a51cb39f5e86225da9eef08513",
+        bytes: 241_601_162
+    )
+    static let decoderArtifact = releaseArtifact(
+        "v4_rnnt_advance.onnx",
+        sha256: "559ac5a56145e906d05b3334f143db7f1847025fe5cb1312ae97e6886e8a146a",
+        bytes: 12_753_376
+    )
+    static let preprocessorArtifact = releaseArtifact(
+        "gigaam_v4_preprocessor.onnx",
+        sha256: "b62e6c6df7f1c769e447b98bff9d8c471a5fc5738cea100fd807f3b1f60ea1f6",
+        bytes: 79_440
+    )
+    static let vocabularyArtifact = releaseArtifact(
+        "v4_rnnt_e2e_vocab.txt",
+        sha256: "4af4f59269ff664ea6a55838b12fa0cb5e07bd5e019202b4d38b3fbc9275e923",
+        bytes: 9_982
+    )
+    static let artifacts = [encoderArtifact, decoderArtifact, preprocessorArtifact, vocabularyArtifact]
+
+    static func cacheDirectory(fileManager: FileManager = .default) -> URL {
+        GuesliPaths.defaultSupportDirectoryURL(
+            appName: AppIdentity.supportDirectoryName,
+            fileManager: fileManager
+        ).appendingPathComponent(cacheRelativePath, isDirectory: true)
+    }
+
+    static func helperArguments(modelDirectory: URL) -> [String] {
+        func path(_ artifact: DownloadArtifact) -> String {
+            modelDirectory.appendingPathComponent(artifact.url.lastPathComponent).path
+        }
+        return [
+            "--model", path(encoderArtifact),
+            "--decoder", path(decoderArtifact),
+            "--preprocessor", path(preprocessorArtifact),
+            "--vocab", path(vocabularyArtifact),
+        ]
+    }
+
+    static func isAvailableLocally(fileManager: FileManager = .default) -> Bool {
+        isCompleteModelDirectory(cacheDirectory(fileManager: fileManager), fileManager: fileManager)
+    }
+
+    static func isCompleteModelDirectory(_ directory: URL, fileManager: FileManager = .default) -> Bool {
+        artifacts.allSatisfy {
+            ONNXGigaAMModelStore.fileMeetsMinimum(
+                directory.appendingPathComponent($0.url.lastPathComponent),
+                bytes: $0.minimumBytes,
+                fileManager: fileManager
+            )
+        }
+    }
+
+    static func deleteModelFiles(fileManager: FileManager = .default) throws {
+        let directory = cacheDirectory(fileManager: fileManager)
+        guard fileManager.fileExists(atPath: directory.path) else { return }
+        GuesliPaths.preconditionSafeForTestWrite(directory)
+        try fileManager.removeItem(at: directory)
+    }
+
+    static func downloadIfNeeded(progress: ((Double, String?) -> Void)? = nil) async throws -> URL {
+        let finalDirectory = cacheDirectory()
+        if isAvailableLocally() {
+            progress?(1, nil)
+            return finalDirectory
+        }
+
+        let fileManager = FileManager.default
+        let root = finalDirectory.deletingLastPathComponent()
+        GuesliPaths.preconditionSafeForTestWrite(root)
+        try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+        let partial = root.appendingPathComponent("onnx-gigaam-v4.partial-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fileManager.removeItem(at: partial) }
+        try fileManager.createDirectory(at: partial, withIntermediateDirectories: true)
+
+        let totalBytes = Double(artifacts.reduce(0) { $0 + $1.minimumBytes })
+        var completedFraction = 0.0
+        progress?(0.01, "Downloading GigaAM v4 RNNT INT8...")
+        for artifact in artifacts {
+            let destination = partial.appendingPathComponent(artifact.url.lastPathComponent)
+            let base = completedFraction
+            let weight = Double(artifact.minimumBytes) / totalBytes
+            try await downloadWithRetry(from: artifact.url, to: destination) { fraction in
+                progress?(0.01 + 0.98 * (base + weight * fraction), "Downloading GigaAM v4 RNNT INT8...")
+            }
+            try ONNXGigaAMModelStore.validateDownloadedArtifact(artifact, at: destination, fileManager: fileManager)
+            completedFraction += weight
+        }
+
+        guard isCompleteModelDirectory(partial, fileManager: fileManager) else {
+            throw ONNXGigaAMModelStore.modelError(5, "GigaAM v4 ONNX model did not finish installing.")
+        }
+        GuesliPaths.preconditionSafeForTestWrite(finalDirectory)
+        try? fileManager.removeItem(at: finalDirectory)
+        try fileManager.moveItem(at: partial, to: finalDirectory)
+        progress?(1, nil)
+        return finalDirectory
+    }
+}
+
+/// Which GigaAM ONNX model a transcriber and its helper process run.
+enum ONNXGigaAMVariant: Sendable {
+    case v3
+    case v4
+
+    var isAvailableLocally: Bool {
+        self == .v3 ? ONNXGigaAMModelStore.isAvailableLocally() : ONNXGigaAMV4ModelStore.isAvailableLocally()
+    }
+
+    var cacheDirectory: URL {
+        self == .v3 ? ONNXGigaAMModelStore.cacheDirectory() : ONNXGigaAMV4ModelStore.cacheDirectory()
+    }
+
+    func downloadIfNeeded(progress: ((Double, String?) -> Void)?) async throws -> URL {
+        self == .v3
+            ? try await ONNXGigaAMModelStore.downloadIfNeeded(progress: progress)
+            : try await ONNXGigaAMV4ModelStore.downloadIfNeeded(progress: progress)
+    }
+
+    func helperArguments(modelDirectory: URL) -> [String] {
+        switch self {
+        case .v3:
+            return [
+                "--model", modelDirectory.appendingPathComponent("v3_e2e_ctc.int8.onnx").path,
+                "--preprocessor", modelDirectory.appendingPathComponent("gigaam_v3.onnx").path,
+                "--vocab", modelDirectory.appendingPathComponent("v3_e2e_ctc_vocab.txt").path,
+            ]
+        case .v4:
+            return ONNXGigaAMV4ModelStore.helperArguments(modelDirectory: modelDirectory)
+        }
     }
 }
 
@@ -303,6 +455,7 @@ final class ONNXGigaAMHelperProcess: @unchecked Sendable {
 
     static func start(
         modelDirectory: URL,
+        variant: ONNXGigaAMVariant = .v3,
         readyTimeout: TimeInterval = ONNXGigaAMHelperProcess.readyTimeout,
         helperURLOverride: URL? = nil
     ) throws -> ONNXGigaAMHelperProcess {
@@ -311,11 +464,7 @@ final class ONNXGigaAMHelperProcess: @unchecked Sendable {
         let stdin = Pipe()
         let stdout = Pipe()
         process.executableURL = helper
-        process.arguments = [
-            "--model", modelDirectory.appendingPathComponent("v3_e2e_ctc.int8.onnx").path,
-            "--preprocessor", modelDirectory.appendingPathComponent("gigaam_v3.onnx").path,
-            "--vocab", modelDirectory.appendingPathComponent("v3_e2e_ctc_vocab.txt").path,
-        ]
+        process.arguments = variant.helperArguments(modelDirectory: modelDirectory)
         process.standardInput = stdin
         process.standardOutput = stdout
         process.standardError = FileHandle.standardError
@@ -415,24 +564,27 @@ actor ONNXGigaAMTranscriber {
     private var activeHelperStart: (id: UUID, task: Task<ONNXGigaAMHelperProcess, Error>)?
     private var helper: ONNXGigaAMHelperProcess?
     private var generation = 0
+    private let variant: ONNXGigaAMVariant
     private let helperStarter: HelperStarter
 
-    init(helperStarter: @escaping HelperStarter = { directory in
-        try ONNXGigaAMHelperProcess.start(modelDirectory: directory)
-    }) {
-        self.helperStarter = helperStarter
+    init(variant: ONNXGigaAMVariant = .v3, helperStarter: HelperStarter? = nil) {
+        self.variant = variant
+        self.helperStarter = helperStarter ?? { directory in
+            try ONNXGigaAMHelperProcess.start(modelDirectory: directory, variant: variant)
+        }
     }
 
     func loadModels(progress: ((Double, String?) -> Void)? = nil) async throws {
         let expectedGeneration = generation
         let directory: URL
-        if ONNXGigaAMModelStore.isAvailableLocally() {
-            directory = ONNXGigaAMModelStore.cacheDirectory()
+        if variant.isAvailableLocally {
+            directory = variant.cacheDirectory
             progress?(0.98, "Starting GigaAM ONNX...")
         } else if let activeDownloadTask {
             directory = try await activeDownloadTask.value
         } else {
-            let task = Task { try await ONNXGigaAMModelStore.downloadIfNeeded(progress: progress) }
+            let variant = self.variant
+            let task = Task { try await variant.downloadIfNeeded(progress: progress) }
             activeDownloadTask = task
             do {
                 directory = try await task.value

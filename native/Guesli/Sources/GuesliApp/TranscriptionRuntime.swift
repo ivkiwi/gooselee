@@ -34,12 +34,13 @@ actor TranscriptionCoordinator {
     private static let defaultDiarizerLoadOperationTimeout: Duration = .seconds(300)
 
     static let explicitlyRoutedBackendIdentifiers: Set<String> = [
-        "fluidaudio", "nemotron35", "gigaam_v3",
+        "fluidaudio", "nemotron35", "gigaam_v3", "gigaam_v4",
     ]
 
     private let fluidTranscriber = FluidAudioTranscriber()
     private var _qwen3PostProcessor: Any?
     private let onnxGigaAMTranscriber = ONNXGigaAMTranscriber()
+    private let onnxGigaAMV4Transcriber = ONNXGigaAMTranscriber(variant: .v4)
     private var vadManager: VadManager?
     private var diarizerManager: DiarizerManager?
     private var vadLoadTask: Task<Void, Never>?
@@ -253,6 +254,8 @@ actor TranscriptionCoordinator {
             }
         case "gigaam_v3":
             try await onnxGigaAMTranscriber.loadModels(progress: progress)
+        case "gigaam_v4":
+            try await onnxGigaAMV4Transcriber.loadModels(progress: progress)
         default:
             throw NSError(domain: "GuesliTranscriptionRuntime", code: 5, userInfo: [
                 NSLocalizedDescriptionKey: "Unknown transcription backend: \(backend.backend)",
@@ -524,8 +527,11 @@ actor TranscriptionCoordinator {
         cleanMeetingTranscript(try await route(url: url, samples: samples, backend: backend))
     }
 
-    func transcribeMeetingBatchWithONNXGigaAM(samplesBatch: [[Float]]) async throws -> [SpeechTranscriptionResult] {
-        let results = try await transcribeWithONNXGigaAMBatch(samplesBatch: samplesBatch)
+    func transcribeMeetingBatchWithONNXGigaAM(
+        samplesBatch: [[Float]],
+        backend: BackendOption
+    ) async throws -> [SpeechTranscriptionResult] {
+        let results = try await transcribeWithONNXGigaAMBatch(samplesBatch: samplesBatch, backend: backend)
         return results.map { cleanMeetingTranscript($0) }
     }
 
@@ -592,6 +598,7 @@ actor TranscriptionCoordinator {
         resumeAllDiarizerLoadWaiters(with: .cancelled)
         await fluidTranscriber.shutdown()
         await onnxGigaAMTranscriber.shutdown()
+        await onnxGigaAMV4Transcriber.shutdown()
         if #available(macOS 15, *) {
             if let nemotron35 = _nemotron35Transcriber as? Nemotron35StreamingTranscriber {
                 await nemotron35.shutdown()
@@ -735,8 +742,8 @@ actor TranscriptionCoordinator {
         switch backend.backend {
         case "nemotron35":
             return try await transcribeWithNemotron35(url: url, samples: samples)
-        case "gigaam_v3":
-            return try await transcribeWithONNXGigaAM(url: url, samples: samples)
+        case "gigaam_v3", "gigaam_v4":
+            return try await transcribeWithONNXGigaAM(url: url, samples: samples, backend: backend)
         case "fluidaudio":
             return try await transcribeWithFluidAudio(url: url, language: parakeetLanguage)
         default:
@@ -765,15 +772,24 @@ actor TranscriptionCoordinator {
         )
     }
 
-    // MARK: - GigaAM v3 E2E CTC INT8 (ONNX Runtime with CoreML EP)
+    // MARK: - GigaAM v3 E2E CTC / v4 RNNT INT8 (ONNX Runtime helper)
 
-    private func transcribeWithONNXGigaAM(url: URL, samples: [Float]? = nil) async throws -> SpeechTranscriptionResult {
-        fputs("[guesli-native] transcribing with ONNX GigaAM E2E CTC INT8: \(url.lastPathComponent)\n", stderr)
+    private func onnxGigaAMTranscriber(for backend: BackendOption) -> ONNXGigaAMTranscriber {
+        backend.backend == ONNXGigaAMV4ModelStore.backendIdentifier ? onnxGigaAMV4Transcriber : onnxGigaAMTranscriber
+    }
+
+    private func transcribeWithONNXGigaAM(
+        url: URL,
+        samples: [Float]? = nil,
+        backend: BackendOption
+    ) async throws -> SpeechTranscriptionResult {
+        fputs("[guesli-native] transcribing with ONNX \(backend.label): \(url.lastPathComponent)\n", stderr)
+        let transcriber = onnxGigaAMTranscriber(for: backend)
         let result: ONNXGigaAMTranscriptionResult
         if let samples {
-            result = try await onnxGigaAMTranscriber.transcribe(samples: samples, sampleRate: 16_000)
+            result = try await transcriber.transcribe(samples: samples, sampleRate: 16_000)
         } else {
-            result = try await onnxGigaAMTranscriber.transcribe(wavURL: url)
+            result = try await transcriber.transcribe(wavURL: url)
         }
         fputs("[guesli-native] ONNX GigaAM result: \(DictationLogMetadata(text: result.text).summary) (took \(String(format: "%.3f", result.processingTime))s)\n", stderr)
         let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -783,9 +799,12 @@ actor TranscriptionCoordinator {
         )
     }
 
-    private func transcribeWithONNXGigaAMBatch(samplesBatch: [[Float]]) async throws -> [SpeechTranscriptionResult] {
-        fputs("[guesli-native] transcribing \(samplesBatch.count) segments with ONNX GigaAM batch\n", stderr)
-        let results = try await onnxGigaAMTranscriber.transcribe(
+    private func transcribeWithONNXGigaAMBatch(
+        samplesBatch: [[Float]],
+        backend: BackendOption
+    ) async throws -> [SpeechTranscriptionResult] {
+        fputs("[guesli-native] transcribing \(samplesBatch.count) segments with ONNX \(backend.label) batch\n", stderr)
+        let results = try await onnxGigaAMTranscriber(for: backend).transcribe(
             samplesBatch: samplesBatch,
             sampleRate: 16_000
         )

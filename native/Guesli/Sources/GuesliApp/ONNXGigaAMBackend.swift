@@ -226,7 +226,7 @@ enum ONNXGigaAMV4ModelStore {
 
     private static func releaseArtifact(_ name: String, sha256: String, bytes: Int64) -> DownloadArtifact {
         DownloadArtifact(
-            url: URL(string: "https://github.com/ivkiwi/muesli/releases/download/gigaam-v4-rnnt-onnx-1/\(name)")!,
+            url: URL(string: "https://github.com/ivkiwi/gooselee/releases/download/gigaam-v4-rnnt-onnx-1/\(name)")!,
             expectedSHA256: sha256,
             minimumBytes: bytes
         )

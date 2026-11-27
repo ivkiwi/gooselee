@@ -2,6 +2,15 @@
     <channel>
         <title>Guesli</title>
         <item>
+            <title>0.9.4</title>
+            <pubDate>Fri, 27 Nov 2026 10:41:13 +0000</pubDate>
+            <link>https://github.com/ivkiwi/gooselee/releases</link>
+            <sparkle:version>1009.4.0</sparkle:version>
+            <sparkle:shortVersionString>0.9.4</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.2</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/ivkiwi/gooselee/releases/download/beta-0.9.4-34-1/GooseLee-0.9.4-selfsigned-unnotarized.dmg" length="110676559" type="application/octet-stream" sparkle:edSignature="YyxuZcyUQQUVobQIEfpAIq82MrhYMhFQh7ttgCJp468wvAncNnA1SJv1pmyzO7otCqDur7n9hv8V8zxy6SjACQ=="/>
+        </item><item>
             <title>0.9.3.3</title>
             <pubDate>Thu, 15 Oct 2026 21:31:09 +0000</pubDate>
             <link>https://github.com/ivkiwi/gooselee/releases</link>

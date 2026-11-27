@@ -14,11 +14,12 @@ GooseLee начинались как русский fork [Muesli](https://github
 - делать summary встречи через настраиваемый LLM;
 - при желании подключать календарь и локальный Google Meet speaker bridge.
 
-Основной ASR-каталог намеренно ограничен тремя вариантами:
+Основной ASR-каталог намеренно ограничен четырьмя вариантами:
 
 | Модель | Основное назначение |
 | --- | --- |
 | **GigaAM v3 E2E CTC** | Русская речь, встречи и диктовка |
+| **GigaAM v4 RNNT** | Новая версия: русская и английская речь, встречи и диктовка |
 | **Parakeet v3** | Мультиязычные встречи и диктовка, 25 языков |
 | **Nemotron 3.5 Multilingual** | Потоковая мультиязычная диктовка и live text |
 
@@ -46,4 +47,4 @@ GooseLee начинались как русский fork [Muesli](https://github
 
 GooseLee is a lightweight, free, configurable macOS meeting recorder, local transcription app, and meeting summarizer with a Russian-first focus. The name reads as «Гусли» in Russian and Goose Lee in English. It started from [Muesli](https://github.com/Muesli-HQ/muesli), but now lives in a standalone repository and is maintained as an independent product. Useful upstream fixes are reviewed and ported selectively.
 
-The deliberately small ASR catalog contains GigaAM v3, Parakeet v3, and Nemotron 3.5 Multilingual. Optional Parakeet Realtime EOU support is available only for English live meeting previews. GooseLee has no product telemetry, donation prompts, or paid upsells.
+The deliberately small ASR catalog contains GigaAM v3, GigaAM v4, Parakeet v3, and Nemotron 3.5 Multilingual. Optional Parakeet Realtime EOU support is available only for English live meeting previews. GooseLee has no product telemetry, donation prompts, or paid upsells.

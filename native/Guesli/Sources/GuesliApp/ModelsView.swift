@@ -49,6 +49,7 @@ struct ModelsView: View {
                     .foregroundStyle(GuesliTheme.textSecondary)
 
                 modelCard(option: .gigaAMV3Russian)
+                modelCard(option: .gigaAMV4)
                 modelCard(option: .parakeetMultilingual, logo: "nvidia-logo")
                 modelCard(option: .nemotron35Multilingual, logo: "nvidia-logo")
 
@@ -1081,6 +1082,8 @@ struct ModelsView: View {
             try removeItemIfPresent(at: path, fileManager: fm)
         case "gigaam_v3":
             try ONNXGigaAMModelStore.deleteModelFiles(fileManager: fm)
+        case "gigaam_v4":
+            try ONNXGigaAMV4ModelStore.deleteModelFiles(fileManager: fm)
         default:
             break
         }
@@ -1151,6 +1154,8 @@ struct ModelsView: View {
             return ManagedASRModelPlans.parakeetV3().isAvailableLocally(fileManager: fm)
         case "gigaam_v3":
             return ONNXGigaAMModelStore.isAvailableLocally()
+        case "gigaam_v4":
+            return ONNXGigaAMV4ModelStore.isAvailableLocally()
         default:
             return false
         }

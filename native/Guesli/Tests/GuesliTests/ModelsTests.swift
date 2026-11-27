@@ -8,12 +8,22 @@ import GuesliCore
 struct BackendOptionTests {
     @Test("catalog contains only the supported backends")
     func focusedCatalog() {
-        let expected = [BackendOption.gigaAMV3Russian, .parakeetMultilingual, .nemotron35Multilingual]
+        let expected = [BackendOption.gigaAMV3Russian, .gigaAMV4, .parakeetMultilingual, .nemotron35Multilingual]
         #expect(BackendOption.all == expected)
         #expect(BackendOption.primaryCatalog == expected)
         #expect(BackendOption.onboarding == expected)
         #expect(Set(BackendOption.all.map(\.model)).count == expected.count)
-        #expect(Set(BackendOption.all.map(\.backend)) == ["gigaam_v3", "fluidaudio", "nemotron35"])
+        #expect(Set(BackendOption.all.map(\.backend)) == ["gigaam_v3", "gigaam_v4", "fluidaudio", "nemotron35"])
+    }
+
+    @Test("GigaAM v4 takes the same meeting paths as v3")
+    func gigaAMV4SharesONNXGigaAMPaths() {
+        #expect(BackendOption.gigaAMV3Russian.isONNXGigaAM)
+        #expect(BackendOption.gigaAMV4.isONNXGigaAM)
+        #expect(!BackendOption.parakeetMultilingual.isONNXGigaAM)
+        #expect(BackendOption.resolve(backend: "gigaam_v4", model: BackendOption.gigaAMV4.model) == .gigaAMV4)
+        #expect(MeetingSession.liveChunkingConfiguration(for: .gigaAMV4)
+            == MeetingSession.liveChunkingConfiguration(for: .gigaAMV3Russian))
     }
 
     @Test("removed GigaAM selections still resolve to the supported backend")
